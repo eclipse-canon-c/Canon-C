@@ -926,6 +926,12 @@ Expected output: `Proved goals: 1753 / 1755` with exactly 2 timeouts.
 > forced anyway. At x86_64 the unit is unchanged. `frama-c-win64` proves it
 > at `msvc_x86_64` and compares it with x86_64 by name.
 
+> **Note (2026-11-07, VERIFY-061 phase C).** The job's roll-call names all
+> twelve since this note, compared with the run's unproved goals by set
+> equality; it was a sample of six. Coq proves the twelve, as WP states them,
+> in `12 · Coq: bits.h` (`tools/coq`), report-only until VERIFY-061's phase C
+> enforces it.
+
 ### What is proved
 
 - **Functional correctness** for simple bit operations: `bits_test`,

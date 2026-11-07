@@ -18933,12 +18933,12 @@ prefix.
 |---|---|---|---|
 | 1 | `typed_checked_add_overflow_ensures` | `frama-c-checked`, `frama-c-range`; with `typed_cast_`, `frama-c-ptr`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-borrow`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | `overflow`: `a + b` reaches 2^N, N the width of `usize`, so the stored sum is `a + b - 2^N`, below `a`, and `*result >= a` is false |
 | 2 | `typed_checked_add_u64_overflow_ensures` | as row 1 | the same, at `u64`, N being 64 |
-| 3 | `typed_cast_bits_clear_ensures` | `frama-c-bitset`; `frama-c-bits` with `typed_` | `~(1ULL << bit)` is `2^64 - 1 - 2^bit`, which is `0xFFFFFFFFFFFFFFFF ^ 2^bit`, the spec's mask |
-| 4 | `typed_cast_bits_rotl_assert_rte_shift_2` | `frama-c-bitset` | `64u - sh` past `sh == 0u`, with `sh = shift & 63`: 1 to 63, a valid count |
-| 5 | `typed_cast_bits_rotr_assert_rte_shift_2` | `frama-c-bitset` | the same in `bits_rotr` |
-| 6 | `typed_cast_bits_bswap16_assert_rte_signed_overflow` | `frama-c-bitset`; `frama-c-bits` with `typed_` | `value << 8`, the `u16` promoted to `int`: at most 65535 × 256 = 16776960, below 2^31 |
-| 7 | `typed_cast_bits_bswap32_ensures` | `frama-c-bitset` | each term shifts one masked byte to another byte's place and stays below 2^32, so the C terms are the spec's, with disjoint bits |
-| 8 | `typed_cast_bits_bswap64_ensures` | `frama-c-bitset`; `frama-c-bits` with `typed_` | the same below 2^64 |
+| 3 | `typed_cast_bits_clear_ensures` | `frama-c-bitset`, `frama-c-hashmap`; `frama-c-bits` with `typed_` | `~(1ULL << bit)` is `2^64 - 1 - 2^bit`, which is `0xFFFFFFFFFFFFFFFF ^ 2^bit`, the spec's mask |
+| 4 | `typed_cast_bits_rotl_assert_rte_shift_2` | `frama-c-bitset`, `frama-c-hashmap`; `frama-c-bits` with `typed_` | `64u - sh` past `sh == 0u`, with `sh = shift & 63`: 1 to 63, a valid count |
+| 5 | `typed_cast_bits_rotr_assert_rte_shift_2` | `frama-c-bitset`, `frama-c-hashmap`; `frama-c-bits` with `typed_` | the same in `bits_rotr` |
+| 6 | `typed_cast_bits_bswap16_assert_rte_signed_overflow` | `frama-c-bitset`, `frama-c-hashmap`; `frama-c-bits` with `typed_` | `value << 8`, the `u16` promoted to `int`: at most 65535 × 256 = 16776960, below 2^31 |
+| 7 | `typed_cast_bits_bswap32_ensures` | `frama-c-bitset`, `frama-c-hashmap`; `frama-c-bits` with `typed_` | each term shifts one masked byte to another byte's place and stays below 2^32, so the C terms are the spec's, with disjoint bits |
+| 8 | `typed_cast_bits_bswap64_ensures` | `frama-c-bitset`, `frama-c-hashmap`; `frama-c-bits` with `typed_` | the same below 2^64 |
 | 9 | `typed_cast_align_up_ensures` | `frama-c-ptr`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-vec`, `cc-vec_struct` | `n + align - 1u` is the formula's sum, wrapping twice to it at `n + align = 2^N`, and `~(align - 1u)` keeps the bits of a value below 2^N that ACSL's `~(align - 1)` keeps |
 | 10 | `typed_cast_align_down_ensures` | as row 9 | `~(align - 1u)` as in row 9, on `n` |
 
@@ -19011,12 +19011,12 @@ own prediction.
 
 #### The SWAR population count's range (1)
 
-The row names the goal as `frama-c-bitset` pins it; `frama-c-bits` pins it
-with `typed_`.
+The row names the goal as `frama-c-bitset` pins it; `frama-c-hashmap` pins
+it so too, and `frama-c-bits` with `typed_`.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_bits_popcount_ensures` | `frama-c-bitset`; `frama-c-bits` with `typed_` | `0 <= \result <= 64`: the fallback leaves each byte's count in that byte, and the multiply's top byte, which it returns, is their sum |
+| 1 | `typed_cast_bits_popcount_ensures` | `frama-c-bitset`, `frama-c-hashmap`; `frama-c-bits` with `typed_` | `0 <= \result <= 64`: the fallback leaves each byte's count in that byte, and the multiply's top byte, which it returns, is their sum |
 
 **Functions affected**: `bits_popcount` (the fallback body WP verifies).
 
@@ -19046,17 +19046,20 @@ is the sum of all eight counts, at most 64, and `>> 56` returns it.
 **Retirement.** A lemma for each step, or a bit-vector prover; neither was
 tried. A change with its own prediction.
 
-#### Bit smearing to the next power of two (5)
+#### Bit smearing to the next power of two (4)
 
-Rows 1 to 4 name the goals as `frama-c-bitset` pins them.
+Rows 1 to 4 name the goals as `frama-c-bitset` pins them; `frama-c-hashmap`
+pins them so too, and `frama-c-bits` with `typed_`. Until VERIFY-061's phase
+C a fifth row named the bits job's sample name for the four,
+`typed_bits_next_power_of_two_normal_ensures`; the bits job names the four
+since.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_bits_next_power_of_two_normal_ensures_part3` | `frama-c-bitset` | `\result >= value` on the smearing path |
-| 2 | `typed_cast_bits_next_power_of_two_normal_ensures_2_part3` | `frama-c-bitset` | `\result != 0` there |
-| 3 | `typed_cast_bits_next_power_of_two_normal_ensures_3_part3` | `frama-c-bitset` | `(\result & (\result - 1)) == 0` there |
-| 4 | `typed_cast_bits_next_power_of_two_normal_ensures_4_part3` | `frama-c-bitset` | `\result / 2 < value` there |
-| 5 | `typed_bits_next_power_of_two_normal_ensures` | `frama-c-bits` | the bits job's sample name; its roll-call matches it unanchored, so it stands for the four above, which WP splits the same way there (WP 25, run locally) |
+| 1 | `typed_cast_bits_next_power_of_two_normal_ensures_part3` | `frama-c-bitset`, `frama-c-hashmap`; `frama-c-bits` with `typed_` | `\result >= value` on the smearing path |
+| 2 | `typed_cast_bits_next_power_of_two_normal_ensures_2_part3` | `frama-c-bitset`, `frama-c-hashmap`; `frama-c-bits` with `typed_` | `\result != 0` there |
+| 3 | `typed_cast_bits_next_power_of_two_normal_ensures_3_part3` | `frama-c-bitset`, `frama-c-hashmap`; `frama-c-bits` with `typed_` | `(\result & (\result - 1)) == 0` there |
+| 4 | `typed_cast_bits_next_power_of_two_normal_ensures_4_part3` | `frama-c-bitset`, `frama-c-hashmap`; `frama-c-bits` with `typed_` | `\result / 2 < value` there |
 
 **Functions affected**: `bits_next_power_of_two`.
 
@@ -19833,8 +19836,7 @@ that states it, dated today, after the text batch 6 wrote.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_bits_insert_normal_ensures_part3` | `frama-c-bitset`, `frama-c-hashmap` | `normal`, `0 < count < 64`: `(u64)(m << start)` is the code's `mask`, `(u64)(src << start)` its `src << start`, and `0xFFFFFFFFFFFFFFFF ^ shifted_mask` its `~mask`, so the two sides are the same terms |
-| 2 | `typed_bits_insert_normal_ensures` | `frama-c-bits` | the bits job's sample name; its roll-call matches it unanchored, so it stands for row 1's part, which WP splits the same way there (WP 25, run locally) |
+| 1 | `typed_cast_bits_insert_normal_ensures_part3` | `frama-c-bits`, `frama-c-bitset`, `frama-c-hashmap` | `normal`, `0 < count < 64`: `(u64)(m << start)` is the code's `mask`, `(u64)(src << start)` its `src << start`, and `0xFFFFFFFFFFFFFFFF ^ shifted_mask` its `~mask`, so the two sides are the same terms |
 
 **VERIFY-008's Category 2, its two rows restated.** Since G16 `align_padding`
 computes `(0 - n) & (align - 1)` and requires no bound on `n`. The two goals

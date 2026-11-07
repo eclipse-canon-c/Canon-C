@@ -3,13 +3,15 @@ name: "12 · Coq: bits.h"
 # three automatic provers leave at every model (745 / 757 at x86_64),
 # proved in Coq. The job installs Coq 8.18.0, the newest that Why3 1.7.2's
 # Coq library supports (why3-coq: coq >= 8.11 and < 8.19), into the
-# Frama-C switch, in this job only; the cached switch is unchanged. Phase
-# B, report-only: it replays the twelve proof scripts of tools/coq/session,
-# each compiled by Coq as Why3 runs it, then frama-c-bits's command with
-# Coq added, in WP's batch mode (tools/coq/replay.sh). Phase A's
-# tools/coq/phase_a.sh writes the scripts as WP gives them, without
-# proofs. Runs when its own paths change, and by hand. Map:
-# .github/workflows/README.md.
+# Frama-C switch, in this job only; the cached switch is unchanged. It
+# replays the twelve proof scripts of tools/coq/session: each compiled by
+# Coq as Why3 runs it, resting only on its own script's declarations, then
+# frama-c-bits's command with Coq added, in WP's batch mode, at x86_64 and
+# the nine machine models of proofs-machdeps.yml (tools/coq/replay.sh).
+# Phase C, runs 1 and 2: report-only. Phase A's tools/coq/phase_a.sh
+# writes the scripts as WP gives them, without proofs. Runs when its own
+# paths change (bits.h, types.h which it includes, the models), and by
+# hand. Map: .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -17,6 +19,8 @@ on:
       - '.github/workflows/coq.yml'
       - 'tools/coq/**'
       - 'core/primitives/bits.h'
+      - 'core/primitives/types.h'
+      - 'tools/machdeps/machdep_*.yaml'
       - '.github/actions/framac-setup/**'
   workflow_dispatch:
 
@@ -47,8 +51,8 @@ jobs:
             why3 config add-prover "${family}" /usr/local/bin/cvc5 cvc5 && break
           done
           why3 config list-provers
-      - name: "bits.h's twelve goals, proved in Coq: the scripts replayed (report-only)"
-        continue-on-error: true   # VERIFY-061 phase B: report-only
+      - name: "bits.h's twelve goals, proved in Coq at x86_64 and the nine machine models (report-only)"
+        continue-on-error: true   # VERIFY-061 phase C, runs 1 and 2: report-only
         run: |
           eval $(opam env --switch=frama-c)
           tools/coq/replay.sh out

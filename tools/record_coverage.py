@@ -95,13 +95,14 @@ pointer order across objects, have no goal table and no goal filed by name
 under them, and are reported as not joined; a block in force that is not
 joined fails --strict.
 Option's and result's blocks have no goal table of their own, their goals
-filed by name under them (VERIFY-039, the main pass). bits.h's roll-call is a
-documented 6-of-15 sample, and bitset's pins all 15; two of the sample's
-names, bits_next_power_of_two_normal_ensures and
-bits_rotl_nonzero_shift_ensures, are whole goals that bitset pins split,
-as _part3 and _part2, so they count as names of their own: over the main
-CI's units the script's union is the paper's (§6.3) and these two. Goal
-names are compared modulo the typed_ / typed_cast_ prefix, as in the paper.
+filed by name under them (VERIFY-039, the main pass). bits.h's roll-call
+names its twelve residuals since VERIFY-061's phase C. Until then it was a
+sample of names matched unanchored, the last of it six of the twelve; two of
+its names, bits_next_power_of_two_normal_ensures and, before VERIFY-039's
+G15, bits_rotl_nonzero_shift_ensures, were whole goals that bitset pins
+split, as _part3 and _part2, and counted as names of their own; they left
+the union with the sample. Goal names are compared modulo the typed_ /
+typed_cast_ prefix, as in the paper.
 """
 import re, sys, os, glob, argparse, subprocess
 from collections import defaultdict

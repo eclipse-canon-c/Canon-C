@@ -11,12 +11,9 @@ argued in docs/deviations.md (record coverage checks that), so a model's
 residual is argued where the x86_64 one is, and no model adds a residual
 that nothing argues.
 
-One unit is checked as its x86_64 job checks itself: frama-c-bits pins its
-count, 12, and a sample of six names matched as prefixes ("roll-call: 6-name
-sample - full-set completion pending"). A bits goal passes here if a sampled
-name is a prefix of it; the others are listed as not joined, not counted as
-problems, since no x86_64 pin names them either. Exit status: the number of
-problems found.
+Every unit is joined by name. frama-c-bits named a sample of six of its
+twelve until VERIFY-061's phase C, and was joined here by prefix; it names
+all twelve since. Exit status: the number of problems found.
 """
 import importlib.util
 import os
@@ -26,7 +23,6 @@ import sys
 UNITS = ['checked', 'bits', 'compare', 'ptr', 'slice', 'memory', 'arena',
          'pool', 'region', 'lifetime']
 CLASSES = ['ilp32', 'lp64', 'llp64']
-SAMPLED = {'bits'}   # x86_64 job pins a count and a prefix sample
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -83,15 +79,9 @@ def main():
                 continue
             mine = {k for k, units in pins.items() if job in units}
             stray = [n for n in names if rc.norm(n) not in mine]
-            if unit in SAMPLED:
-                stray = [n for n in stray
-                         if not any(rc.norm(n).startswith(k) for k in mine)]
-                for n in stray:
-                    print(f'not joined: {unit}.{cls}: {n} ({job} pins a sample)')
-            else:
-                for n in stray:
-                    print(f'NOT PINNED AT x86_64: {unit}.{cls}: {n} ({job} does not pin it)')
-                problems += len(stray)
+            for n in stray:
+                print(f'NOT PINNED AT x86_64: {unit}.{cls}: {n} ({job} does not pin it)')
+            problems += len(stray)
             print(f'{unit}.{cls}: proved {proved} / {total}, {len(names)} unproved, '
                   f'{len(names) - len(stray)} of them pinned by {job}')
     print(f'check_pins.py: {problems} problem(s)')

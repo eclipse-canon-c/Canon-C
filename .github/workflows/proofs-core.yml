@@ -78,9 +78,8 @@ jobs:
   #              set's identity with the 64-bit run).)
   #     Gate 2 — exact residual count
   #     Gate 3 — by-name roll-call; with gate 2 and unique names this is
-  #              set equality. Full roll-calls everywhere except bits
-  #              (6/15 sampled — completion pending a wp-proof-bits pull;
-  #              see the bits job comment).
+  #              set equality. Full roll-calls everywhere: bits names its
+  #              twelve since VERIFY-061 phase C (a 6-name sample before).
   #
   #   Eva is intentionally NOT run on these headers: Eva needs an entry point
   #   to anchor abstract interpretation, and these are header-only modules of
@@ -244,10 +243,11 @@ jobs:
         # The 12 are documented in docs/deviations.md (VERIFY-003, and
         # VERIFY-039's batch 6 and G15).
         # (2026-07-16 retrofit): Failed gated at zero; Proved line pinned
-        # hard. KNOWN GAP: the roll-call below is a 6-name SAMPLE, not the
-        # full 12 — count+sample is weaker than set equality. TODO: pull
-        # the full 12 names from a recent wp-proof-bits artifact and
-        # extend CHECKS to the complete set (see ci-fix-plan P2).
+        # hard. VERIFY-061, phase C: the roll-call names all twelve and is
+        # compared with the run's unproved goals by set equality, in place
+        # of the 6-name sample it was. Coq proves the twelve, as WP states
+        # them, at x86_64 and the nine machine models: 12 · Coq: bits.h
+        # (tools/coq). This job pins what the automatic provers prove.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -323,22 +323,31 @@ jobs:
             exit 1
           fi
           CHECKS=(
-            "typed_bits_clear_ensures"
-            "typed_bits_popcount_ensures"
-            "typed_bits_insert_normal_ensures"
-            "typed_bits_next_power_of_two_normal_ensures"
             "typed_bits_bswap16_assert_rte_signed_overflow"
+            "typed_bits_bswap32_ensures"
             "typed_bits_bswap64_ensures"
+            "typed_bits_clear_ensures"
+            "typed_bits_insert_normal_ensures_part3"
+            "typed_bits_next_power_of_two_normal_ensures_2_part3"
+            "typed_bits_next_power_of_two_normal_ensures_3_part3"
+            "typed_bits_next_power_of_two_normal_ensures_4_part3"
+            "typed_bits_next_power_of_two_normal_ensures_part3"
+            "typed_bits_popcount_ensures"
+            "typed_bits_rotl_assert_rte_shift_2"
+            "typed_bits_rotr_assert_rte_shift_2"
           )
-          for goal in "${CHECKS[@]}"; do
-            if ! grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_bits_output.txt; then
-              echo "FAIL: expected unproved goal ${goal} not observed."
-              exit 1
-            fi
-          done
+          printf '%s\n' "${CHECKS[@]}" | sort > bits_want_names.txt
+          { grep -E "^\[wp\] \[(Timeout|Unknown)\]" wp_bits_output.txt || true; } \
+            | sed -E 's/^\[wp\] \[[A-Za-z]+\] (Goal )?([^ ]+).*/\2/' | sort -u > bits_got_names.txt
+          if ! diff bits_want_names.txt bits_got_names.txt > bits_names.diff; then
+            echo "FAIL: the unproved goals are not the twelve (< pinned, > this run):"
+            cat bits_names.diff
+            exit 1
+          fi
           echo "PASS: WP discharged all goals automatically except the 12"
-          echo "      documented unproved goals. See docs/verification.md."
-          echo "      (roll-call: 6-name sample — full-set completion pending)"
+          echo "      documented unproved goals, each by name. See"
+          echo "      docs/verification.md. Coq proves the twelve:"
+          echo "      12 · Coq: bits.h (VERIFY-061)."
           echo "==============================================="
       - name: Upload WP proof output (bits.h)
         if: always()
