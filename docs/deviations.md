@@ -30242,3 +30242,50 @@ measured, not predicted.
 **What follows.** Phase B's run 2, for name stability. Then phase C:
 Coq goes into `frama-c-bits`, its pin moves from 745 / 757, and the docs
 follow.
+
+### Phase B, run 1: scored (2026-11-07)
+
+The push of 028e275 and 71a6a67 ran eight workflows, all `success`:
+`12 · Coq: bits.h` #4 and the seven usual ones (#31, `2 · Platforms` #39,
+`8 · Records` #39). The Coq job took 6 minutes, 4 minutes 38 of them
+installing Coq. The replay took 49 seconds: 20 for the twelve Coq runs
+and 29 for WP.
+
+| # | scored |
+|---|--------|
+| B1 | **MATCH.** Coq accepts all twelve scripts, in 0.9 to 3.4 seconds each. Each rests on the same declarations as here, name for name: 4 for the two rotations and 34 to 36 for the others. |
+| B2 | **MATCH.** 100 / 100 at the nine functions, and none of the twelve is unproved. WP's summary: 9 terminating, 9 unreachable, Qed 66, Alt-Ergo 2.6.3 4, and Coq 8.18.0 12 ("610ms-1.6s-4.4s"). The report-only step exits 0. |
+| B3 | **MATCH.** WP changed none of the twelve scripts in its copy of the session. It added eleven cache files. |
+| B4 | **MATCH.** `8 · Records` #39 is green. The 77 jobs of the six other workflows are `success`, and each gives the notices it gave at run 3's push. |
+
+At x86_64, bits.h's twelve residual goals are proved: by Coq, as WP states
+them, with WP crediting Coq.
+
+### Phase B, run 2: pre-registration
+
+Run 2 replays the same scripts again, for name stability. It also
+measures something phase C needs. VERIFY-060 pins the same twelve goals
+at each of the nine other machine models, so phase C must decide whether
+the proofs go to those jobs too. The replay now also runs WP with the
+same scripts at one model of each class:
+
+- `cortex_m4` (ILP32, read with `-enums gcc-short-enums`);
+- `aarch64_linux_gnu` (LP64, a GCC-mode model, unlike x86_64);
+- `msvc_x86_64` (LLP64).
+
+Each runs on its own copy of the session. The x86_64 part and the exit
+status are unchanged, so these runs are measurements, not checks.
+
+**The change.** `tools/coq/replay.sh` gains a fifth part: the same WP
+run at the three models, with each one's summary, unproved goals and
+changed scripts. It also stops printing WP's Coq line a second time.
+
+Only `tools/coq/` and this record change. `12 · Coq: bits.h`,
+`8 · Records` and `2 · Platforms` run (`2 · Platforms` does not skip
+`tools/**`); the others skip the push.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| B5 | **Run 1 again at x86_64:** Coq accepts the twelve on the same declarations; WP gives 100 / 100 with Coq credited with twelve and none unproved; the scripts are unchanged; the step exits 0. | any difference from run 1 | H |
+| B6 | **The same scripts prove the twelve at the three models:** 100 / 100 at each, with Coq credited with twelve and no script changed. | at any of the three, a count other than 100 / 100, Coq credited with fewer than twelve, or a script changed | M–H: bits.h computes in fixed-width types, and `int`, which bswap16's promotion uses, is 32 bits at all three. So WP should state each goal alike, but this has not been measured |
+| B7 | **Nothing else moves:** `8 · Records` is green, and `2 · Platforms` gives run 1's notices. | any change | H |
