@@ -30410,3 +30410,56 @@ bits.h`, `8 · Records` and `2 · Platforms` run; the others skip the push.
 
 **After run 2.** Run 3 enforces the Coq job, brings the docs and closes the
 record.
+
+### Phase C, run 2: scored (2026-11-07)
+
+The push of d811055 and 5084aa6 ran two workflows, both `success`:
+`12 · Coq: bits.h` #7 and `8 · Records` #42. The record said three:
+`2 · Platforms` did not run (C7). The Coq job took 11 minutes, on a
+slower runner than run 1's. The install took 4 minutes 56 seconds and the
+replay 5 minutes 18: 22 seconds for the twelve Coq runs, and about 30 for
+WP at each model.
+
+| # | scored |
+|---|--------|
+| C6 | **MATCH.** Run 1 again. Coq accepts the twelve, in 1.0 to 3.7 seconds each. Each proof rests only on names declared in its own script, the same names as at run 1. All ten models pass, and the step exits 0. |
+| C7 | **MISS.** `8 · Records` #42 is green, but `2 · Platforms` did not run, so it gave no notices. Both files the push changed end in `.md`, which `2 · Platforms` skips. Nothing moved. But the record's list of the workflows that would run was wrong for the second run in a row: run 1's missed the two machine-model workflows. |
+
+**What changes for the lists.** From run 3, a record names the workflows
+its push will start from `tools/which_workflows.py`. The script reads each
+workflow's push filters against the files the push changes. Run here, it
+gives the workflows that ran at this run, at run 1, and at phase B's and
+phase A's second runs.
+
+### Phase C, run 3: pre-registration
+
+**The change.**
+
+1. `12 · Coq: bits.h` is enforced. Its replay step no longer continues
+   on error, so the job fails unless every script passes and all ten
+   models pass. The job's name says so, and its comments follow.
+2. The docs:
+   - `docs/verification.md`: bits.h's section gets a note and its
+     expected output, and the roadmap's bits.h row reads 757 / 757, with
+     the twelve proved by Coq;
+   - `docs/traceability.md`: a note after the proof table. bits.h's row
+     keeps its automatic count, and its deviation cell names VERIFY-061;
+   - `README.md`'s paragraph on formal verification;
+   - the CI map's row (enforced), and `tools/coq/README.md`;
+   - the records of the goals: a note in VERIFY-003, and a line in each
+     of VERIFY-039's three blocks.
+3. `tools/which_workflows.py` (C7).
+
+By `tools/which_workflows.py`, the push starts `1 · Build & test`,
+`2 · Platforms`, `3 · Static analysis & coverage`, the three proof
+workflows, `8 · Records` and `12 · Coq: bits.h`. A workflow file changes,
+and the others skip the push.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| C8 | **The enforced Coq job passes.** Coq accepts the twelve, each resting only on its own script's declarations, and the ten models pass. The job is `success`, and its step is no longer allowed to fail. | the job fails | H |
+| C9 | **The push starts the eight workflows named above,** and no others. | any other set | H |
+| C10 | **Nothing else moves:** `8 · Records` is green, and every job of the six other workflows gives the notices it gave at phase C's run 1 push. | any change | H |
+
+**After run 3.** The record closes, with run 3's score and a status
+update.
