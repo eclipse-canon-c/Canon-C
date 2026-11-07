@@ -33,6 +33,12 @@ after WP's `intros` line. A goal whose statement changed may need its
 proof changed too.
 
 **To check the proofs locally**, install Coq 8.18 and why3-coq 1.7.2 with
-opam, then run:
+opam. Compile a copy outside the repository, so that Coq's output files stay
+out of it:
 
-    coqc -R "$(why3 --print-libdir)/coq" Why3 tools/coq/session/interactive/<goal>.v
+    cp tools/coq/session/interactive/<goal>.v /tmp/
+    (cd /tmp && coqc -R "$(why3 --print-libdir)/coq" Why3 <goal>.v)
+
+`tools/coq/replay.sh OUTDIR` does the same for all twelve, writing in
+OUTDIR, and then runs WP at the ten models; that part needs the CI job's
+Frama-C setup.
