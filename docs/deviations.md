@@ -30306,3 +30306,71 @@ for WP at x86_64, and about 24 for each of the three models.
 Phase B is done. The twelve scripts prove bits.h's twelve residual goals,
 as WP states them, at x86_64 and at one model of each other class, and
 the results are the same at both runs.
+
+### Phase C: the choice
+
+The author's choice (2026-11-07): the Coq check stays in `12 · Coq:
+bits.h` and runs at x86_64 and at the nine machine models of VERIFY-060,
+with one Coq install for all ten. The automatic provers' pins stay as they
+are, because they say what those provers prove: `frama-c-bits` at
+745 / 757, and the class pins at the nine models. The docs will say
+757 / 757, with the twelve proved by Coq in that job. `frama-c-bits`'s
+roll-call, a sample of six names since VERIFY-039, will name all twelve.
+
+This changes phase A's plan, which put Coq into `frama-c-bits`. Doing
+that, and the same for the other ten bits jobs, would take eleven Coq
+installs a run; this takes one.
+
+### Phase C, run 1: pre-registration
+
+**The change.**
+
+1. `tools/coq/replay.sh`:
+   - Part 1 also checks that every name a proof rests on is declared in
+     its own script, as a `Parameter` or `Axiom` of WP's theory.
+   - Part 2 runs WP at x86_64 and at the nine models, with
+     `proofs-machdeps.yml`'s arguments, each on its own copy of the
+     session. A model passes if WP gives 100 / 100, credits Coq with
+     twelve, leaves no goal unproved and changes no script.
+   - The exit status counts the scripts rejected or resting on any other
+     name, plus the models that do not pass.
+2. `12 · Coq: bits.h` stays report-only for runs 1 and 2. Its paths gain
+   `core/primitives/types.h`, which bits.h includes, and the models'
+   files. Its step's name and comments follow.
+3. `frama-c-bits` (`proofs-core.yml`): the roll-call names the twelve and
+   compares them with the run's unproved goals by set equality, in place
+   of the six-name sample. Its comments and its PASS line follow. This is
+   enforced at once, because these twelve names are already known at
+   x86_64 and in the same class pins:
+   - the machine-model pins list them at every class, from VERIFY-060's
+     three runs;
+   - the Coq job's three phase A runs gave them at x86_64;
+   - `frama-c-bitset` and `frama-c-hashmap` pin the same twelve under
+     Typed+Cast.
+4. The records follow the roll-call:
+   - VERIFY-039's bit-smearing block loses the sample's row, and its
+     heading counts four.
+   - In VERIFY-039's filing table for fixed-width arithmetic, the sample's
+     row goes, and the insert goal's Units cell names `frama-c-bits` too.
+   - In VERIFY-039's three blocks, each Units cell of the twelve names
+     every job that pins the goal: `frama-c-bitset`, `frama-c-hashmap`,
+     and `frama-c-bits` with `typed_`. The cells left out
+     `frama-c-hashmap`, whose roll-call names the twelve too, and
+     `frama-c-bits` for the six goals its sample did not name.
+   - `tools/machdeps/check_pins.py` joins bits like the other units, with
+     its sample case gone.
+   - `tools/record_coverage.py`'s note on the sample follows.
+
+A workflow file changes, so all eight workflows run.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| C1 | **Coq accepts the twelve,** and each proof rests only on names declared in its own script. | a script rejected, or a name declared elsewhere | H |
+| C2 | **All ten models pass:** at x86_64 and at each of the nine machine models, WP gives 100 / 100, credits Coq with twelve, leaves no goal unproved and changes no script. The report-only step exits 0. | a model that does not pass | M–H: phase B's run 2 measured three of the nine. The other six are in the same classes, whose models gave the same results at VERIFY-060's runs |
+| C3 | **`frama-c-bits` passes its full roll-call:** 745 / 757, with exactly the twelve names unproved. | a different count or a different name | H |
+| C4 | **The records join:** `8 · Records` is green. Record coverage, strict and complete, finds no stale goal, no drift and no filing problem; `check_pins.py` finds 0 problems and joins every bits name. | any problem | H: measured here |
+| C5 | **Nothing else moves:** every other job gives the notices it gave at phase B's run 1 push, the last run of all eight. That includes `frama-c-bits`, whose notice reads WP's output, not the gate. | any change | H |
+
+**After run 1.** Run 2, for name stability, is the Coq job again on the
+same commit, started by hand, since nothing needs to change. Run 3
+enforces the Coq job and brings the docs.
