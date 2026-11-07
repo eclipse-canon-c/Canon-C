@@ -969,7 +969,9 @@ AArch64 Linux; big-endian 32-bit PowerPC Linux, at a generated model and at
 Frama-C's `ppc_32`; and 64-bit Windows' LLP64 model. Each leaves the
 x86-64 run's unproved goals or fewer, and is enforced on its own pins.
 `arena.h` is also proved at `gcc_x86_32`, and `memory.h` and `bits.h` at
-LLP64 in `frama-c-win64` too (VERIFY-047).
+LLP64 in `frama-c-win64` too (VERIFY-047). The twelve of bits.h's goals the
+automatic provers leave are proved in Coq, as WP states them, at x86-64 and
+the nine models: bits.h is proved 757 / 757 (VERIFY-061, `tools/coq`).
 
 ---
 

@@ -175,6 +175,13 @@ and 12: the eleven true, listed in batch 6's three blocks, and `normal`'s
 part. The bits job's sample takes `typed_bits_insert_normal_ensures` for
 `typed_bits_rotl_nonzero_shift_ensures` (VERIFY-039, G14 to G17's score).
 
+**Proof note (2026-11-07, VERIFY-061).** Coq proves the twelve, as WP states
+them, at x86_64 and at the nine machine models: `12 · Coq: bits.h`
+(`tools/coq`), enforced from VERIFY-061's phase C, run 3. With it, bits.h's
+goals are proved 757 / 757. The job's pin stays at 745 / 757, which is what
+the automatic provers prove. Since phase C's run 1, the bits job names all
+twelve instead of its sample.
+
 ## VERIFY-004: Weakened Specs (bits.h — CLZ, CTZ, popcount)
 
 | Field          | Value |
@@ -19009,6 +19016,13 @@ bound it within 120 s.
 or a prover that reasons on bit vectors; neither was tried. A change with its
 own prediction.
 
+**Proved in Coq (2026-11-07, VERIFY-061).** Rows 3 to 8, and the insert goal
+filed under this block, are proved in Coq as `frama-c-bits` states them, at
+x86_64 and at the nine machine models (`12 · Coq: bits.h`, enforced). Their
+`typed_cast_` copies are not proved there, because the proofs are for WP's
+Typed model; nor are rows 1, 2, 9 and 10. Every goal stays pinned where it
+is, and this block argues it for the automatic provers' runs.
+
 #### The SWAR population count's range (1)
 
 The row names the goal as `frama-c-bitset` pins it; `frama-c-hashmap` pins
@@ -19045,6 +19059,11 @@ is the sum of all eight counts, at most 64, and `>> 56` returns it.
 
 **Retirement.** A lemma for each step, or a bit-vector prover; neither was
 tried. A change with its own prediction.
+
+**Proved in Coq (2026-11-07, VERIFY-061).** The goal is proved in Coq as
+`frama-c-bits` states it, at x86_64 and at the nine machine models (`12 ·
+Coq: bits.h`, enforced). The proof reads the three steps byte by byte. Its
+`typed_cast_` copies are not proved there, and the goal stays pinned.
 
 #### Bit smearing to the next power of two (4)
 
@@ -19085,6 +19104,11 @@ not 0, it is a power of two, so `\result & (\result - 1)` is 0, and
 
 **Retirement.** A lemma for the smear, or a bit-vector prover; neither was
 tried. A change with its own prediction.
+
+**Proved in Coq (2026-11-07, VERIFY-061).** The four are proved in Coq as
+`frama-c-bits` states them, at x86_64 and at the nine machine models (`12 ·
+Coq: bits.h`, enforced), by the smear argued above. Their `typed_cast_`
+copies are not proved there, and the four stay pinned.
 
 **VERIFY-008's Category 2, restated in part.** Its argument names "the
 power-of-2 mask identity" and draws divisibility from it, for the goal it

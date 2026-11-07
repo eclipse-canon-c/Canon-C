@@ -8,10 +8,13 @@ name: "12 · Coq: bits.h"
 # Coq as Why3 runs it, resting only on its own script's declarations, then
 # frama-c-bits's command with Coq added, in WP's batch mode, at x86_64 and
 # the nine machine models of proofs-machdeps.yml (tools/coq/replay.sh).
-# Phase C, runs 1 and 2: report-only. Phase A's tools/coq/phase_a.sh
-# writes the scripts as WP gives them, without proofs. Runs when its own
-# paths change (bits.h, types.h which it includes, the models), and by
-# hand. Map: .github/workflows/README.md.
+# Enforced since phase C's run 3: the job fails unless every script passes
+# and all ten models give 100 / 100 with Coq credited with twelve. The
+# automatic provers' pins stay in frama-c-bits (745 / 757) and the
+# machine-model jobs; with this job, bits.h's goals are proved 757 / 757.
+# Phase A's tools/coq/phase_a.sh writes the scripts as WP gives them,
+# without proofs. Runs when its own paths change (bits.h, types.h which it
+# includes, the models), and by hand. Map: .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -29,7 +32,7 @@ permissions:
 
 jobs:
   coq-bits:
-    name: "coq: bits.h (VERIFY-061, report-only)"
+    name: "coq: bits.h (VERIFY-061, enforced)"
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     steps:
@@ -51,8 +54,7 @@ jobs:
             why3 config add-prover "${family}" /usr/local/bin/cvc5 cvc5 && break
           done
           why3 config list-provers
-      - name: "bits.h's twelve goals, proved in Coq at x86_64 and the nine machine models (report-only)"
-        continue-on-error: true   # VERIFY-061 phase C, runs 1 and 2: report-only
+      - name: "bits.h's twelve goals, proved in Coq at x86_64 and the nine machine models (enforced)"
         run: |
           eval $(opam env --switch=frama-c)
           tools/coq/replay.sh out

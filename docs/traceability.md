@@ -1023,7 +1023,7 @@ and after the paragraphs below say where a reading here no longer holds.
 | Header     | Functions | Proof obligations | Proved (auto)     | Unproved | Deviation    |
 |------------|-----------|-------------------|-------------------|----------|--------------|
 | checked.h  | 30        |              1755 | 1753 (99.89%) | 2        | VERIFY-002   |
-| bits.h     | 18        |               757 | 745 (98.41%) | 12       | VERIFY-003/4 |
+| bits.h     | 18        |               757 | 745 (98.41%) | 12       | VERIFY-003/4/61 |
 | compare.h  | 28        |               208 | 208 (100.00%) | 0        | VERIFY-005   |
 | ptr.h      | 21        |              1972 | 1966 (99.70%) | 6        | VERIFY-006/23/58/59 |
 | slice.h    | 22        |               398 | 390 (97.99%) | 8        | VERIFY-007/12 |
@@ -1049,6 +1049,13 @@ and after the paragraphs below say where a reading here no longer holds.
 | array.h    | 20        |              2887 | 2863 (99.17%) | 24       | VERIFY-052   |
 | hashmap    | 19        |              4784 | 4738 (99.04%) | 46       | VERIFY-054/55/56 |
 | **Total**  | **513**   | **73958**         | **73266 (99.06%)**| **692**  |              |
+
+*No row moves 2026-11-07 (VERIFY-061).* The table counts what the
+automatic provers prove. bits.h's twelve unproved goals are proved in Coq,
+as WP states them, at x86_64 and the nine machine models (`12 · Coq:
+bits.h`, enforced): with them, bits.h's goals are proved 757 / 757. The
+twelve's copies in bitset and hashmap, under WP's Typed+Cast model, stay
+among those units' unproved goals.
 
 *Brought to the pins again 2026-11-05 (VERIFY-059).* Twelve rows move,
 +12 each: ptr.h's `ptr_in_range` and `ptr_range_in_range` compare

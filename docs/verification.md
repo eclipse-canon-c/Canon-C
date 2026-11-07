@@ -16,6 +16,16 @@ Combined verification status across all annotated headers:
 | **Proved automatic** | 73262 (99.06%)                                                                 |
 | **Unproved**         | 692 (each filed by name in `docs/deviations.md`; see per-header sections)      |
 
+*Not recomputed 2026-11-07 (VERIFY-061): no pin moved.* The card counts
+what the automatic provers prove. Coq proves bits.h's twelve residual
+goals, as WP states them, at x86_64 and the nine machine models of
+VERIFY-060 (`12 · Coq: bits.h`, enforced), so bits.h's goals are proved
+757 / 757 ("core/primitives/bits.h", below). The twelve's copies in other
+units stay among the 692: `frama-c-bitset` and `frama-c-hashmap` pin them
+under WP's Typed+Cast model, which these proofs do not cover. Since
+VERIFY-061, `frama-c-bits` names its twelve, not the sample of six that
+the VERIFY-039 note below describes.
+
 *Not recomputed 2026-11-06 (VERIFY-060): no pin moved.* The card counts
 each unit at x86_64. VERIFY-060 proves the ten core/ units at nine more
 machine models, each job enforced on its own pins: 90 jobs, and at no model
@@ -932,6 +942,17 @@ Expected output: `Proved goals: 1753 / 1755` with exactly 2 timeouts.
 > in `12 · Coq: bits.h` (`tools/coq`), report-only until VERIFY-061's phase C
 > enforces it.
 
+> **Note (2026-11-07, VERIFY-061, enforced from phase C's run 3).** bits.h's
+> goals are proved 757 / 757: 745 by the automatic provers, this job's pin,
+> and the twelve by Coq, as WP states them. `12 · Coq: bits.h` compiles each
+> of the twelve proof scripts (`tools/coq/session`) as Why3 runs Coq. Each
+> proof rests only on WP's theory as written into its script. The job then
+> runs this job's command with Coq added, at x86_64 and at the nine machine
+> models of VERIFY-060, and gets 100 / 100 at the nine functions that hold
+> the twelve. The automatic provers' pins stay as they are. The `typed_cast_`
+> copies of the twelve, which `frama-c-bitset` and `frama-c-hashmap` pin
+> under WP's Typed+Cast model, stay pinned there.
+
 ### What is proved
 
 - **Functional correctness** for simple bit operations: `bits_test`,
@@ -1019,7 +1040,8 @@ frama-c -wp -wp-rte \
 ```
 
 Expected output: `Proved goals: 745 / 757` with 12 unproved goals, the pin
-since VERIFY-039 G15 (`742 / 757` with 15 before it).
+since VERIFY-039 G15 (`742 / 757` with 15 before it). Coq proves the twelve:
+`tools/coq/replay.sh` (VERIFY-061).
 
 ---
 
@@ -5156,7 +5178,7 @@ procedure.
 | Header       | Status           | Proved    | Notes                              |
 |--------------|------------------|-----------|------------------------------------|
 | checked.h    | ✅ Verified       | 1753/1755 | 2 manual discharges                |
-| bits.h       | ✅ Verified       | 745/757   | 12 documented residuals at CI #1373, all true (VERIFY-003, VERIFY-039 batch 6); 15 before VERIFY-039 G15 closed three false postconditions |
+| bits.h       | ✅ Fully verified | 757/757   | 745 automatic, and the 12 documented residuals, all true (VERIFY-003, VERIFY-039 batch 6), proved in Coq as WP states them, at x86_64 and the nine machine models (VERIFY-061, `12 · Coq: bits.h`); 15 residuals before VERIFY-039 G15 closed three false postconditions |
 | compare.h    | ✅ Fully verified | 208/208   | 100% automatic, 0 timeouts         |
 | ptr.h        | ✅ Verified       | 1966/1972 | VERIFY-059's pin (+12, ptr.h's bounds checks' results, proved); before it VERIFY-058's 1954/1960, the full run with checked.h's goals: CI #1373's 1952/1958 and ptr_elem's and ptr_elem_const's two `in_object` calls, proved; 6 documented residuals, all true: checked.h's 2 and `align_up`'s and `align_down`'s formulas (VERIFY-039's fixed-width block), and `align_padding`'s formula and `ptr_align_padding`'s bound (VERIFY-008 Category 2); 16 before VERIFY-039 G14 and G16 closed the handler's pair, two calls and six pointer postconditions, none of which held for every admitted call; own baseline 1729/1739 with 10 (VERIFY-006), not re-measured after VERIFY-023 |
 | types.h      | N/A              |           | Type definitions only              |

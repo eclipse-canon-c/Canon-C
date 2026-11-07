@@ -3,8 +3,13 @@
 The automatic provers (Alt-Ergo, Z3, cvc5) leave twelve of bits.h's goals
 unproved at every machine model: `frama-c-bits` proves 745 / 757 at
 x86_64. Each goal is argued true in docs/deviations.md. VERIFY-061 proves
-them in Coq, as WP states them. The job is `12 · Coq: bits.h`
-(`.github/workflows/coq.yml`).
+them in Coq, as WP states them, at x86_64 and the nine machine models. The
+job is `12 · Coq: bits.h` (`.github/workflows/coq.yml`), enforced since
+VERIFY-061's phase C: with it, bits.h's goals are proved 757 / 757. The
+automatic provers' pins stay as they are, because they say what those
+provers prove. The bitset and hashmap jobs pin the same twelve under WP's
+Typed+Cast model; these proofs are for the Typed model, so those copies
+stay pinned there.
 
 | File | What it is |
 |---|---|
