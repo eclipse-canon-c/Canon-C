@@ -15,9 +15,15 @@
 #      provers, in -wp-interactive batch mode, on a copy of the committed
 #      session: WP gives Coq each script against the goal it generates now;
 #   3. WP's summary, with each prover's count, and the unproved goals;
-#   4. whether WP changed any script in its copy of the session.
+#   4. whether WP changed any script in its copy of the session;
+#   5. the same WP run at one model of each other class (cortex_m4,
+#      aarch64_linux_gnu, msvc_x86_64; the arguments are those of
+#      proofs-machdeps.yml), each on its own copy of the session, with its
+#      summary, unproved goals and changed scripts: phase B's run 2
+#      measures there whether the scripts prove the twelve at the other
+#      machine models too, for phase C.
 # Exit status: the number of scripts Coq rejects at 1, plus the number of
-# the twelve goals WP leaves unproved at 3.
+# the twelve goals WP leaves unproved at 3. Part 5 is measured only.
 
 set -u
 OUT="${1:?usage: replay.sh OUTDIR}"
@@ -85,7 +91,6 @@ echo "WP exit status: $?"
 echo "=== 3. WP's summary, and the unproved goals"
 awk '/^\[wp\] Proved goals:/{p=1; print; next} p && /^  /{print; next} {p=0}' "$OUT/wp_output.txt"
 grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" "$OUT/wp_output.txt" || echo "(none)"
-grep -iE "coq|script" "$OUT/wp_output.txt" | grep -v "^\[wp\] Proved goals" | head -40
 UNPROVED=0
 for g in "${GOALS[@]}"; do
   if grep -qE "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\] (Goal )?${g}( |$)" "$OUT/wp_output.txt"; then
@@ -99,6 +104,37 @@ find "$OUT/session" -type f | sort | sed 's/^/   /'
 for f in "$SESSION"/interactive/*.v; do
   cmp -s "$f" "$OUT/session/interactive/$(basename "$f")" \
     || echo "-- $(basename "$f"): changed by WP"
+done
+
+echo "=== 5. The same WP run at one model of each other class"
+MODELS=(
+  "cortex_m4|-machdep tools/machdeps/machdep_cortex_m4.yaml -enums gcc-short-enums"
+  "aarch64_linux_gnu|-machdep tools/machdeps/machdep_aarch64_linux_gnu.yaml"
+  "msvc_x86_64|-machdep msvc_x86_64"
+)
+for m in "${MODELS[@]}"; do
+  name=${m%%|*}
+  args=${m#*|}
+  rm -rf "$OUT/session_$name"
+  cp -r "$SESSION" "$OUT/session_$name"
+  # shellcheck disable=SC2086
+  frama-c -wp -wp-rte ${args} \
+    -wp-prover alt-ergo,z3,cvc5,coq \
+    -wp-interactive batch \
+    -wp-session "$OUT/session_$name" \
+    -wp-fct "$FUNCTIONS" \
+    -wp-timeout 120 \
+    -wp-split \
+    -cpp-extra-args=" -I core/primitives -I core -I . -DCANON_NO_REQUIRE -DNDEBUG" \
+    core/primitives/bits.h > "$OUT/wp_output_$name.txt" 2>&1
+  echo "-- ${name}: WP exit status $?"
+  awk '/^\[wp\] Proved goals:/{p=1; print; next} p && /^  /{print; next} {p=0}' "$OUT/wp_output_$name.txt"
+  grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" "$OUT/wp_output_$name.txt" \
+    || echo "   no goal unproved"
+  for f in "$SESSION"/interactive/*.v; do
+    cmp -s "$f" "$OUT/session_$name/interactive/$(basename "$f")" \
+      || echo "   $(basename "$f"): changed by WP"
+  done
 done
 
 echo "replay.sh: ${#GOALS[@]} scripts, ${REJECTED} rejected by Coq; ${UNPROVED} of the twelve unproved by WP"

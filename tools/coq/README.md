@@ -9,7 +9,7 @@ them in Coq, as WP states them. The job is `12 · Coq: bits.h`
 | File | What it is |
 |---|---|
 | `session/interactive/<goal>.v` | The twelve proofs. Each file is the script WP writes for its goal, byte for byte, with the proof after WP's `intros` line. WP names each file after its goal without the `typed_` prefix. |
-| `replay.sh` | Phase B's check. It compiles each script as Why3 runs Coq, with what the proof rests on (`Print Assumptions`). It then runs `frama-c-bits`'s command with Coq added, in WP's batch mode, on a copy of the session. |
+| `replay.sh` | Phase B's check. It compiles each script as Why3 runs Coq, with what the proof rests on (`Print Assumptions`). It then runs `frama-c-bits`'s command with Coq added, in WP's batch mode, on a copy of the session. It also runs that command at one model of each other class, as a measurement only. |
 | `phase_a.sh` | Phase A's tool. It writes the twelve scripts as WP gives them, without proofs, and prints the sources of Why3's Coq library. |
 
 **Versions.** Coq 8.18.0 and Why3 1.7.2's Coq library (opam package
