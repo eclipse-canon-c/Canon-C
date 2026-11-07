@@ -1,12 +1,15 @@
 name: "12 · Coq: bits.h"
 # VERIFY-061 (docs/deviations.md): bits.h's twelve residual goals, which the
-# three automatic provers leave at every model (745 / 757 at x86_64), given
-# to Coq. Phase A, report-only: it installs Coq 8.18.0, the newest that
-# Why3 1.7.2's Coq library supports (why3-coq: coq >= 8.11 and < 8.19), into
-# the Frama-C switch, has WP write the twelve goals as Coq scripts, and
-# prints them with the Coq sources they can require (tools/coq/phase_a.sh).
-# Coq is installed in this job only; the cached switch is unchanged. Runs
-# when its own paths change, and by hand. Map: .github/workflows/README.md.
+# three automatic provers leave at every model (745 / 757 at x86_64),
+# proved in Coq. The job installs Coq 8.18.0, the newest that Why3 1.7.2's
+# Coq library supports (why3-coq: coq >= 8.11 and < 8.19), into the
+# Frama-C switch, in this job only; the cached switch is unchanged. Phase
+# B, report-only: it replays the twelve proof scripts of tools/coq/session,
+# each compiled by Coq as Why3 runs it, then frama-c-bits's command with
+# Coq added, in WP's batch mode (tools/coq/replay.sh). Phase A's
+# tools/coq/phase_a.sh writes the scripts as WP gives them, without
+# proofs. Runs when its own paths change, and by hand. Map:
+# .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -44,14 +47,14 @@ jobs:
             why3 config add-prover "${family}" /usr/local/bin/cvc5 cvc5 && break
           done
           why3 config list-provers
-      - name: "bits.h's twelve goals, as Coq is given them (report-only)"
-        continue-on-error: true   # VERIFY-061 phase A: report-only
+      - name: "bits.h's twelve goals, proved in Coq: the scripts replayed (report-only)"
+        continue-on-error: true   # VERIFY-061 phase B: report-only
         run: |
           eval $(opam env --switch=frama-c)
-          tools/coq/phase_a.sh out
+          tools/coq/replay.sh out
       - uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: coq-bits-phase-a
+          name: coq-bits
           path: out/
           retention-days: 90
