@@ -279,6 +279,8 @@ typedef MANGLE_VEC_TYPE(type) stack_##type; \
  * \
  * @post Stack is empty, ready for push/pop \
  * @post Capacity is fixed — no growth possible \
+ * @post s->items is buffer if capacity > 0, NULL if capacity == 0, as \
+ *       vec_init returns it (VERIFY-062) \
  * @post If capacity > CANON_VEC_MAX_CAPACITY / sizeof(type), the stack is \
  *       zero (items NULL, capacity 0), as vec_init returns it: every push \
  *       then fails with ERR_INVALID_ARG (VERIFY-049 S4) \
@@ -297,7 +299,9 @@ typedef MANGLE_VEC_TYPE(type) stack_##type; \
     ensures s->items == \null && s->len == 0 && s->capacity == 0;                    \
     behavior ok:                                                                     \
     assumes capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*buffer);                    \
-    ensures s->items == buffer && s->len == 0 && s->capacity == capacity;            \
+    ensures (capacity > 0 ==> s->items == buffer)                                    \
+         && (capacity == 0 ==> s->items == \null)                                    \
+         && s->len == 0 && s->capacity == capacity;                                  \
     complete behaviors;                                                              \
     disjoint behaviors; */                                                           \
 linkage void stack_##type##_init( \
@@ -321,7 +325,7 @@ linkage void stack_##type##_init( \
  * - Time:  O(1) — no allocation \
  * - Space: O(1) \
  */ \
-/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
+/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null <==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
     assigns s->len, s->items[0 .. s->capacity - 1];                                                                                                                                                                                                                                                                                                                                           \
     behavior invalid:                                                                                                                                                                                                                                                                                                                                                                         \
     assumes s == \null || (s != \null && s->items == \null);                                                                                                                                                                                                                                                                                                                                  \
@@ -356,7 +360,7 @@ linkage result__Bool_Error stack_##type##_push( \
  * @sa stack_##type##_push — Result variant with specific error codes \
  * @sa stack_##type##_push_unchecked — unchecked variant for maximum throughput \
  */ \
-/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
+/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null <==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
     assigns s->len, s->items[0 .. s->capacity - 1];                                                                                                                                                                                                                                                                                                                                           \
     behavior refuse:                                                                                                                                                                                                                                                                                                                                                                          \
     assumes s == \null || (s != \null && (s->items == \null || s->len >= s->capacity));                                                                                                                                                                                                                                                                                                       \
@@ -394,7 +398,7 @@ linkage bool stack_##type##_try_push( \
  * @sa stack_##type##_push — Result variant with full diagnostics \
  * @sa stack_##type##_try_push — bool variant with runtime checks \
  */ \
-/*@ requires ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
+/*@ requires ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null <==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
     requires s->items != \null;                                                                                                                                                                                                                                                                                                                                                 \
     requires s->len < s->capacity;                                                                                                                                                                                                                                                                                                                                              \
     assigns s->len, s->items[s->len];                                                                                                                                                                                                                                                                                                                                           \
@@ -422,7 +426,7 @@ linkage void stack_##type##_push_unchecked( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
+/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null <==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
     requires out == \null || \valid(out);                                                                                                                                                                                                                                                                                                                                                     \
     requires (s != \null && out != \null) ==>                                                                                                                                                                                                                                                                                                                                                 \
     \separated(out, s->items + (0 .. s->capacity - 1)) && \separated(out, s);                                                                                                                                                                                                                                                                                                                 \
@@ -457,7 +461,7 @@ linkage result__Bool_Error stack_##type##_pop( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
+/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null <==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
     assigns s->len;                                                                                                                                                                                                                                                                                                                                                                           \
     behavior some:                                                                                                                                                                                                                                                                                                                                                                            \
     assumes s != \null && s->items != \null && s->len > 0;                                                                                                                                                                                                                                                                                                                                    \
@@ -497,7 +501,7 @@ linkage option_##type stack_##type##_pop_option( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-/*@ requires \valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)));  \
+/*@ requires \valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null <==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)));  \
     requires \valid(out);                                                                                                                                                                                                               \
     requires \separated(out, s);                                                                                                                                                                                                        \
     requires s->capacity > 0 ==> \separated(out, s->items + (0 .. s->capacity - 1));                                                                                                                                                    \
@@ -542,7 +546,7 @@ linkage bool stack_##type##_peek( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-/*@ requires \valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)));  \
+/*@ requires \valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null <==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)));  \
     assigns \nothing;                                                                                                                                                                                                                   \
     behavior empty:                                                                                                                                                                                                                     \
     assumes s->len == 0;                                                                                                                                                                                                                \
@@ -573,7 +577,7 @@ linkage option_##type stack_##type##_peek_option( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
+/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null <==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
     assigns \nothing;                                                                                                                                                                                                                                   \
     ensures \result == (s == \null ? 0 : s->len); */                                                                                                                                                                                                    \
 linkage usize stack_##type##_len( \
@@ -592,7 +596,7 @@ linkage usize stack_##type##_len( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
+/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null <==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
     assigns \nothing;                                                                                                                                                                                                                                   \
     ensures \result == (s == \null ? 0 : s->capacity); */                                                                                                                                                                                               \
 linkage usize stack_##type##_capacity( \
@@ -611,7 +615,7 @@ linkage usize stack_##type##_capacity( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
+/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null <==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
     assigns \nothing;                                                                                                                                                                                                                                   \
     ensures s == \null ==> \result == 0;                                                                                                                                                                                                                \
     ensures s != \null ==> \result == s->capacity - s->len; */                                                                                                                                                                                          \
@@ -631,7 +635,7 @@ linkage usize stack_##type##_remaining( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
+/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null <==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
     assigns \nothing;                                                                                                                                                                                                                                   \
     ensures \result <==> (s == \null || s->len == 0); */                                                                                                                                                                                                \
 linkage bool stack_##type##_is_empty( \
@@ -650,7 +654,7 @@ linkage bool stack_##type##_is_empty( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
+/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null <==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
     assigns \nothing;                                                                                                                                                                                                                                   \
     ensures \result <==> (s == \null || s->len >= s->capacity); */                                                                                                                                                                                      \
 linkage bool stack_##type##_is_full( \
@@ -672,7 +676,7 @@ linkage bool stack_##type##_is_full( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
+/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null <==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
     assigns s->len;                                                                                                                                                                                                                                                                                                                                                                           \
     behavior null:                                                                                                                                                                                                                                                                                                                                                                            \
     assumes s == \null;                                                                                                                                                                                                                                                                                                                                                                       \

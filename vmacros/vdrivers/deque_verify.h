@@ -594,7 +594,7 @@ DEFINE_DEQUE_STRUCTS(int)
     \valid_read(d)
     && d->size <= d->capacity
     && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(int)
-    && (d->buffer == \null ==> d->capacity == 0)
+    && (d->buffer == \null <==> d->capacity == 0)
     && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1)))
     && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)
     && (d->capacity == 0 ==> d->head == 0 && d->tail == 0);

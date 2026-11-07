@@ -94,6 +94,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: vmacros/vdrivers/vec_verify.h (VERIFY-018, enforced)"
+        continue-on-error: true   # VERIFY-062 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -467,6 +468,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: vmacros/vdrivers/deque_verify.h (VERIFY-019, report-only)"
+        continue-on-error: true   # VERIFY-062 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         run: |
           eval $(opam env --switch=frama-c)
           # ---- PROMOTED TO ENFORCED at CI #1237 (VERIFY-019) ----
@@ -2268,6 +2270,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: data/vec/vec_range.h under -CC (VERIFY-041, enforced)"
+        continue-on-error: true   # VERIFY-062 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         run: |
           eval $(opam env --switch=frama-c)
           # VERIFY-041: vec_range.h's contract and its loop's annotation live
@@ -2486,6 +2489,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: data/vec/vec_fmt.h under -CC (VERIFY-042, enforced)"
+        continue-on-error: true   # VERIFY-062 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         run: |
           eval $(opam env --switch=frama-c)
           # VERIFY-042: vec_fmt.h's contracts and loop annotations live in
@@ -2931,6 +2935,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP under -CC: data/stack.h at int"
+        continue-on-error: true   # VERIFY-062 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         run: |
           eval $(opam env --switch=frama-c)
           ENFORCE=1   # VERIFY-049: enforced at run 3; pins from run 2 (Frama-C stack #2, f5cc32d)

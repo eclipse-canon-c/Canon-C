@@ -124,6 +124,23 @@ static void test_init_sets_state(void)
     EXPECT(!vec_int_is_full(&v));
 }
 
+/* VERIFY-062: the pointer is NULL exactly when the capacity is 0, so a
+ * buffer passed with capacity 0 is not kept. */
+static void test_init_zero_capacity_keeps_no_buffer(void)
+{
+    int buf[4];
+    vec_int z = vec_int_init(buf, 0);
+    vec_int v = vec_int_init(buf, 4);
+
+    EXPECT(z.items    == NULL);
+    EXPECT(z.len      == 0);
+    EXPECT(z.capacity == 0);
+    EXPECT(vec_int_is_empty(&z));
+    EXPECT(vec_int_is_full(&z));
+    EXPECT(v.items    == buf);
+    EXPECT(v.capacity == 4);
+}
+
 /* ── Constructor: empty() ────────────────────────────────────────────────── */
 
 static void test_empty_is_null_state(void)
@@ -1202,6 +1219,7 @@ int main(void)
 
     /* constructor */
     test_init_sets_state();
+    test_init_zero_capacity_keeps_no_buffer();
     test_empty_is_null_state();
     test_alloc_and_free();
     test_alloc_zero_returns_empty();

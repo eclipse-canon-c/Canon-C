@@ -16,4 +16,5 @@ matched, and the 122 unproved goal-instances are read by kind.
 Each unit's file, memory model and preprocessing are copied from its job;
 if a job's flags change, change them here too. The job runs when the script,
 `probes.yml`, the toolchain pins or, since VERIFY-058, `core/primitives/ptr.h`
-change, and on demand.
+change; since VERIFY-062, also when `data/vec/`, `data/deque/`,
+`data/stack.h` or the drivers in `vmacros/vdrivers/` change; and on demand.

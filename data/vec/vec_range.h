@@ -148,7 +148,7 @@
  * the code before F1's and F2's fixes; run 2 on the code below. */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_EXTEND_FROM_RANGE(linkage, VecType, fn, type)                 \
-/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null <==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     assigns v->len, v->items[0 .. v->capacity - 1];                            \
     behavior invalid:                                                          \
     assumes v == \null || (v != \null && v->items == \null)                    \

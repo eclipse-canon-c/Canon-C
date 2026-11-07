@@ -121,6 +121,10 @@
  *      (VERIFY-042 F2; the same holds for any %s argument). Pointing into
  *      the current string [data, data + len) is fine.
  * @pre The vector's elements do not lie in that tail either.
+ * @pre v, if non-NULL, is a vector as vec.h's functions require it: its
+ *      pointer NULL exactly when its capacity is 0, and its capacity's
+ *      elements readable. The pointer is read before the length is tested
+ *      (VERIFY-062).
  *
  * @post Each element present at the call, in order, formatted via
  *       stringbuf_printf(sb, fmt, element), appended after what sb holds
@@ -140,7 +144,7 @@
  * as vec_range.h's do, and reach the prover only under -CC; frama-c-vec-fmt
  * preprocesses so. They name no macro parameter. */
 #define IMPL_VEC_TO_STRINGBUF(linkage, VecType, fn, type)                      \
-/*@ requires v_ok:    v == \null || (\valid_read(v) && v->len <= v->capacity && (v->len > 0 ==> \valid_read(v->items + (0 .. v->len - 1)))); \
+/*@ requires v_ok:    v == \null || (\valid_read(v) && v->len <= v->capacity && (v->items == \null <==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1))) && (v->len > 0 ==> \valid_read(v->items + (0 .. v->len - 1)))); \
     requires sb_ok:   sb == \null || stringbuf_ok(sb);                         \
     requires fmt_ok:  fmt == \null || valid_read_string(fmt);                  \
     requires fmt_sep: !(v != \null && sb != \null && fmt != \null && sb->data != \null && v->len > 0) \
@@ -211,6 +215,10 @@ linkage bool fn(                                                               \
  * ```
  *
  * @pre cb, if not NULL, is a valid function pointer
+ * @pre v, if non-NULL, is a vector as vec.h's functions require it: its
+ *      pointer NULL exactly when its capacity is 0, and its capacity's
+ *      elements readable. The pointer is read before the length is tested
+ *      (VERIFY-062).
  *
  * @post Each element present at the call passed to cb(sb, element), in
  *       order. The length and buffer are read once, at entry, so a callback
@@ -229,7 +237,7 @@ linkage bool fn(                                                               \
  * - Space: O(1) — no allocation, writes via caller-provided callback
  */
 #define IMPL_VEC_TO_STRINGBUF_CB(linkage, VecType, fn, type)                   \
-/*@ requires v_ok:  v == \null || (\valid_read(v) && v->len <= v->capacity && (v->len > 0 ==> \valid_read(v->items + (0 .. v->len - 1)))); \
+/*@ requires v_ok:  v == \null || (\valid_read(v) && v->len <= v->capacity && (v->items == \null <==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1))) && (v->len > 0 ==> \valid_read(v->items + (0 .. v->len - 1)))); \
     requires cb_ok: (v != \null && sb != \null && cb != \null && v->len > 0) ==> \valid_function(cb); \
     terminates !(v != \null && sb != \null && cb != \null && v->len > 0);      \
     exits v != \null && sb != \null && cb != \null && \old(v->len) > 0;        \

@@ -29,6 +29,10 @@ on:
       - 'tools/probes/verify-040/p_padding_lemmas.h'
       - 'tools/probes/verify-057/pointer_probe.py'
       - 'core/primitives/ptr.h'
+      - 'data/vec/**'
+      - 'data/deque/**'
+      - 'data/stack.h'
+      - 'vmacros/vdrivers/**'
       - 'tools/machdeps/flip_char.py'
       - 'tools/machdeps/machdep_aarch64_linux_gnu.yaml'
       - 'core/arena.h'
@@ -63,7 +67,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
-          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/ptr.h"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"]}'
+          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/ptr.h", "data/vec/**", "data/deque/**", "data/stack.h", "vmacros/vdrivers/**"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"]}'
         run: |
           python3 - <<'PY'
           import json, os, subprocess, fnmatch
@@ -575,6 +579,9 @@ jobs:
   # enforced jobs, and its results are scored in docs/deviations.md,
   # VERIFY-057. Since VERIFY-058 it also runs when core/primitives/ptr.h
   # changes: VERIFY-058's repair of ptr.h's contracts is measured by it.
+  # Since VERIFY-062, also when data/vec/, data/deque/, data/stack.h or the
+  # drivers in vmacros/vdrivers/ change: VERIFY-062's containers are
+  # measured by it.
   #
   # QUESTION: -wp-rte does not check the pointers a unit computes or reads;
   # C leaves one outside its object (or past one-past-the-end) undefined.

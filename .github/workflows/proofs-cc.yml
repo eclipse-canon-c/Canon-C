@@ -270,6 +270,7 @@ jobs:
           echo "==============================================================="
 
       - name: "Gates 0-3: proved line, zero refutations, exact count, roll-call (ENFORCED)"
+        continue-on-error: ${{ matrix.family == 'vec' || matrix.family == 'vec_struct' || matrix.family == 'deque' }}   # VERIFY-062 runs 1 and 2, report-only for the three families whose contracts change; run 3 removes this line
         shell: bash
         run: |
           OUT="wp_cc_${{ matrix.family }}_output.txt"

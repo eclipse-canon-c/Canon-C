@@ -516,7 +516,7 @@ DEFINE_VEC_STRUCTS(int)
     \valid_read(v)
     && v->len <= v->capacity
     && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(int)
-    && (v->items == \null ==> v->capacity == 0)
+    && (v->items == \null <==> v->capacity == 0)
     && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)));
 
   // VERIFY-039 G4, listing entry 5: the vec lies outside its own buffer.
@@ -556,7 +556,8 @@ DEFINE_VEC_STRUCTS(int)
       ensures \result.items == \null && \result.len == 0 && \result.capacity == 0;
     behavior ok:
       assumes capacity <= CANON_VEC_MAX_CAPACITY / sizeof(int);
-      ensures \result.items == buffer;
+      ensures (capacity > 0 ==> \result.items == buffer)
+           && (capacity == 0 ==> \result.items == \null);
       ensures \result.len == 0;
       ensures \result.capacity == capacity;
     complete behaviors;
@@ -582,7 +583,7 @@ static inline vec_int vec_int_empty(void);
     behavior attempt:
       assumes 0 < capacity <= CANON_VEC_MAX_CAPACITY / sizeof(int);
       ensures \result.len == 0;
-      ensures \result.items == \null ==> \result.capacity == 0;
+      ensures \result.items == \null <==> \result.capacity == 0;
       ensures \result.items != \null ==>
                 \result.capacity == capacity
              && \valid(\result.items + (0 .. capacity - 1));
@@ -602,7 +603,7 @@ static inline vec_int vec_int_alloc(usize capacity);
       assumes arena != \null && 0 < capacity <= CANON_VEC_MAX_CAPACITY / sizeof(int);
       assigns *arena;
       ensures \result.len == 0;
-      ensures \result.items == \null ==> \result.capacity == 0;
+      ensures \result.items == \null <==> \result.capacity == 0;
       ensures \result.items != \null ==>
                 \result.capacity == capacity
              && \valid(\result.items + (0 .. capacity - 1));
@@ -701,7 +702,7 @@ static inline option_int vec_int_get_option(borrowed(const vec_int*) v, usize i)
 /* ensure_msg guards are compiled out under NDEBUG: the body is a raw read
  * and these preconditions are its entire safety argument. items != NULL is
  * derivable: i < len <= capacity forces capacity > 0, and the invariant's
- * (items == NULL ==> capacity == 0) contrapositive gives items != NULL. */
+ * (items == NULL <==> capacity == 0) gives items != NULL. */
 /*@ requires vec_int_view(v);
     requires i < v->len;
     assigns \nothing;
