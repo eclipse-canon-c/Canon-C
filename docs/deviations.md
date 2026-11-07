@@ -29992,6 +29992,7 @@ cross-compilers without recommended packages.
 | **ID**         | VERIFY-061 |
 | **Date**       | 2026-11-06 |
 | **Status**     | PREDICTED (phase A). This record is committed before phase A's workflow and script, which are pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-07 — CLOSED: phase C's run 3 (`12 · Coq: bits.h` #8, enforced) matched every prediction. bits.h's twelve residual goals are proved in Coq, as WP states them, at x86_64 and the nine machine models, so bits.h's goals are proved 757 / 757. See "VERIFY-061 closed (2026-11-07)" below. The Status above is the record as committed. |
 | **Baseline**   | 966f40c (`VERIFY-060 closed: phase C matched every prediction`) |
 | **Scope**      | Phase A: `.github/workflows/coq.yml` ("12 · Coq: bits.h", new, report-only), `tools/coq/phase_a.sh`, the CI map's row 12. Phases B and C: the proof scripts, their replay in CI, and `frama-c-bits`'s pins. |
 | **Category**   | Interactive proofs of goals the automatic provers leave. Decided with the author (2026-11-06): "Try to prove what we can and if we can't, leave it." |
@@ -30487,3 +30488,72 @@ and the others skip the push.
 
 **After run 3.** The record closes, with run 3's score and a status
 update.
+
+### Phase C, run 3: scored (2026-11-07)
+
+The push of 66b5de2 and 47e11d8 ran eight workflows, all `success`: the
+ones `tools/which_workflows.py` named. The Coq job took 10 minutes 31
+seconds. Its replay took 5 minutes 9: 21 seconds for the twelve Coq runs,
+and about 29 for WP at each of the ten models.
+
+| # | scored |
+|---|--------|
+| C8 | **MATCH.** The enforced job, `coq: bits.h (VERIFY-061, enforced)`, is `success`. Coq accepts the twelve, in 0.9 to 3.5 seconds each. Each proof rests only on names declared in its own script, the same names as at runs 1 and 2. All ten models pass. |
+| C9 | **MATCH.** The push started the eight workflows named, and no others. |
+| C10 | **MATCH.** `8 · Records` #43 is green. The 77 jobs of the six other workflows give the notices they gave at phase C's run 1 push. |
+
+### VERIFY-061 closed (2026-11-07)
+
+**What it shows.** Alt-Ergo, Z3 and cvc5 leave twelve of bits.h's goals
+unproved at every machine model. All twelve are proved in Coq 8.18.0, as WP
+states them, at x86_64 and at the nine machine models of VERIFY-060. With
+them, bits.h's goals are proved 757 / 757. `12 · Coq: bits.h` checks this
+whenever bits.h, types.h, the models, the scripts or the Frama-C setup
+change:
+
+- each of the twelve scripts is WP's for its goal with the proof added,
+  and Coq accepts it as Why3 runs Coq;
+- each proof rests only on the declarations of WP's theory written into
+  its script, with no axiom from Why3's or Coq's libraries;
+- WP, given the scripts, proves 100 / 100 at the nine functions that hold
+  the twelve, at each of the ten models.
+
+None of the twelve had to be left. Each argument of VERIFY-003 and of
+VERIFY-039's batch 6 went through in Coq.
+
+**The record.** There were 31 predictions over eight runs: 28 MATCH and
+3 MISS.
+
+- A3 and A7 were faults in phase A's script. It looked for WP's scripts
+  under the wrong names, and for Why3's Coq library sources in the wrong
+  place.
+- C7 was a list of the workflows a push would start. So were two lists
+  corrected in the scores of phase A's run 2 and phase C's run 1. Since
+  phase C's run 3, `tools/which_workflows.py` writes these lists, and
+  that run's list held (C9).
+
+**Along the way.**
+
+- `frama-c-bits`'s roll-call names its twelve and checks them by set
+  equality, in place of a sample of six. This closes VERIFY-060's lead on
+  it, and VERIFY-039's tables follow.
+- `2 · Platforms`'s embedded job installs its toolchains without
+  recommended packages, under a 30-minute limit, after an install that
+  stalled for 2 hours 48 minutes (phase A's run 2).
+- `tools/which_workflows.py` names the workflows a push starts.
+
+**What it costs.** The Coq job takes 8 to 11 minutes: about 4 to 5 to
+install Coq and why3-coq into the switch, and 4 to 5 for the replay. It
+runs only when its own paths change.
+
+**Left, as leads, not as owed work.**
+
+- **The Typed+Cast copies.** `frama-c-bitset` and `frama-c-hashmap` pin the
+  twelve under WP's Typed+Cast model, and the proofs are for the Typed
+  model. If WP states those goals the same way, the same proofs, under the
+  copies' names, would close them too. That needs measuring first.
+- **The automatic provers' pins** for bits stay at 745 / 757 at every
+  model, by choice, because they say what those provers prove.
+- **Coq's version** is held at 8.18.0 by why3-coq 1.7.2, which needs a Coq
+  older than 8.19. A newer Why3 would move it, and the scripts would be
+  checked again.
