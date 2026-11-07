@@ -30289,3 +30289,20 @@ Only `tools/coq/` and this record change. `12 · Coq: bits.h`,
 | B5 | **Run 1 again at x86_64:** Coq accepts the twelve on the same declarations; WP gives 100 / 100 with Coq credited with twelve and none unproved; the scripts are unchanged; the step exits 0. | any difference from run 1 | H |
 | B6 | **The same scripts prove the twelve at the three models:** 100 / 100 at each, with Coq credited with twelve and no script changed. | at any of the three, a count other than 100 / 100, Coq credited with fewer than twelve, or a script changed | M–H: bits.h computes in fixed-width types, and `int`, which bswap16's promotion uses, is 32 bits at all three. So WP should state each goal alike, but this has not been measured |
 | B7 | **Nothing else moves:** `8 · Records` is green, and `2 · Platforms` gives run 1's notices. | any change | H |
+
+### Phase B, run 2: scored (2026-11-07)
+
+The push of 8b16fe2 and 3da4eda ran three workflows, all `success`:
+`12 · Coq: bits.h` #5, `8 · Records` #40 and `2 · Platforms` #40. The
+replay took 1 minute 56 seconds: 17 seconds for the twelve Coq runs, 26
+for WP at x86_64, and about 24 for each of the three models.
+
+| # | scored |
+|---|--------|
+| B5 | **MATCH.** Run 1 again at x86_64. Coq accepts the twelve, in 0.8 to 2.9 seconds, each on the same declarations, name for name. WP gives 100 / 100, crediting Coq with 12 ("484ms-1.2s-3.5s"), and none of the twelve is unproved. The scripts are unchanged, and the step exits 0. |
+| B6 | **MATCH.** At `cortex_m4`, `aarch64_linux_gnu` and `msvc_x86_64`, WP gives 100 / 100 with the same scripts. Each credits Coq with 12 and leaves no goal unproved, and no script is changed. Each summary is x86_64's: 9 terminating, 9 unreachable, Qed 66, Alt-Ergo 4, Coq 12. |
+| B7 | **MATCH.** `8 · Records` #40 is green. `2 · Platforms` #40's 15 jobs give run 1's conclusions and notices. |
+
+Phase B is done. The twelve scripts prove bits.h's twelve residual goals,
+as WP states them, at x86_64 and at one model of each other class, and
+the results are the same at both runs.
