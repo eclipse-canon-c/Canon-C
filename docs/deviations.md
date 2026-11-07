@@ -30135,3 +30135,110 @@ Because a workflow file changes, the seven usual workflows run with
 
 How long the install takes is not predicted, because the mirror decides
 it.
+
+### Phase A, run 3: scored (2026-11-07)
+
+The push of 9cd22f9, 69bb097 and 58c6a31 ran eight workflows, all
+`success`: `12 · Coq: bits.h` #3 (16 minutes) and the seven usual ones
+(`1 · Build & test` #30, `2 · Platforms` #38, `3 · Static analysis &
+coverage` #30, the three proof workflows #30, `8 · Records` #38).
+
+| # | scored |
+|---|--------|
+| A10 | **MATCH.** The log holds the source of each of the 64 modules, from why3-coq 1.7.2's archive, including the ten the scripts require. The report-only step exited 0. |
+| A11 | **MATCH.** The twelve scripts are run 2's, byte for byte. |
+| A12 | **MATCH.** 88 / 100, the same twelve. The insert goal is Unknown again, as at run 1. |
+| A13 | **MATCH.** apt lists `libstdc++-arm-none-eabi-newlib` under its recommended packages and installs the other eleven without it. It had 380 MB to get and fetched them in 18 seconds; the step took 38 seconds. The checks gave run 2's results. |
+| A14 | **MATCH.** The 77 jobs of the six other workflows are `success`, and each gives the notices it gave at run 1's push. 38 jobs give notices, among them the proved lines, `misra` 66, MC/DC 2030 / 2198 and the embedded counts. |
+
+Phase A is done. Run 3's log holds each goal's script and the source of
+every module the scripts require, as CI gives them to Coq.
+
+### Phase B: what was done here
+
+Measured here before the push, with Coq 8.18.0 (apt's, the version CI
+installs with opam):
+
+- **The library.** Why3 1.7.2's Coq library, rebuilt from run 3's log:
+  its 64 modules compile.
+- **The proofs.** A proof was written for each of the twelve goals, and
+  none was left: every argument in the table above went through.
+- **Each script is WP's, byte for byte,** except the empty line WP leaves
+  for the proof after its `intros`; the proof takes that line's place.
+- **Coq accepts each one** as Why3 runs Coq (`coqtop -batch -R <library>
+  Why3 -l <script>`), in 0.6 to 3.4 seconds.
+- **What each proof rests on** (`Print Assumptions`): declarations of WP's
+  theory, which WP writes into the script, and nothing else. No axiom of
+  Why3's library or of Coq's is used. The two rotations rest on four:
+  `land`, `to_uint64`, `uint_land_range` and `id_uint64`. The other ten
+  rest on 34 to 36 each: WP's bit theory, which relates `land`, `lor`,
+  `lxor`, `lsl`, `lsr`, `to_uint32` and `to_uint64` to the bits of an
+  integer (`bit_test`), with its extensionality axiom `is_sint_ext`.
+
+**How the proofs go.** In WP's theory the bit operators are declared, not
+defined: each has only the axioms that state its bits. Ten of the proofs
+begin with the same block. It derives from those axioms alone that WP's
+`land`, `lor`, `lxor`, `lsr`, `lsl`, `to_uint32` and `to_uint64` are
+Coq's `Z.land`, `Z.lor`, `Z.lxor` and `Z.shiftr`, multiplication by 2^n,
+and reduction modulo 2^32 and 2^64. Each goal is then proved in Coq's
+integers:
+
+- **rotl, rotr:** `sh = shift & 63` is 1 to 63 once it is not 0, so
+  `64 - sh` is too. These two proofs need no block.
+- **bswap16:** `value << 8` is at most 65535 × 256.
+- **bswap32, bswap64:** each shifted byte is below 2^32 (2^64), so the
+  casts change nothing. Both sides OR the same four (eight) terms in a
+  different order.
+- **clear, insert:** below bit 64, `~mask` cast to 64 bits and
+  `0xFFFFFFFFFFFFFFFF ^ mask` have the same bits. From bit 64 up, the
+  value's bits are 0.
+- **next_power_of_two, the four goals:** the six shifted ORs of
+  `x = value - 1` set every bit below x's highest set bit T and none above
+  it. Their OR is therefore 2^(T+1) - 1, and the result is 2^(T+1), with
+  T = -1 when x is 0. The four goals follow: the result is at least
+  `value`, it is not 0, it is a power of two, and its half is below
+  `value`.
+- **popcount:** byte by byte. No step carries from one byte into the
+  next, so each byte of the count before the multiply depends only on the
+  same byte of `value`. Coq computes all 256 byte values (`vm_compute`):
+  each gives at most 8. The top byte of the product with
+  0x0101010101010101 is the sum of the eight bytes, at most 64.
+
+### Phase B: pre-registration
+
+**The change.**
+
+1. `tools/coq/session/interactive/`: the twelve scripts with their
+   proofs, each named as WP names it.
+2. `tools/coq/replay.sh` prints four parts:
+   1. each committed script, compiled by Coq as Why3 runs Coq, with its
+      time and what it rests on;
+   2. `frama-c-bits`'s command with Coq added, in `-wp-interactive batch`
+      mode, on a copy of the session, so that WP gives Coq each script
+      against the goal it generates now;
+   3. WP's summary, with each prover's count, and the unproved goals;
+   4. whether WP changed any script in its copy.
+
+   Its exit status counts the scripts Coq rejects and the twelve goals WP
+   leaves unproved.
+3. `12 · Coq: bits.h` runs `replay.sh`, report-only, instead of
+   `phase_a.sh`. `phase_a.sh` stays, to write the scripts again if bits.h's
+   goals change. `tools/coq/README.md` describes the files. The workflow's
+   comments and its row in the CI map follow.
+
+Because a workflow file changes, the seven usual workflows run with it,
+as at runs 1 and 3.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| B1 | **Coq accepts the twelve scripts in CI as it does here,** each resting on the declarations listed above and on nothing else. | a script rejected, or a declaration from outside the script | H: the same Coq version and the same library sources |
+| B2 | **WP proves the twelve with Coq:** 100 / 100 at the nine functions, Coq credited with twelve goals in WP's summary, and none of the twelve unproved. The report-only step exits 0. | fewer than 100, Coq credited with fewer than twelve, or a nonzero exit | M: how WP 29 reads a committed script in batch mode has not been measured. WP must find each script by its name in the session, and Why3 must keep the proof when it writes the goal again |
+| B3 | **WP leaves the scripts as they are** in its copy of the session. | a script changed | M: for the same reason |
+| B4 | **Nothing else moves:** `8 · Records` is green, and every job of the six other workflows gives the notices it gave at run 3's push. | any change | H |
+
+WP's summary beyond the twelve, and how long Coq takes in CI, are
+measured, not predicted.
+
+**What follows.** Phase B's run 2, for name stability. Then phase C:
+Coq goes into `frama-c-bits`, its pin moves from 745 / 757, and the docs
+follow.
