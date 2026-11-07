@@ -30557,3 +30557,163 @@ runs only when its own paths change.
 - **Coq's version** is held at 8.18.0 by why3-coq 1.7.2, which needs a Coq
   older than 8.19. A newer Why3 would move it, and the scripts would be
   checked again.
+
+## VERIFY-062: Pre-registration — VERIFY-057's I, R, T and V Decided; Phase A, a Container's Pointer Is NULL Exactly When Its Capacity Is 0
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-062 |
+| **Date**       | 2026-11-07 |
+| **Status**     | PREDICTED (phase A). This record is committed before phase A's change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 2a17f2f (`VERIFY-061 closed: phase C's run 3 matched every prediction`) |
+| **Scope**      | Phase A: the contracts of `data/vec/vec_impl.h`, `vec_range.h`, `vec_fmt.h`, `data/stack.h`, `data/deque/deque_impl.h`, `vmacros/vdrivers/vec_verify.h` and `deque_verify.h`; `vec_init`'s code; their documentation; a test in `test/data/vec_test.c`; the WP steps of five jobs and -CC's gate step for three families, report-only for runs 1 and 2; the pointer probe's filter and README. Phase B: the queue's, stringbuf's and region's queries. |
+| **Category**   | Contracts that close pointer reads the pointer probe measured. Decided with the author (2026-11-07). |
+
+### What was decided
+
+VERIFY-057's probe left 44 goal names unproved, in five kinds; VERIFY-058
+repaired the three P goals, and `9 · Probes` #7 (9902e06) reads 987 / 1073,
+86 unproved, 41 names. The author decided the rest (2026-11-07):
+
+- **I (2 names), kept.** `ptr_align_up` and `ptr_align_down` compute an
+  address as an integer and convert it back to a pointer. Their job is that
+  address, which may lie outside `p`'s object: a page base below a heap
+  block, for example. C leaves the conversion's result
+  implementation-defined (6.3.2.3p5), and WP does not tie the integer to an
+  object, so the probe's goal that the result points into an object cannot
+  be proved, and is not a defect. No library function calls them. Their two
+  goals stay unproved in the probe, with this argument; the probe gates
+  nothing, and they are in no pin.
+- **R, the containers (23 names): the pointer is NULL exactly when the
+  capacity is 0.** vec's and deque's clauses `items == \null ==> capacity
+  == 0` become equivalences, as vec's struct comment already says ("NULL
+  iff capacity == 0"). `vec_init(buffer, 0)` kept the caller's buffer, and
+  now gives NULL; `stack_init`, which calls it, the same. With the
+  predicates' "capacity above 0, elements valid", that is to close 17
+  names: vec's ten, in vec and in stack, `extend_from_range`'s and deque's
+  six.
+  vec_fmt's two functions read the pointer under a contract that states only
+  the elements below the length; they require vec's form, the equivalence
+  included, in phase A too. In phase B, the queue's, stringbuf's and
+  region's queries (4 names) require their predicates.
+- **R, the callers' pointers (6) and borrow's handles (4)** are decided
+  after this record, by what their callers are to owe.
+- **T (3) and V (3)** stay with the arguments VERIFY-057 gave them, and
+  nothing changes for them.
+
+### Phase A: the change
+
+1. **82 clauses become equivalences**: `vec_impl.h` 30, `vec_range.h` 1,
+   `stack.h` 13, `deque_impl.h` 34, `vec_verify.h` 3 (its predicate
+   `vec_int_view`, and the results of `vec_int_alloc` and
+   `vec_int_arena_alloc`), `deque_verify.h` 1 (its predicate
+   `deque_int_view`). Each read `p->items == \null ==> p->capacity == 0`
+   (`buffer` for deque; `\result.items` for the two constructors), the same
+   struct on both sides, and reads `<==>`. The precondition
+   `buffer == \null ==> capacity == 0` of `vec_init` and `stack_init` stays:
+   a buffer passed with capacity 0 is still accepted.
+2. **`vec_init`** stores the buffer when the capacity is above 0, and NULL
+   when it is 0: `v.items = (capacity > 0u) ? buffer : NULL;`. Its `ok`
+   postcondition, in `vec_impl.h` and in `vec_verify.h`'s prototype, was
+   `\result.items == buffer` and is `(capacity > 0 ==> \result.items ==
+   buffer) && (capacity == 0 ==> \result.items == \null)`; `stack_init`'s
+   says the same of `s->items`, in its conjunction. Frama-C 25's typer
+   refuses the shorter `\result.items == (capacity > 0 ? buffer : \null)`
+   ("types int * and void * are not convertible"), so the two cases are
+   written out. The documentation follows, with a note: a vector of
+   capacity 0 is `fn_empty()`'s, whatever buffer is passed, so `push`
+   returns `ERR_INVALID_ARG` for it where it returned
+   `ERR_CAPACITY_EXCEEDED`, and `data()` NULL where it returned the buffer.
+   deque needs no code change: `deque_init` requires a buffer and a capacity
+   above 0, and `deque_empty` gives NULL and 0.
+3. **vec_fmt.** `vec_int_to_stringbuf` and `vec_int_to_stringbuf_cb` read
+   `v->items` before they test the length, and their precondition `v_ok`
+   states the elements valid below the length only: at length 0 it says
+   nothing of the pointer. `v_ok` gains vec's two conjuncts, the equivalence
+   and the capacity's elements readable, and their `@pre` says so. No
+   verified unit calls them.
+4. **A test.** `vec_test.c`'s `test_init_zero_capacity_keeps_no_buffer`:
+   `vec_int_init(buf, 0)` gives a NULL pointer, length 0 and capacity 0, and
+   `vec_int_init(buf, 4)` keeps `buf`. `vmacros/coverage/vec_cover.c` is not
+   changed: its calls `vec_int_init(buf, 8)` and `vec_int_init(NULL, 0)`
+   take the new test both ways.
+5. **The jobs.** The WP steps of `frama-c-vec`, `frama-c-stack`,
+   `frama-c-vec-range`, `frama-c-vec-fmt` and `frama-c-deque`, and -CC's
+   gate step for `vec`, `vec_struct` and `deque`, are report-only for runs 1
+   and 2 (`continue-on-error`), with their pins unchanged: a gate that
+   misses fails its step, which the log and an error annotation show, and
+   not the job. Run 3 sets the pins measured and removes the lines.
+6. **The probe.** `pointer-probe` runs, from this push, when `data/vec/`,
+   `data/deque/`, `data/stack.h` or the drivers in `vmacros/vdrivers/`
+   change (its filter and the workflow's paths); its README says so.
+   Editing `probes.yml` runs the workflow's other probes too.
+
+### Measured here, with their limits
+
+This workspace has Frama-C 25's kernel without WP (Ubuntu 24.04's package
+ships none, and frama-c.com cannot be reached from here): no goal is
+generated or proved here. What was run:
+
+- **Parsing and typing.** The eight files the jobs give WP, each with its
+  job's preprocessing (and `-c11`, which Frama-C 25 needs for
+  `_Static_assert`): `vec_verify.h`, `deque_verify.h`, and under `-CC`
+  `stack_verify.h`, `vec_range_verify.h`, `vec_fmt_verify.h` and -CC's
+  `vec_cc_experiment.h`, `vec_struct_cc_experiment.h` and
+  `deque_cc_experiment.h`. Each parses and types, before and after.
+- **The probe's assertions.** The RTE plugin with `-warn-invalid-pointer`,
+  on the probe's files with its preprocessing, writes the same
+  `pointer_value` assertions per function before and after: vec 76, stack
+  76, vec_range 25, vec_fmt 79, deque 26. CI's WP counts more goals (88, 88,
+  36, 86, 37): it splits some under `-wp-split`, which is not measured here.
+  `vec_init`'s new branch adds no assertion: the pointer goes through a
+  local.
+- **Build and tests**, GCC 13, Debug: the 58 tests pass, the new one
+  included.
+- **Coverage**, as the coverage job makes it (GCC 14, lcov, the cover
+  TUs): the baseline gives CI's numbers exactly, 2933 of 3014 lines, 753 of
+  756 functions, 1777 of 1932 branches and 2030 of 2198 MC/DC outcomes,
+  each cover TU's row as in `3 · Static analysis & coverage` #33's notice.
+  After: lines, functions and branches the same; MC/DC 2032 of 2200,
+  `vec_cover.c`'s row 157 / 160, from 155 / 158: the new test's two
+  outcomes, both taken.
+- **MISRA**, cppcheck 2.13.0 as the misra job runs it: the baseline gives
+  real 66, canary 3, as CI; after, the same, each finding at the same file
+  and rule.
+
+### The workflows
+
+`tools/which_workflows.py` on the two commits' files: `1 · Build & test`,
+`2 · Platforms`, `3 · Static analysis & coverage`, `4 · Proofs: core/`,
+`5 · Proofs: semantics/`, `6 · Proofs: data/`, `7 · Proofs: -CC`,
+`8 · Records` and `9 · Probes` run; `10 · Machine models`,
+`11 · Proofs: machine models` and `12 · Coq: bits.h` do not. 4 and 5 run
+because workflow files change; their units' sources do not.
+
+### Predictions
+
+Run 1 is this push, report-only; run 2 the next push that runs these jobs;
+run 3 sets the pins and removes the `continue-on-error` lines. Each part is
+scored from the jobs' logs and annotations.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| A1 | **Every goal added or changed is proved, and no other goal changes status**, in the eight jobs whose contracts change: `frama-c-vec`, `-stack`, `-vec-range`, `-vec-fmt` and `-deque`, and -CC's `vec`, `vec_struct` and `deque`. Each keeps its unproved count, 93, 69, 45, 47 and 12, and 69, 69 and 12, and its roll-call; none Failed or Invalid. | an unproved count or a pinned name changes; any Failed or Invalid | M–H; M for the pinned names with a part number (e.g. `vec_int_insert_assigns_normal_part10`), which change if WP splits their goal otherwise |
+| A2 | **The totals**, if WP splits the two initialisers' postconditions at their new conjunct and keeps each equivalence one goal: `frama-c-vec` and -CC's `vec` and `vec_struct` +1 each (`vec_init`'s, two parts from one); `frama-c-stack` +2 (and `stack_init`'s, four from three); `frama-c-vec-range`, `-vec-fmt` and `-deque`, and -CC's `deque`, +0 (their units define no vec constructor, and each changed clause stays one goal, or one part). The proved count rises with the total (A1). | another count | L–M: if WP splits an equivalence into its two directions, every job with a goal that states one counts more (calls' preconditions under -CC, the two constructors' postconditions, deque's restated predicate) |
+| A3 | **The probe's containers**: the 19 names close wherever they were open: `frama-c-vec` 84 / 88 (left: `ptr_align_up`'s, `ptr_align_down`'s, and `vec_int_fill`'s second, in two parts), `frama-c-stack` 86 / 88 and `frama-c-vec-range` 34 / 36 (ptr.h's two), `frama-c-vec-fmt` 78 / 86 (borrow's four, ptr.h's two, `stringbuf_is_arena_backed`'s, `vec_int_to_stringbuf_cb`'s second), `frama-c-deque` 37 / 37. If WP splits one of them, every part is proved. | one of the 19 unproved, in any part | M–H: each reads a pointer that is null, or whose capacity is then above 0 and its elements valid |
+| A4 | **The probe's other goals** as at #7: 1016 / 1073 in all, 57 unproved, 22 names (I 2; R 14: borrow's 4, the callers' `ctx` 6, phase B's 4; T 3; V 3); each unit's total unchanged. | another goal's status changed, or a unit's total | M–H for the statuses; M for the totals: WP may split a pointer goal otherwise under the new hypothesis |
+| A5 | **Nothing else moves in the proofs**: the jobs of 4, 5 and 6 whose units do not include vec, deque or stack, and -CC's `slice`, `result`, `option` and `borrow`, at their pins. | any change | H (their sources do not change) |
+| A6 | **Builds, tests, coverage, MISRA**: `1 · Build & test` and `2 · Platforms` green; coverage at 2933 of 3014 lines, 753 of 756 functions, 1777 of 1932 branches and 2032 of 2200 MC/DC outcomes, `vec_cover.c` 157 / 160 and the other cover TUs as at #33; `misra` at real 66, canary 3; `compcert` 59 / 59. | any change | H for coverage and MISRA (the jobs' tools, run here); M–H for the builds, since MSVC, macOS, CompCert and the platform jobs were not run here |
+| A7 | **The earlier probes**: g4, g11, g13, g19, count, round3 and char green, with #7's verdicts. The count probe runs on `vec_verify.h`, whose predicate changes; its two functions state the predicate as one call, so its run H still counts 196 goals, B 191. | any change | M–H |
+| A8 | **8 · Records** passes. | a failure | H (run here) |
+| A9 | **The workflows**: 1 to 9 run, 10 to 12 do not. | another set | H |
+
+**What follows.** If A1 and A3 match, run 2, the push of this score, gives
+the same lines and names, and run 3 pins them and removes the
+`continue-on-error` lines. A MISS in A2 alone is a count of WP's splits and
+moves the pins only. An unproved goal, in A1 or A3, is read against its code
+before anything is pinned. Then phase B, under its own predictions:
+`pq_as_bytes`, `pq_as_cbytes`, `stringbuf_is_arena_backed` and
+`region_has_parent` require their predicates.
+
+The change is pushed with this record, in the commit after it. Its hash
+follows this one, and neither has run in CI.
