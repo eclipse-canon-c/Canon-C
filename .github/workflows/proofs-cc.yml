@@ -148,7 +148,12 @@ jobs:
           # all proved. Before: vec 5532 / 5601, vec_struct 5530 / 5599.
           # Held at runs 1 and 2 (afabc7d, CC #15; db4509d, CC #16),
           # enforced from run 3.
-          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5544 / 5613", unproved: 69  }
+          # VERIFY-062 measured: vec and vec_struct +8 each, all proved.
+          # Before: vec 5544 / 5613, vec_struct 5542 / 5611. Run 1 (366832e,
+          # vec_init's conditional): 5556 / 5625 and 5554 / 5623; run 2
+          # (ba39dea, its if): 5552 / 5621 and 5550 / 5619. Written at run 3,
+          # report-only; enforced from run 4.
+          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5552 / 5621", unproved: 69  }
           - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1653 / 1665", unproved: 12  }
           # vec_struct: VERIFY-037/038 — vec and option at a struct type (Rec).
           # First pinned as a prediction (38404b9); measured at CC #27; ratcheted
@@ -159,7 +164,8 @@ jobs:
           # and 97.
           # VERIFY-040 round 3: predicted pin, as cc-vec's. Before:
           # 5488 / 5581 and 93.
-          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5542 / 5611", unproved: 69  }
+          # VERIFY-062: as cc-vec's, run 2's line (5542 / 5611 before).
+          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5550 / 5619", unproved: 69  }
     steps:
       - uses: actions/checkout@v6
 
@@ -270,7 +276,7 @@ jobs:
           echo "==============================================================="
 
       - name: "Gates 0-3: proved line, zero refutations, exact count, roll-call (ENFORCED)"
-        continue-on-error: ${{ matrix.family == 'vec' || matrix.family == 'vec_struct' || matrix.family == 'deque' }}   # VERIFY-062 runs 1 and 2, report-only for the three families whose contracts change; run 3 removes this line
+        continue-on-error: ${{ matrix.family == 'vec' || matrix.family == 'vec_struct' || matrix.family == 'deque' }}   # VERIFY-062 runs 1 to 3, report-only for the three families whose contracts change; run 4 removes this line
         shell: bash
         run: |
           OUT="wp_cc_${{ matrix.family }}_output.txt"
