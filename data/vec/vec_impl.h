@@ -296,6 +296,14 @@ static inline void fn_lt_close(VecType* v) { \
  *       returned ERR_CAPACITY_EXCEEDED, and data() NULL where it returned
  *       the buffer.
  *
+ * @note The buffer is stored by an if, not a conditional expression: the
+ *       conditional takes this function's control-flow graph to 14 blocks,
+ *       where clang's static analyzer counts a function as large and
+ *       inlines it at most 32 times per translation unit; past that it
+ *       reads the vector as unknown, and clang-tidy reported a false
+ *       out-of-bounds read in test/data/vec_test.c (VERIFY-062, run 1). The
+ *       if keeps the graph at 13 blocks, with the requires on.
+ *
  * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token. The ID is
  * derived from the returned struct's address — borrows constructed against
  * this vec carry this ID. On overflow check failure the returned zero-init
@@ -328,9 +336,12 @@ linkage VecType fn(borrowed(type*) buffer, usize capacity) { \
         return (VecType){0}; \
     } \
     VecType v; \
-    v.items    = (capacity > 0u) ? buffer : NULL; \
+    v.items    = NULL; \
     v.len      = 0; \
     v.capacity = capacity; \
+    if (capacity > 0u) { \
+        v.items = buffer; \
+    } \
     fn_lt_open(&v); \
     return v; \
 }
