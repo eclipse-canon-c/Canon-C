@@ -30717,3 +30717,91 @@ before anything is pinned. Then phase B, under its own predictions:
 
 The change is pushed with this record, in the commit after it. Its hash
 follows this one, and neither has run in CI.
+
+### Phase A, run 1: scored (2026-11-08)
+
+The push of 4ec04fd and 366832e ran nine workflows, 1 to 9; 10, 11 and 12
+did not run. Eight were green. `3 · Static analysis & coverage` #34 was red:
+its job `static-analysis (ubuntu-24.04)` failed at clang-tidy. The other
+workflows have 119 jobs, not counting `8 · Records`. 109 of them give the
+notices of their last runs: 47e11d8, -CC's b8d935c and the probes' 9902e06.
+Ten differ: coverage, the failed job, `frama-c-vec`, `frama-c-stack`, the
+count probe (by its printed line numbers, A7) and the pointer probe's five
+container units. The report-only steps of `frama-c-vec`,
+`frama-c-stack`, and -CC's `vec` and `vec_struct` failed at their proved
+lines, as set up, and their jobs stayed green.
+
+| # | scored |
+|---|--------|
+| A1 | **MATCH.** The eight jobs keep their unproved counts (93, 69, 45, 47 and 12; 69, 69 and 12) and their roll-calls, by name. `frama-c-vec`'s gate stopped at its proved line, so its 93 names were taken from its log: they are its pinned 93. `frama-c-stack`'s 69 are cc-vec's 69, and none is its own. -CC's three report "missing 0, unpinned 0". `-vec-range`, `-vec-fmt` and `-deque` pass all their gates. No goal is Failed, Invalid or Stepout, and every goal added is proved. |
+| A2 | **MISS.** `frama-c-vec` is at 5507 / 5600, -CC's `vec` at 5556 / 5625, -CC's `vec_struct` at 5554 / 5623 and `frama-c-stack` at 5746 / 5815: 12 goals more each, all proved. The record said 1, 1, 1 and 2. `frama-c-vec-range`, `-vec-fmt` and `-deque`, and -CC's `deque`, stay at their pins, +0, as it said. The four that count 12 more are the four units that define vec's functions. In `frama-c-vec`'s statistics, the 12 are Qed's (4596 to 4608). Alt-Ergo, CVC5 and Z3 split the rest differently (594, 9 and 56 to 611, 10 and 38), and so do Timeout and Unknown among the same 93 names (92 and 1 to 84 and 9). WP's output names only the goals it leaves unproved, so which 12 goals these are was not measured. They are not in `vec_int_append_array` or `vec_int_extend`: the count probe's run H still counts 196 goals there. |
+| A3 | **MATCH.** The 19 names close. `frama-c-vec` is at 84 / 88, leaving `ptr_align_down`'s, `ptr_align_up`'s and `vec_int_fill`'s second, in two parts. `frama-c-stack` (86 / 88) and `frama-c-vec-range` (34 / 36) leave ptr.h's two. `frama-c-vec-fmt` (78 / 86) leaves the eight named, and `frama-c-deque` is at 37 / 37. |
+| A4 | **MATCH.** 1016 / 1073 in all, 57 unproved, 22 names. The other 21 units give #7's lines, and every unit keeps its total. |
+| A5 | **MATCH.** The other jobs of 4, 5 and 6 give the notices of 47e11d8. -CC's `slice`, `result`, `option` and `borrow` pass at their pins. |
+| A6 | **MISS.** Everything it names matched: `1 · Build & test` #34 and `2 · Platforms` #43 green; coverage at 2933 of 3014 lines, 753 of 756 functions, 1777 of 1932 branches and 2032 of 2200 MC/DC outcomes, with `vec_cover.c` at 157 / 160 and the other rows as at #33; misra at real 66, canary 3; compcert at 59 / 59. But a job it did not name failed: in `static-analysis (ubuntu-24.04)`, clang-tidy's analyzer reported "The right operand of '==' is a garbage value due to array index out of bounds" at `test/data/vec_test.c:702`, in `test_iter_visits_all_elements`. The record had not run clang-tidy. |
+| A7 | **MATCH.** g4, g11, g13, g19, count, round3 and char are green, with #7's verdicts. The count probe's run H counts 196 goals and run B 191. The only change in its notice: the goals it prints from `vec_verify.h` now sit one line lower. |
+| A8 | **MATCH.** `8 · Records` #45 is green. |
+| A9 | **MATCH.** Workflows 1 to 9 ran; 10, 11 and 12 did not. |
+
+Seven of the nine match.
+
+**The red job, measured here.** clang-tidy 18.1.3 (the runner's version)
+gives the finding here on 366832e's tree and not on 2a17f2f's, and only
+because of `data/vec/vec_impl.h`: 366832e's headers with 2a17f2f's
+`vec_test.c` give it, and 2a17f2f's headers with 366832e's test do not.
+`clang --analyze` with the core checkers gives the same warning, and with
+`-analyzer-config max-times-inline-large=1000` it gives none.
+
+The mechanism: clang's analyzer counts a function of 14 or more
+control-flow blocks as large, and inlines a large function at most 32 times
+in a translation unit (`min-cfg-size-treat-functions-as-large` and
+`max-times-inline-large`). After that, it evaluates the call without its
+body. In that job's build the requires are on, and there `vec_int_init` has
+11 blocks at 2a17f2f and 14 with the conditional expression. `vec_test.c`
+calls it 49 times. In `test_iter_visits_all_elements`, the analyzer no
+longer knows the vector's length after three pushes, so it follows the loop
+past `expected`'s three elements and reads `expected[3]`. The test cannot
+do that: the finding is a false positive, and the code behaves as tested.
+
+### Phase A, run 2: pre-registration
+
+**The fix.** `vec_init` stores NULL, and then the buffer under
+`if (capacity > 0u)`. That gives 13 blocks, one under the analyzer's limit.
+Its contract and behaviour are unchanged, and its documentation says why it
+uses an if. Nothing else changes, and the report-only lines stay for this
+run.
+
+**Measured here, on the fix:**
+
+- **clang-tidy**, the job's step over its 61 files: no finding. The same
+  step gives no finding on 2a17f2f's tree and exactly run 1's one on
+  366832e's.
+- **Coverage**: as at run 1, with 2933 of 3014 lines, 753 of 756 functions,
+  1777 of 1932 branches and 2032 of 2200 MC/DC outcomes (`vec_cover.c` at
+  157 / 160).
+- **MISRA**: real 66 and canary 3, each finding at the same file and rule.
+- **The probe's assertions**: the same per function as before phase A.
+- **Parsing**: Frama-C 25 parses -CC's three drivers.
+- **Builds and tests**: GCC 13 and clang 18 build with no warning, and the
+  58 tests pass.
+
+**The workflows.** `tools/which_workflows.py` on this score's commit and the
+fix's (`docs/deviations.md` and `data/vec/vec_impl.h`): 1 to 9 run, and 10,
+11 and 12 do not. In `9 · Probes`, only the pointer probe runs, because its
+filter has `data/vec/**`; the other probes' jobs are skipped.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| B1 | **`3 · Static analysis & coverage` is green**: clang-tidy reports nothing, and coverage, MISRA and CompCert give run 1's numbers. | a finding, or another number | H (the jobs' tools, run here) |
+| B2 | **The eight jobs give run 1's lines**: `frama-c-vec` 5507 / 5600, `frama-c-stack` 5746 / 5815, -CC's `vec` 5556 / 5625 and `vec_struct` 5554 / 5623, and the other four at their pins. They keep the same unproved counts and names, and none is Failed or Invalid. | another line or name | M–H: the if gives WP the two paths the conditional gave it |
+| B3 | **The pointer probe gives run 1's lines**: 1016 / 1073, 57 unproved, 22 names, each unit as at run 1. | another line | M–H, for the same reason |
+| B4 | **Nothing else moves**: 1 and 2 are green, the other proof jobs stay at their pins, and `8 · Records` passes. | any change | H |
+| B5 | **The workflows**: 1 to 9 run and 10 to 12 do not; in 9, only the pointer probe's 26 jobs run. | another set | H |
+
+**What follows.** If B1 to B3 match, run 3 pins B2's lines in the four jobs
+whose lines moved, keeps the other four, and removes the `continue-on-error`
+lines. If B2 or B3 gives other lines, they are read against the change, and
+another report-only run confirms them before anything is pinned. Then phase
+B, under its own predictions.
+
+The fix is pushed with this score, in the commit after it.
