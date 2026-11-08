@@ -28471,7 +28471,7 @@ differences from its pins.
 | **ID**         | VERIFY-057 |
 | **Date**       | 2026-11-03 |
 | **Status**     | PREDICTED. This record is committed before the probe commit, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-04 — CLOSED: the probe's run on 9207897 (`9 · Probes` #3) matched every prediction; 122 of 1073 goals unproved, 44 names in five kinds. See "Scored (2026-11-04)" below. Kind P repaired by VERIFY-058 (closed 2026-11-04): the probe at a32639e (`9 · Probes` #4) reads 987 / 1073, 86 unproved, 41 names. The Status above is the record as committed. |
+| **Status update** | 2026-11-04 — CLOSED: the probe's run on 9207897 (`9 · Probes` #3) matched every prediction; 122 of 1073 goals unproved, 44 names in five kinds. See "Scored (2026-11-04)" below. Kind P repaired by VERIFY-058 (closed 2026-11-04): the probe at a32639e (`9 · Probes` #4) reads 987 / 1073, 86 unproved, 41 names. Kinds I, R, T and V decided with the author in VERIFY-062 (2026-11-07): I, T and V kept, with their arguments; R's 19 container names closed by VERIFY-062's phase A, enforced 2026-11-08: the probe at 366832e and ba39dea (`9 · Probes` #8, #9) reads 1016 / 1073, 57 unproved, 22 names. R's four queue, stringbuf and region queries are VERIFY-062's phase B; the callers' `ctx` (6) and borrow's handles (4) are still to be decided. The Status above is the record as committed. |
 | **Baseline**   | `VERIFY-056 run 3: the first enforced run holds`, on 81220e7 (named by its subject: it is pushed with this record) |
 | **Scope**      | A probe, `pointer-probe` in `.github/workflows/probes.yml`, and its script `tools/probes/verify-057/pointer_probe.py`. No unit's source, contract, job or pin changes. |
 | **Category**   | A gap in what the proofs check, measured before anything is changed. Decided with the author (2026-11-03): probe every unit first, then tighten `ptr_offset`'s contract, each under its own predictions. |
@@ -30565,6 +30565,7 @@ runs only when its own paths change.
 | **ID**         | VERIFY-062 |
 | **Date**       | 2026-11-07 |
 | **Status**     | PREDICTED (phase A). This record is committed before phase A's change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-08 — Phase A enforced from run 4: runs 2 (ba39dea) and 3 (12ee338) gave the same lines and names, with every pointer goal of the containers proved in the probe. Seven of run 1's nine predictions matched, four of run 2's five, and all three of run 3's. See "Phase A, run 3: scored, and enforced" below. Phase B is open. The Status above is the record as committed. |
 | **Baseline**   | 2a17f2f (`VERIFY-061 closed: phase C's run 3 matched every prediction`) |
 | **Scope**      | Phase A: the contracts of `data/vec/vec_impl.h`, `vec_range.h`, `vec_fmt.h`, `data/stack.h`, `data/deque/deque_impl.h`, `vmacros/vdrivers/vec_verify.h` and `deque_verify.h`; `vec_init`'s code; their documentation; a test in `test/data/vec_test.c`; the WP steps of five jobs and -CC's gate step for three families, report-only for runs 1 and 2; the pointer probe's filter and README. Phase B: the queue's, stringbuf's and region's queries. |
 | **Category**   | Contracts that close pointer reads the pointer probe measured. Decided with the author (2026-11-07). |
@@ -30863,3 +30864,66 @@ two workflow files: 1 to 8 run, and 9 to 12 do not.
 lines and closes phase A. Phase B follows under its own predictions.
 
 The workflow change is pushed with this score, in the commit after it.
+
+### Phase A, run 3: scored, and enforced (2026-11-08)
+
+The push of 6ab1caf and 12ee338 ran workflows 1 to 8, all `success`; 9 to
+12 did not run. No job has a failure annotation: no report-only step
+failed. Of the 84 jobs outside `8 · Records`, 83 give run 2's notices. The
+84th is `frama-c-stack`, whose notice now names its new pin, with no
+difference.
+
+| # | scored |
+|---|--------|
+| C1 | **MATCH.** The eight gates pass. `frama-c-vec` passes at 5503 / 5596 ("VERIFY-018 ENFORCED PASS: 0 Failed, count 93/93"), with its pinned 93 names. `frama-c-stack` passes at 5742 / 5811, with no difference. `-vec-range` (5179 / 5224), `-vec-fmt` (5259 / 5306) and `-deque` (1653 / 1665) pass at their pins. -CC's `vec` (5552 / 5621), `vec_struct` (5550 / 5619) and `deque` (1653 / 1665) pass all four gates. |
+| C2 | **MATCH.** `1 · Build & test` #36, `2 · Platforms` #45 and `3 · Static analysis & coverage` #36 are green with run 2's numbers: coverage 2933 / 3014, 753 / 756, 1777 / 1932 and 2032 / 2200; misra real 66 and canary 3; compcert 59 / 59. The other proof jobs stay at their pins, and `8 · Records` #47 passes. |
+| C3 | **MATCH.** Workflows 1 to 8 ran, and 9 to 12 did not. |
+
+All three match.
+
+**Enforced from run 4.** The six `continue-on-error` lines go: five on the
+WP steps of `frama-c-vec`, `-stack`, `-vec-range`, `-vec-fmt` and `-deque`,
+and one on -CC's gate step. The pins' comments say that runs 2 and 3 held.
+The documentation follows:
+
+- `docs/verification.md`: the summary card is recomputed to 73970
+  obligations and 73278 proved (99.06%), with 692 unproved. The vec and
+  stack.h rows and cards, and the expected output of vec's driver, move to
+  the new lines.
+- `docs/traceability.md`: the vec and stack.h rows move, and the total
+  becomes 73974, 73282 and 692. deque, vec_range.h and vec_fmt.h name
+  VERIFY-062. The coverage table reads MC/DC 2032 / 2200, with a note, and
+  the history table gains a row.
+- `docs/vmacros.md`: vec's row moves to the new line.
+- VERIFY-057's status names what VERIFY-062 decided and closed.
+
+`tools/which_workflows.py` on these files: 1 to 8 run, and 9 to 12 do not.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| D1 | **The eight jobs pass, enforced**, at run 3's lines and names. | a job fails, or another line | H |
+| D2 | **Nothing else moves**: 1, 2 and 3 are green with run 3's numbers, the other proof jobs stay at their pins, and `8 · Records` passes. | any change | H |
+| D3 | **The workflows**: 1 to 8 run, and 9 to 12 do not. | another set | H |
+
+### Phase A closed (2026-11-08)
+
+vec's and deque's contracts say that a container's pointer is NULL exactly
+when its capacity is 0, as vec's struct comment always said, and
+`vec_init(buffer, 0)` gives NULL. Each unit that defines `vec_init` counts 8
+goals more, all proved; no unproved goal is added or closed. The pointer
+probe proves the 19 container reads that VERIFY-057 left open: 1016 / 1073,
+with 57 unproved goals under 22 names. The behaviour change is documented,
+and a test checks it: for a vector made with capacity 0, push returns
+`ERR_INVALID_ARG` where it returned `ERR_CAPACITY_EXCEEDED`, and `data()`
+returns NULL where it returned the buffer.
+
+Two predictions missed, and both are recorded above. WP's goal counts
+cannot be predicted here without WP: a conditional expression gave 12 goals,
+and the if that replaced it gives 8. Run 1 also went red on a job no
+prediction named. This record's local checks had left out CI's clang-tidy
+step, and that step, run here, reproduces CI's verdict at all three trees.
+Later records run it before they predict.
+
+Phase B, the queue's, stringbuf's and region's queries, follows under its
+own predictions. The callers' `ctx` (6 names) and borrow's handles (4) wait
+for the author's decision.
