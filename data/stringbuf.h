@@ -1328,9 +1328,16 @@ static inline bool stringbuf_is_full(borrowed(const StringBuf*) sb) {
     return !sb || ((sb->len + 1u) >= sb->capacity);
 }
 
-/** @brief Returns true if buffer was allocated from an arena. NULL-safe. O(1) */
+/**
+ * @brief Returns true if buffer was allocated from an arena. NULL-safe. O(1)
+ *
+ * @pre The arena sb names, if any, still exists: C does not allow a pointer
+ *      to an object that has ended to be read, even to test it (6.2.4p2)
+ *      (VERIFY-062)
+ */
 /*@
   requires sb == \null || \valid_read(sb);
+  requires sb == \null || \object_pointer(sb->arena);   // VERIFY-062
   assigns \nothing;
   ensures \result <==> (sb != \null && sb->arena != \null);
 */

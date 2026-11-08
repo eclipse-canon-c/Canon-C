@@ -17,4 +17,6 @@ Each unit's file, memory model and preprocessing are copied from its job;
 if a job's flags change, change them here too. The job runs when the script,
 `probes.yml`, the toolchain pins or, since VERIFY-058, `core/primitives/ptr.h`
 change; since VERIFY-062, also when `data/vec/`, `data/deque/`,
-`data/stack.h` or the drivers in `vmacros/vdrivers/` change; and on demand.
+`data/stack.h`, the drivers in `vmacros/vdrivers/`,
+`data/priority_queue.h`, `data/stringbuf.h` or `core/region.h` change; and
+on demand.

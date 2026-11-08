@@ -1540,11 +1540,15 @@ static inline bool pq_is_full(borrowed(const PriorityQueue*) pq) {
  * Covers only [0, len). NULL or empty pq returns bytes_empty().
  * Non-owning — do not free the returned bytes_t.ptr.
  *
+ * @pre pq, if non-NULL, has no buffer or is a queue pq_init() made (pq_wf):
+ *      the buffer pointer is read before the length is tested (VERIFY-062)
+ *
  * Performance: O(1)
  */
 #ifdef __FRAMAC__
 /*@
   requires pq == \null || \valid_read(pq);
+  requires pq == \null || pq->data == \null || pq_wf(pq);   // VERIFY-062
   assigns \nothing;
   behavior empty:
     assumes pq == \null || pq->data == \null || pq->len == 0;
@@ -1571,10 +1575,13 @@ static inline bytes_t pq_as_bytes(borrowed(PriorityQueue*) pq) {
 
 /**
  * @brief Read-only twin of pq_as_bytes() — see API-001
+ *
+ * @pre as pq_as_bytes()'s (VERIFY-062)
  */
 #ifdef __FRAMAC__
 /*@
   requires pq == \null || \valid_read(pq);
+  requires pq == \null || pq->data == \null || pq_wf(pq);   // VERIFY-062
   assigns \nothing;
   behavior empty:
     assumes pq == \null || pq->data == \null || pq->len == 0;

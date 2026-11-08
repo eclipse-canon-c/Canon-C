@@ -753,6 +753,10 @@ static inline bool region_is_open(const Region* r) {
  *
  * Always returns false when CANON_NO_REGION_PARENT is defined.
  *
+ * @pre The parent r names, if any, still exists: C does not allow a pointer
+ *      to an object that has ended to be read, even to test it (6.2.4p2)
+ *      (VERIFY-062)
+ *
  * Complexity: O(1)
  */
 #ifdef CANON_NO_REGION_PARENT
@@ -764,6 +768,7 @@ static inline bool region_is_open(const Region* r) {
 #else
 /*@
   requires r == \null || \valid_read(r);
+  requires r == \null || \object_pointer(r->parent);   // VERIFY-062
   assigns  \nothing;
   ensures  \result <==> (r != \null && r->parent != \null);
 */
