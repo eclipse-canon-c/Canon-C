@@ -496,9 +496,12 @@ goals are filed as residuals.
   VERIFY-058 repaired the false goals its first run found in ptr.h's three
   offsets, in twelve units. VERIFY-062's phase A closed the 19 reads of a
   container's own pointer: vec's and deque's pointer is NULL exactly when
-  the capacity is 0. At `9 · Probes` #9, 1016 of its 1073 goals are proved;
-  the 57 unproved are VERIFY-057's other kinds, 22 names, as VERIFY-062
-  sorts them.
+  the capacity is 0. Its phase B closed 4 queries' reads: the queue's byte
+  views require `pq_wf` or no buffer, and stringbuf's and region's queries
+  require their stored pointer to point to an object that still exists. At
+  `9 · Probes` #10, 1021 of its 1073 goals are proved; the 52 unproved are
+  18 names, as VERIFY-062 sorts them: I 2, R 10 (the callers' `ctx` and
+  borrow's handles, still to be decided), T 3 and V 3.
 - **Relational comparison and subtraction of pointers into different
   objects** (6.5.8p5, 6.5.6p9): no goal checks them. Until VERIFY-059,
   ptr.h's `ptr_in_range` and `ptr_range_in_range` documented that their

@@ -28471,7 +28471,7 @@ differences from its pins.
 | **ID**         | VERIFY-057 |
 | **Date**       | 2026-11-03 |
 | **Status**     | PREDICTED. This record is committed before the probe commit, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-04 — CLOSED: the probe's run on 9207897 (`9 · Probes` #3) matched every prediction; 122 of 1073 goals unproved, 44 names in five kinds. See "Scored (2026-11-04)" below. Kind P repaired by VERIFY-058 (closed 2026-11-04): the probe at a32639e (`9 · Probes` #4) reads 987 / 1073, 86 unproved, 41 names. Kinds I, R, T and V decided with the author in VERIFY-062 (2026-11-07): I, T and V kept, with their arguments; R's 19 container names closed by VERIFY-062's phase A, enforced 2026-11-08: the probe at 366832e and ba39dea (`9 · Probes` #8, #9) reads 1016 / 1073, 57 unproved, 22 names. R's four queue, stringbuf and region queries are VERIFY-062's phase B; the callers' `ctx` (6) and borrow's handles (4) are still to be decided. The Status above is the record as committed. |
+| **Status update** | 2026-11-04 — CLOSED: the probe's run on 9207897 (`9 · Probes` #3) matched every prediction; 122 of 1073 goals unproved, 44 names in five kinds. See "Scored (2026-11-04)" below. Kind P repaired by VERIFY-058 (closed 2026-11-04): the probe at a32639e (`9 · Probes` #4) reads 987 / 1073, 86 unproved, 41 names. Kinds I, R, T and V decided with the author in VERIFY-062 (2026-11-07): I, T and V kept, with their arguments; R's 19 container names closed by VERIFY-062's phase A, enforced 2026-11-08: the probe at 366832e and ba39dea (`9 · Probes` #8, #9) reads 1016 / 1073, 57 unproved, 22 names. R's four queue, stringbuf and region queries closed by VERIFY-062's phase B (2026-11-09): the probe at 6878d29 (`9 · Probes` #10) reads 1021 / 1073, 52 unproved, 18 names. The callers' `ctx` (6) and borrow's handles (4) are still to be decided. The Status above is the record as committed. |
 | **Baseline**   | `VERIFY-056 run 3: the first enforced run holds`, on 81220e7 (named by its subject: it is pushed with this record) |
 | **Scope**      | A probe, `pointer-probe` in `.github/workflows/probes.yml`, and its script `tools/probes/verify-057/pointer_probe.py`. No unit's source, contract, job or pin changes. |
 | **Category**   | A gap in what the proofs check, measured before anything is changed. Decided with the author (2026-11-03): probe every unit first, then tighten `ptr_offset`'s contract, each under its own predictions. |
@@ -30565,7 +30565,7 @@ runs only when its own paths change.
 | **ID**         | VERIFY-062 |
 | **Date**       | 2026-11-07 |
 | **Status**     | PREDICTED (phase A). This record is committed before phase A's change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-08 — Phase A enforced from run 4: runs 2 (ba39dea) and 3 (12ee338) gave the same lines and names, with every pointer goal of the containers proved in the probe. Seven of run 1's nine predictions matched, four of run 2's five, and all three of run 3's. See "Phase A, run 3: scored, and enforced" below. Phase B is open. The Status above is the record as committed. |
+| **Status update** | 2026-11-08 — Phase A enforced from run 4: runs 2 (ba39dea) and 3 (12ee338) gave the same lines and names, with every pointer goal of the containers proved in the probe. Seven of run 1's nine predictions matched, four of run 2's five, and all three of run 3's. See "Phase A, run 3: scored, and enforced" below. 2026-11-09 — CLOSED for the names it decided: phase B (9d8b1b9, 6878d29) matched all six predictions; see "Phase B: scored" below, and the probe reads 1021 / 1073, 52 unproved, 18 names. The callers' `ctx` (6) and borrow's handles (4) wait for the author's decision, in a record of their own. The Status above is the record as committed. |
 | **Baseline**   | 2a17f2f (`VERIFY-061 closed: phase C's run 3 matched every prediction`) |
 | **Scope**      | Phase A: the contracts of `data/vec/vec_impl.h`, `vec_range.h`, `vec_fmt.h`, `data/stack.h`, `data/deque/deque_impl.h`, `vmacros/vdrivers/vec_verify.h` and `deque_verify.h`; `vec_init`'s code; their documentation; a test in `test/data/vec_test.c`; the WP steps of five jobs and -CC's gate step for three families, report-only for runs 1 and 2; the pointer probe's filter and README. Phase B: the queue's, stringbuf's and region's queries. |
 | **Category**   | Contracts that close pointer reads the pointer probe measured. Decided with the author (2026-11-07). |
@@ -31009,3 +31009,50 @@ and VERIFY-057's status then give the new numbers. The callers' `ctx` (6
 names) and borrow's handles (4) wait for the author's decision.
 
 The change is pushed with this record, in the commit after it.
+
+### Phase B: scored (2026-11-09)
+
+The push of 9d8b1b9 and 6878d29 ran workflows 1 to 9 and 11, all
+`success`; 10 and 12 did not run. Of the 208 jobs with notices, 204 give
+the notices of their last runs: run 4's for workflows 1 to 7, #5's
+(41dd414) for 11, #8's for the earlier probes, and #9's for the pointer
+probe. The other four are the pointer probe's four units, each as
+predicted.
+
+| # | scored |
+|---|--------|
+| E1 | **MATCH.** `frama-c-priority-queue` is at 44 / 48, `frama-c-region` at 28 / 33, `frama-c-stringbuf` at 75 / 81 and `frama-c-vec-fmt` at 79 / 86, each leaving the names predicted. The other 22 units stay as at #9. In all: 1021 / 1073, 52 unproved, 18 names. |
+| E2 | **MATCH.** Every job of 4, 5, 6, 7 and 11 gives its notice, at its pin. |
+| E3 | **MATCH.** `1 · Build & test` #38, `2 · Platforms` #47 and `3 · Static analysis & coverage` #38 are green with run 4's numbers, and clang-tidy finds nothing. |
+| E4 | **MATCH.** g4, g11, g13, g19, count, round3 and char are green, with #8's verdicts. |
+| E5 | **MATCH.** `8 · Records` #49 is green. |
+| E6 | **MATCH.** Workflows 1 to 9 and 11 ran; 10 and 12 did not. |
+
+All six match.
+
+### VERIFY-062 closed for the names it decided (2026-11-09)
+
+Of the 41 names VERIFY-057's probe left after VERIFY-058, VERIFY-062
+decided 31, with the author:
+
+- **23 of R's names** are closed. Phase A closed 19, the reads of a
+  container's own pointer: vec's and deque's pointer is NULL exactly when
+  the capacity is 0. Phase B closed 4: the queue's byte views require
+  `pq_wf` or no buffer, and stringbuf's and region's queries require their
+  stored pointer to point to an object that still exists, as C requires.
+- **The 2 I names and the 3 T and 3 V names** are kept, each with its
+  argument, as unproved goals of the probe, which gates nothing.
+
+The probe reads 1021 / 1073, with 52 unproved goals under 18 names: I 2;
+R 10, the callers' `ctx` (6) and borrow's handles (4); T 3; V 3. The proof
+jobs count 8 goals more in each of the four units that define `vec_init`,
+all proved, and are enforced at those lines. Of the 26 predictions, 23
+matched. The three misses are recorded: two goal counts (A2, B2), and the
+clang-tidy job no prediction named (A6).
+
+The callers' `ctx` and borrow's handles wait for the author's decision, in
+a record of their own.
+
+This closing commit changes only documentation: `docs/verification.md`'s
+probe paragraph, this record, and VERIFY-057's status. Only `8 · Records`
+runs for it, and it is to pass.
