@@ -31056,3 +31056,91 @@ a record of their own.
 This closing commit changes only documentation: `docs/verification.md`'s
 probe paragraph, this record, and VERIFY-057's status. Only `8 · Records`
 runs for it, and it is to pass.
+
+## VERIFY-063: Pre-registration — The Callers' Contexts Kept With Their Argument; Borrow's Handles Require Their Source to Still Exist
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-063 |
+| **Date**       | 2026-11-09 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 6878d29 (`queue, stringbuf, region: the four queries require what their reads need (VERIFY-062 phase B)`), with VERIFY-062's closing commit after it, which changes documentation only |
+| **Scope**      | The contracts and documentation of `semantics/borrow.h`'s four handle functions; the documentation of the context pointer in `data/hashmap/hashmap.h`, `data/priority_queue.h` and `core/region.h`; the pointer probe's filter and README. |
+| **Category**   | The last ten names of VERIFY-057's probe, decided with the author (2026-11-09). |
+
+### What was decided
+
+After VERIFY-062, the probe leaves 18 names. I's 2, T's 3 and V's 3 are kept
+with their arguments, and R's 10 were left to the author. Asked
+(2026-11-09):
+
+- **The callers' contexts (6 names), kept.** `hashmap_get`,
+  `hashmap_get_or_null`, `hashmap_insert` and `hashmap_remove` read the
+  map's `ctx` to pass it to its hash and equality functions. `pq_cmp_` reads
+  the queue's `ctx` for its comparator (its second goal), and `region_end`
+  reads each hook's `ctx` for its hook (its fifth). The library never
+  dereferences a context: it hands the value back unchanged. A caller may
+  pass any value, an integer converted to a pointer included: region's own
+  tests pass `(void*)(uintptr_t)1`. C allows the conversion, with an
+  implementation-defined result (6.3.2.3p5), and requiring `\object_pointer`
+  would forbid it. What C does forbid is reading a pointer to an object that
+  has ended (6.2.4p2), and each context's documentation now says so. The six
+  goals stay unproved in the probe, with this argument.
+- **Borrow's handles (4 names): their source must still exist.**
+  `borrowed_ptr_get`, `borrowed_ptr_is_valid`, `borrowed_str_is_valid` and
+  `borrowed_bytes_is_valid` read the handle's stored pointer, which points
+  into a source the caller owns. Each gains
+  `requires source_live: b != \null ==> \object_pointer(...)`: the stored
+  pointer is null or points to an object that still exists, as C requires
+  to read it. The `*_is_valid` functions test only for NULL and cannot tell
+  whether the source has ended; their documentation says so.
+
+### The change
+
+1. `semantics/borrow.h`: the four preconditions, and a `@pre` line in each
+   function's documentation.
+2. `data/hashmap/hashmap.h`, `data/priority_queue.h` and `core/region.h`:
+   the context's documentation states the argument. Their contracts do not
+   change.
+3. The pointer probe's filter and its workflow's paths gain
+   `semantics/borrow.h`, and its README says so. Editing `probes.yml` runs
+   the other probes too.
+
+No code changes. No verified unit calls the four borrow functions, only the
+tests do, so no proof job should count a goal more or fewer. No job is made
+report-only.
+
+### Measured here
+
+- **Parsing**: Frama-C 25 parses 25 of the probe's 26 units and -CC's
+  `borrow_cc_experiment.h`, each with its job's preprocessing. As before, it
+  does not parse `data/priority_queue.h`.
+- **clang-tidy**: the job's step finds nothing in its 61 files.
+- **MISRA and coverage**, as their jobs make them: real 66 and canary 3,
+  with the same findings; 2933 of 3014 lines, 753 of 756 functions, 1777 of
+  1932 branches and 2032 of 2200 MC/DC outcomes, as at VERIFY-062.
+
+### The workflows
+
+`tools/which_workflows.py` on this record's commit and the change's: 1 to 9
+and `11 · Proofs: machine models` run; 10 and 12 do not. In 9, every probe
+runs.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| F1 | **The probe closes borrow's four names** in the three units where they are open: `frama-c-borrow` 15 / 15, `frama-c-stringbuf` 79 / 81 (left: ptr.h's two) and `frama-c-vec-fmt` 83 / 86 (left: ptr.h's two and `vec_int_to_stringbuf_cb`'s second). The other 23 units stay as at #10. In all: 1033 / 1073, 40 unproved, 14 names (I 2; R 6, the callers' contexts; T 3; V 3). | one of the four unproved, another unit's line, or another total | H: each goal is its function's new precondition |
+| F2 | **Every proof job is at its pin**, in workflows 4, 5, 6, 7 and 11. | any job's line or names | H |
+| F3 | **1, 2 and 3 are green with VERIFY-062 phase B's numbers**: coverage, MISRA, CompCert and clang-tidy. | any change | H (no code changes; measured here) |
+| F4 | **The earlier probes** (g4, g11, g13, g19, count, round3, char) are green, with #10's verdicts. | any change | H |
+| F5 | **`8 · Records` passes.** | a failure | H (run here) |
+| F6 | **The workflows**: 1 to 9 and 11 run; 10 and 12 do not. | another set | H |
+
+**What follows.** If F1 to F6 match, VERIFY-063 closes, and every one of
+VERIFY-057's 44 names is decided. VERIFY-058 repaired P's 3. R's 27 are
+closed, VERIFY-062's 23 and this record's 4. I's 2, T's 3, V's 3 and the
+callers' contexts' 6 are kept with their arguments: 14 names and 40 goals,
+unproved in the probe, which gates nothing.
+
+The change is pushed with this record, in the commit after it.
