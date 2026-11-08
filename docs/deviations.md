@@ -30927,3 +30927,85 @@ Later records run it before they predict.
 Phase B, the queue's, stringbuf's and region's queries, follows under its
 own predictions. The callers' `ctx` (6 names) and borrow's handles (4) wait
 for the author's decision.
+
+### Phase A, run 4: scored (2026-11-08)
+
+The push of 8809416 and 8b82494 ran workflows 1 to 8, all `success`; 9 to
+12 did not run. No job has a failure annotation, and all 84 jobs outside
+`8 · Records` give run 3's notices.
+
+| # | scored |
+|---|--------|
+| D1 | **MATCH.** The eight jobs pass, enforced, at run 3's lines and names. |
+| D2 | **MATCH.** `1 · Build & test` #37, `2 · Platforms` #46 and `3 · Static analysis & coverage` #37 are green with run 3's numbers. The other proof jobs stay at their pins, and `8 · Records` #48 passes. |
+| D3 | **MATCH.** Workflows 1 to 8 ran, and 9 to 12 did not. |
+
+All three match, so phase A holds, enforced.
+
+### Phase B: pre-registration (2026-11-08)
+
+**What was decided.** The record said that in phase B the queue's,
+stringbuf's and region's queries would require their predicates. That holds
+for the queue: `pq_wf` states the buffer that `pq_as_bytes` and
+`pq_as_cbytes` read. It does not hold for the other two.
+`stringbuf_is_arena_backed` reads `sb->arena`, and `region_has_parent` reads
+`r->parent`: pointers to an arena and to a parent region that the caller
+owns. No predicate states anything of those fields, so they are of the same
+kind as the callers' `ctx` and borrow's handles. C does not allow such a
+pointer to be read, even to test it, once its object has ended (6.2.4p2).
+Asked, the author chose (2026-11-08) that each of the two queries requires
+its stored pointer to be null or to point to an object that exists,
+`\object_pointer`, which is what C itself requires to read it. Callers owe
+that the arena or the parent still exists. No predicate changes.
+
+**The change.** Three headers change, in contracts and documentation only;
+no code changes.
+
+1. `pq_as_bytes` and `pq_as_cbytes` (`data/priority_queue.h`) gain
+   `requires pq == \null || pq->data == \null || pq_wf(pq);`: the queue
+   either has no buffer or is well-formed, as `pq_init` makes it and the
+   queue's other functions keep it. Their `live` behaviour's
+   `requires pq_wf(pq)` stays.
+2. `stringbuf_is_arena_backed` (`data/stringbuf.h`) gains
+   `requires sb == \null || \object_pointer(sb->arena);`.
+3. `region_has_parent` (`core/region.h`, when `CANON_NO_REGION_PARENT` is
+   not defined) gains `requires r == \null || \object_pointer(r->parent);`.
+4. The pointer probe's filter, and its workflow's paths, gain the three
+   headers. Its README says so. Editing `probes.yml` runs the other probes
+   too.
+
+No verified unit calls these four functions: the tests call them. A
+precondition is a hypothesis of its function and a goal only where the
+function is called, so no proof job should count a goal more or fewer. No
+job is made report-only.
+
+**Measured here.** Frama-C 25 parses 25 of the probe's 26 units, with each
+job's preprocessing, among them every unit that includes `stringbuf.h` or
+`region.h`. It does not parse `data/priority_queue.h`, at 2a17f2f or now:
+"unexpected token 'algo_cmp_u8'", at line 647. So the queue's contract is
+checked first in CI. CI's clang-tidy step finds nothing in its 61 files, and the RTE plugin's
+pointer assertions are unchanged in stringbuf, region and vec_fmt.
+Coverage, as the coverage job makes it, gives run 4's numbers: 2933 of 3014
+lines, 753 of 756 functions, 1777 of 1932 branches and 2032 of 2200 MC/DC
+outcomes. MISRA gives real 66 and canary 3, with the same findings.
+
+**The workflows.** `tools/which_workflows.py` on this record's commit and
+the change's: 1 to 9 and `11 · Proofs: machine models` run, while
+`10 · Machine models` and `12 · Coq: bits.h` do not. In 9, every probe
+runs.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| E1 | **The probe closes the four names**: `frama-c-priority-queue` 44 / 48 (left: ptr.h's two and `pq_cmp_`'s two), `frama-c-region` 28 / 33 (left: ptr.h's two and `region_end`'s three), `frama-c-stringbuf` 75 / 81 (left: borrow's four and ptr.h's two), `frama-c-vec-fmt` 79 / 86 (left: borrow's four, ptr.h's two and `vec_int_to_stringbuf_cb`'s second). The other 22 units stay as at #9. In all: 1021 / 1073, 52 unproved, 18 names (I 2; R 10, borrow's 4 and the callers' `ctx` 6; T 3; V 3). | one of the four unproved, another unit's line, or another total | H for region's and stringbuf's, whose goal is their new precondition; M–H for the queue's two, which the provers must derive from `pq_wf`'s buffer through the cast to `char *` |
+| E2 | **Every proof job is at its pin**, in workflows 4, 5, 6, 7 and 11. | any job's line or names | H |
+| E3 | **1, 2 and 3 are green with run 4's numbers**: coverage, MISRA and CompCert, and clang-tidy finds nothing. | any change | H (no code changes; measured here) |
+| E4 | **The earlier probes** (g4, g11, g13, g19, count, round3, char) are green, with #8's verdicts. | any change | H |
+| E5 | **`8 · Records` passes.** | a failure | H (run here) |
+| E6 | **The workflows**: 1 to 9 and 11 run; 10 and 12 do not. | another set | H |
+
+**What follows.** If E1 to E6 match, phase B closes, and with it
+VERIFY-062's decided names. The probe's paragraph in `docs/verification.md`
+and VERIFY-057's status then give the new numbers. The callers' `ctx` (6
+names) and borrow's handles (4) wait for the author's decision.
+
+The change is pushed with this record, in the commit after it.
