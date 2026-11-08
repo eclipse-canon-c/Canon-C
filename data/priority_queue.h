@@ -867,7 +867,12 @@ static inline void pq_sift_down_(borrowed(PriorityQueue*) pq, usize i) {
  * @param capacity  Maximum number of elements (> 0)
  * @param elem_size Size of each element in bytes (> 0)
  * @param cmp       Three-way comparator — must not be NULL
- * @param ctx       Optional context forwarded to cmp (may be NULL)
+ * @param ctx       Optional context forwarded to cmp (may be NULL).
+ *                  The queue never dereferences ctx: it passes it to cmp
+ *                  unchanged. It may be any value, an integer converted to a
+ *                  pointer included, but not a pointer to an object that has
+ *                  ended, which C does not allow to be read (6.2.4p2).
+ *                  VERIFY-063 keeps the probe's goal here with this argument.
  *
  * @pre pq != NULL
  * @pre buffer != NULL

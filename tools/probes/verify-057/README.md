@@ -18,5 +18,5 @@ if a job's flags change, change them here too. The job runs when the script,
 `probes.yml`, the toolchain pins or, since VERIFY-058, `core/primitives/ptr.h`
 change; since VERIFY-062, also when `data/vec/`, `data/deque/`,
 `data/stack.h`, the drivers in `vmacros/vdrivers/`,
-`data/priority_queue.h`, `data/stringbuf.h` or `core/region.h` change; and
-on demand.
+`data/priority_queue.h`, `data/stringbuf.h` or `core/region.h` change;
+since VERIFY-063, also when `semantics/borrow.h` changes; and on demand.

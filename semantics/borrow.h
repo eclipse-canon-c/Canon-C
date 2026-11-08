@@ -415,12 +415,15 @@ static inline borrowed_ptr borrowed_ptr_null(void)
  * or if the source has been closed.
  *
  * @pre  b != NULL  (checked with require_msg in debug builds).
+ * @pre  The borrowed source still exists: C does not allow the stored
+ *       pointer to be read once its object has ended (6.2.4p2) (VERIFY-063).
  * @note Returns NULL when b == NULL in release builds so that callers
  *       that do not check remain crash-safe if require_msg is a no-op.
  * @param b Pointer to borrowed_ptr; must not be NULL.
  * @return  Stored const void * (may itself be NULL).
  */
 /*@ requires readable_b: b != \null ==> \valid_read(b);
+    requires source_live: b != \null ==> \object_pointer(b->ptr);   // VERIFY-063
     assigns \nothing;
     behavior null_b:
       assumes b == \null;
@@ -441,10 +444,16 @@ static inline const void *borrowed_ptr_get(const borrowed_ptr *b)
 
 /**
  * @brief Returns non-zero (true) if b is non-NULL and b->ptr is non-NULL.
+ *
+ * Tests only for NULL: it cannot tell whether the source has ended.
+ *
+ * @pre  The borrowed source still exists: C does not allow the stored
+ *       pointer to be read once its object has ended (6.2.4p2) (VERIFY-063).
  * @param b Pointer to borrowed_ptr (may be NULL).
  * @return  1 if valid, 0 otherwise.
  */
 /*@ requires readable_b: b != \null ==> \valid_read(b);
+    requires source_live: b != \null ==> \object_pointer(b->ptr);   // VERIFY-063
     assigns \nothing;
     behavior null_b:
       assumes b == \null;
@@ -635,10 +644,16 @@ static inline str_t borrowed_str_get(const borrowed_str *b)
 
 /**
  * @brief Returns non-zero (true) if b is non-NULL and b->str.ptr is non-NULL.
+ *
+ * Tests only for NULL: it cannot tell whether the source has ended.
+ *
+ * @pre  The borrowed source still exists: C does not allow the stored
+ *       pointer to be read once its object has ended (6.2.4p2) (VERIFY-063).
  * @param b Pointer to borrowed_str (may be NULL).
  * @return  1 if valid, 0 otherwise.
  */
 /*@ requires readable_b: b != \null ==> \valid_read(b);
+    requires source_live: b != \null ==> \object_pointer(b->str.ptr);   // VERIFY-063
     assigns \nothing;
     behavior null_b:
       assumes b == \null;
@@ -943,10 +958,16 @@ static inline usize borrowed_bytes_len(const borrowed_bytes *b)
 
 /**
  * @brief Returns non-zero (true) if b is non-NULL and b->bytes.ptr is non-NULL.
+ *
+ * Tests only for NULL: it cannot tell whether the source has ended.
+ *
+ * @pre  The borrowed source still exists: C does not allow the stored
+ *       pointer to be read once its object has ended (6.2.4p2) (VERIFY-063).
  * @param b Pointer to borrowed_bytes (may be NULL).
  * @return  1 if valid, 0 otherwise.
  */
 /*@ requires readable_b: b != \null ==> \valid_read(b);
+    requires source_live: b != \null ==> \object_pointer(b->bytes.ptr);   // VERIFY-063
     assigns \nothing;
     behavior null_b:
       assumes b == \null;

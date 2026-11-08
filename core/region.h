@@ -620,7 +620,12 @@ static inline void region_attach_arena(Region* r, Arena* arena) {
  * @param fn   Cleanup function — void fn(void* ctx); must not be NULL;
  *             must be a function of this type, and must keep
  *             region_end()'s hook rule (region_hook_rule)
- * @param ctx  Context passed to fn (may be NULL)
+ * @param ctx  Context passed to fn (may be NULL).
+ *             The region never dereferences ctx: it passes it to fn unchanged.
+ *             It may be any value, an integer converted to a pointer included,
+ *             but not a pointer to an object that has ended, which C does not
+ *             allow to be read (6.2.4p2). VERIFY-063 keeps the probe's goal
+ *             here with this argument.
  * @return     true on success, false if table is full
  *
  * @pre  r != NULL && r->open

@@ -143,7 +143,11 @@
  *   - Must return a non-zero value (0 is reserved; the impl normalizes it to 1)
  *   - Must be deterministic: same key always produces same hash
  *   - Should distribute keys uniformly across [1, UINT64_MAX]
- *   - ctx is the optional context passed to hashmap_init(); may be NULL
+ *   - ctx is the optional context passed to hashmap_init(); may be NULL.
+ *     The map never dereferences ctx: it passes it to hash and eq unchanged.
+ *     It may be any value, an integer converted to a pointer included, but not
+ *     a pointer to an object that has ended, which C does not allow to be read
+ *     (6.2.4p2). VERIFY-063 keeps the probe's goal here with this argument.
  *
  * Equality function signature:
  *   bool my_eq(const KeyType* a, const KeyType* b, void* ctx);
