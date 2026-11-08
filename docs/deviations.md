@@ -30805,3 +30805,61 @@ another report-only run confirms them before anything is pinned. Then phase
 B, under its own predictions.
 
 The fix is pushed with this score, in the commit after it.
+
+### Phase A, run 2: scored (2026-11-08)
+
+The push of e13f291 and ba39dea ran workflows 1 to 9, all `success`; 10, 11
+and 12 did not run. In `9 · Probes` #9 the pointer probe's 26 jobs ran, and
+the other probes' 7 jobs were skipped. Of the 118 jobs outside `8 · Records`,
+108 give run 1's notices. Eight of the ten that differ are expected: the
+static-analysis job, now green, and the seven probe jobs that did not run
+(char's shows as one skipped job, where run 1 had its two models). The other
+two are `frama-c-vec` and `frama-c-stack`, 4 goals lower than at run 1.
+-CC's `vec` and `vec_struct`, which post no notice, are 4 lower too.
+
+| # | scored |
+|---|--------|
+| B1 | **MATCH.** `3 · Static analysis & coverage` #35 is green, and clang-tidy reports nothing. Coverage gives run 1's numbers: 2933 of 3014 lines, 753 of 756 functions, 1777 of 1932 branches and 2032 of 2200 MC/DC outcomes, each cover TU's row the same. misra gives real 66 and canary 3, and compcert 59 / 59. |
+| B2 | **MISS.** `frama-c-vec` is at 5503 / 5596, `frama-c-stack` at 5742 / 5811, -CC's `vec` at 5552 / 5621 and `vec_struct` at 5550 / 5619: 4 goals fewer each than at run 1, and 8 more than their pins. The other four are at their pins. All eight keep their unproved counts and their names: `frama-c-vec`'s 93 are its pinned 93, `frama-c-stack`'s 69 are cc-vec's, and -CC's report "missing 0, unpinned 0". None is Failed, Invalid or Stepout. |
+| B3 | **MATCH.** The probe gives run 1's 26 lines: 1016 / 1073, 57 unproved, 22 names. |
+| B4 | **MATCH.** `1 · Build & test` #35 and `2 · Platforms` #44 are green. The other proof jobs give their notices, at their pins. `8 · Records` #46 is green. |
+| B5 | **MATCH.** Workflows 1 to 9 ran, and 10 to 12 did not. In 9, only the pointer probe ran. |
+
+Four of the five match.
+
+**B2, read against the change.** The four lines that moved are the units
+that define `vec_init`, and the only code that changed between the runs is
+`vec_init`'s store. CIL compiles a conditional expression into an if and an
+else that assign a temporary, and then assigns the temporary to `v.items`;
+the if assigns `v.items` itself. In `frama-c-vec`, the 4 goals the
+conditional gave were Qed's: Qed proved 4608 goals at run 1 and 4604 at
+run 2, against 4596 at the pin. Which goals they were is not in WP's output.
+Relative to the pins, the change adds 8 goals in each of the four units,
+all proved. In `frama-c-vec` all 8 are Qed's (4596 to 4604). Alt-Ergo, CVC5
+and Z3 prove 659 goals at the pin and at both runs, split differently.
+Timeout and Unknown split the same 93 names as 92 and 1 at the pin, 84 and
+9 at run 1, and 82 and 11 at run 2.
+
+### Phase A, run 3: pre-registration
+
+The record said that if B2 gave other lines, another report-only run would
+confirm them before anything was enforced. Run 3 is that run. It writes run
+2's lines into the four gates: `frama-c-vec` 5503 / 5596, `frama-c-stack`
+5742 / 5811, and -CC's `vec` 5552 / 5621 and `vec_struct` 5550 / 5619. Every
+step stays report-only, so a gate that misses still fails only its step. The
+code does not change. Run 4 removes the `continue-on-error` lines and
+updates the documentation's counts.
+
+**The workflows.** `tools/which_workflows.py` on this score's commit and the
+two workflow files: 1 to 8 run, and 9 to 12 do not.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| C1 | **The eight gates pass**: `frama-c-vec`, `-stack`, `-vec-range`, `-vec-fmt` and `-deque`, and -CC's `vec`, `vec_struct` and `deque`, each at the line written for it, with its unproved count and names. No report-only step fails. | a gate fails, or another line | H: the code is run 2's |
+| C2 | **Nothing else moves**: 1, 2 and 3 are green with run 2's numbers, the other proof jobs stay at their pins, and `8 · Records` passes. | any change | H |
+| C3 | **The workflows**: 1 to 8 run, and 9 to 12 do not. | another set | H |
+
+**What follows.** If C1 to C3 match, run 4 enforces the eight jobs at these
+lines and closes phase A. Phase B follows under its own predictions.
+
+The workflow change is pushed with this score, in the commit after it.
