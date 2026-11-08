@@ -273,7 +273,15 @@
 | Lines      | 97.3%      | 2933       | 3014       |
 | Functions  | 99.6%      | 753        | 756        |
 | Branches   | 92.0%      | 1777       | 1932       |
-| MC/DC      | 92.4%      | 2030       | 2198       |
+| MC/DC      | 92.4%      | 2032       | 2200       |
+
+> **Brought up to 366832e, ba39dea and 12ee338 (VERIFY-062), 2026-11-08.**
+> The coverage job's logs read the same at all three: lines 2933 / 3014,
+> functions 753 / 756, branches 1777 / 1932 and MC/DC 2032 / 2200.
+> `vec_init`'s new test of the capacity adds two outcomes, both taken by
+> `vec_cover.c`'s calls with a buffer and with NULL: `vec_cover.c` 157 /
+> 160, from 155 / 158. The new test in `vec_test.c` is under test/, which
+> the job does not count.
 
 > **Brought up to afabc7d and db4509d (VERIFY-059), 2026-11-05.** The
 > coverage job's logs read the same at both: lines 2933 / 3014, functions
@@ -1036,19 +1044,29 @@ and after the paragraphs below say where a reading here no longer holds.
 | result     | 17        |               213 | 207 (97.18%) | 6        | VERIFY-015   |
 | borrow.h   | 24        |              2465 | 2451 (99.43%) | 14       | VERIFY-016   |
 | diag.h     | 13        |              3058 | 3050 (99.74%) | 8        | VERIFY-017   |
-| vec        | 37        |              5588 | 5495 (98.34%) | 93       | VERIFY-018/23/33/40/58/59 |
-| deque      | 24        |              1665 | 1653 (99.28%) | 12       | VERIFY-019/40 |
+| vec        | 37        |              5596 | 5503 (98.34%) | 93       | VERIFY-018/23/33/40/58/59/62 |
+| deque      | 24        |              1665 | 1653 (99.28%) | 12       | VERIFY-019/40/62 |
 | bitset     | 32        |              5060 | 4986 (98.54%) | 74       | VERIFY-020/23/40/58/59 |
 | lifetime.h | 1         |                 4 | 4 (100.00%)  | 0        | VERIFY-021   |
 | priority_queue.h | 41  |              4718 | 4680 (99.19%) | 38       | VERIFY-022/40/58/59 |
 | range.h    | 15        |              2652 | 2644 (99.70%) | 8        | VERIFY-028/29/30 |
 | stringbuf.h | 29       |              4846 | 4809 (99.24%) | 37       | VERIFY-031..35, 58, 59 |
-| vec_range.h | 1        |              5224 | 5179 (99.14%) | 45       | VERIFY-041/58/59 |
-| vec_fmt.h  | 2         |              5306 | 5259 (99.11%) | 47       | VERIFY-042/58/59 |
-| stack.h    | 14        |              5803 | 5734 (98.81%) | 69       | VERIFY-049/58/59 |
+| vec_range.h | 1        |              5224 | 5179 (99.14%) | 45       | VERIFY-041/58/59/62 |
+| vec_fmt.h  | 2         |              5306 | 5259 (99.11%) | 47       | VERIFY-042/58/59/62 |
+| stack.h    | 14        |              5811 | 5742 (98.81%) | 69       | VERIFY-049/58/59/62 |
 | array.h    | 20        |              2887 | 2863 (99.17%) | 24       | VERIFY-052   |
 | hashmap    | 19        |              4784 | 4738 (99.04%) | 46       | VERIFY-054/55/56 |
-| **Total**  | **513**   | **73958**         | **73266 (99.06%)**| **692**  |              |
+| **Total**  | **513**   | **73974**         | **73282 (99.06%)**| **692**  |              |
+
+*Brought to the pins again 2026-11-08 (VERIFY-062, phase A).* Two rows
+move, +8 each. vec's and deque's contracts say that a container's pointer is
+NULL exactly when its capacity is 0, and `vec_init(buffer, 0)` gives NULL,
+which the units that define `vec_init` prove: vec and stack.h, and -CC's
+vec and vec_struct outside this table. deque, vec_range.h and vec_fmt.h's
+contracts change with no goal added. Every added goal is proved, and no
+unproved goal is added or closed. Runs 2 and 3 (ba39dea, 12ee338) gave the
+same lines and names; enforced from run 4. The total is 73974 obligations,
+73282 proved and 692 unproved, from 73958, 73266 and 692.
 
 *No row moves 2026-11-07 (VERIFY-061).* The table counts what the
 automatic provers prove. bits.h's twelve unproved goals are proved in Coq,
@@ -1913,6 +1931,7 @@ unprovable by construction — cites the coverage stream as its
 | 2026-11-03 | 8152928 → 2bad3cd | B&T #13 → #14 | v1.3.0  | 97.3%  | 99.6%     | 92.0%    | 92.4%  | **hashmap repaired** (VERIFY-056): an independent review of VERIFY-055's argument found `remove` defective on a full map, possible at capacities 1 and 2 only (the last slot kept its element; a second remove wrapped `len`), and the argument wrong. Fixed under a pre-registration (80f623f before 8152928): the shift empties the slot it ends at, `len` is decremented only above 0, `insert`'s loop states `psl <= i`; a test at capacities 1 and 2, and the fuzz target draws them. Run 1: 4738/4784, own 15 → 6 (the masks and four frame goals), every prediction matched; run 2 (2bad3cd) the same; enforced. MC/DC 2023/2196 → 2030/2198, `hashmap_impl.h` 65/92 → 72/94, from CI's annotation; lines, functions and branches measured with the job's steps here, as its MC/DC matched. The docs sweep of the same day (4a4572b) recorded the defect and corrected stale statuses and figures across the docs. |
 | 2026-11-04 | a32639e → 6102084 | B&T #17 → #18 | v1.3.0  | 97.3%  | 99.6%     | 92.0%    | 92.4%  | **pointer arithmetic kept in its object** (VERIFY-057, VERIFY-058): a probe (9207897, `9 · Probes` #3) ran every unit once with `-warn-invalid-pointer`, which `-wp-rte` lacks: 1073 pointer goals, 122 unproved, 44 names in five kinds, three of them false: `ptr_offset`, `ptr_offset_const` and `ptr_retreat` admitted a result outside its object. Repaired under a pre-registration (d058104 before a32639e): the three, and `ptr_elem` and `ptr_elem_const` which call them, require `in_object`; every call in a verified unit proves it, +104 goals over twelve units, all proved; the probe at 987 / 1073. Runs 1 and 2 report-only and identical, enforced from run 3. No code or test changed; coverage unchanged. |
 | 2026-11-05 | afabc7d → db4509d | B&T #20 → #21 | v1.3.0  | 97.3%  | 99.6%     | 92.0%    | 92.4%  | **the bounds checks compare addresses** (VERIFY-059): stating the proved configuration found `ptr_range_in_range` true for a range starting past the region's end, a result its contract left unstated, and both bounds checks comparing pointers their contracts let lie in different objects. Repaired under a pre-registration (cc08e1b before afabc7d): both compare `uintptr_t` addresses and state their result, +12 goals in each unit that includes ptr.h, all proved, every prediction matched at runs 1 and 2; a test and a fuzz check of the old cases. checked.h's `CHECKED_ASSERT_RESULT` reaches `require_msg` in debug builds, as documented; contract.h's table corrected. Lines 2933/3014, MC/DC 2030/2198. |
+| 2026-11-07 → 11-08 | 366832e → 12ee338 | B&T #34 → #36 | v1.3.0  | 97.3%  | 99.6%     | 92.0%    | 92.4%  | **a container's pointer is NULL exactly when its capacity is 0** (VERIFY-062, phase A): VERIFY-057's probe had left vec's and deque's pointer reads unproved in a state their predicates admitted, a pointer that is not NULL at capacity 0. Decided with the author: the predicates' implication becomes an equivalence (82 clauses), and `vec_init(buffer, 0)` gives NULL, so push returns ERR_INVALID_ARG for that vector where it returned ERR_CAPACITY_EXCEEDED; vec_fmt's two functions require vec's form. +8 goals in each unit that defines `vec_init`, all proved; the probe at 1016 / 1073, 19 names closed. Run 1's conditional expression took `vec_init` past clang's analyzer's inlining limit, a false positive in `vec_test.c`; from run 2 it stores the buffer under an if. Enforced from run 4. A test of the zero capacity; MC/DC 2032/2200. |
 
 > **Note (2026-11-02): the commit and CI columns of the rows above.**
 > - **CI numbers since VERIFY-050.** VERIFY-050 split the one CI workflow
