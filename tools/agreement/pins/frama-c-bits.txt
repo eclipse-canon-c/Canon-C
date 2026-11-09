@@ -1,6 +1,6 @@
 # frama-c-bits: the goals that one or two provers prove alone, each prover running alone,
 # as 13 · Prover agreement #3 found them at 5ba6712 (VERIFY-065). A goal not listed is
 # proved by WP itself, by all three provers, or by none (the names its proof job pins).
-# slow: a proof seen to take over 60 s, in run 1 or #3. A slow goal is left out of the
-# comparison, as is any proof over 30 s in the run being compared.
+# slow: a proof seen to take over 60 s in run 1 or #3, or over 30 s in #4. A slow goal is
+# left out of the comparison, as is any proof over 30 s in the run being compared.
 one Z3 typed_bits_extract_normal_ensures_part3

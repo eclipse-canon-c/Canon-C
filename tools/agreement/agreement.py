@@ -74,7 +74,7 @@ import subprocess
 import sys
 import time
 
-ENFORCE = False   # VERIFY-065: report-only until its third run
+ENFORCE = True    # since VERIFY-065's third run: a difference fails the unit's job
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))

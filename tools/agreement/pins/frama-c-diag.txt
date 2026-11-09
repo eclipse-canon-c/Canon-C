@@ -1,8 +1,8 @@
 # frama-c-diag: the goals that one or two provers prove alone, each prover running alone,
 # as 13 · Prover agreement #3 found them at 5ba6712 (VERIFY-065). A goal not listed is
 # proved by WP itself, by all three provers, or by none (the names its proof job pins).
-# slow: a proof seen to take over 60 s, in run 1 or #3. A slow goal is left out of the
-# comparison, as is any proof over 30 s in the run being compared.
+# slow: a proof seen to take over 60 s in run 1 or #3, or over 30 s in #4. A slow goal is
+# left out of the comparison, as is any proof over 30 s in the run being compared.
 one CVC5 typed_cast_diag_push_assert_rte_mem_access_13_part2
 one CVC5 typed_cast_diag_push_call_memcpy_requires_valid_src_part4
 one CVC5 typed_cast_diag_push_valid_diag_ensures_push_msg_terminated_part11
@@ -34,4 +34,6 @@ two Alt-Ergo+CVC5 typed_cast_diag_render_loop_invariant_render_terminated_preser
 two Alt-Ergo+CVC5 typed_cast_diag_render_loop_invariant_render_terminated_preserved_part14
 two Alt-Ergo+CVC5 typed_cast_diag_render_loop_invariant_render_terminated_preserved_part15
 two Alt-Ergo+CVC5 typed_cast_diag_render_loop_invariant_render_terminated_preserved_part16
+slow Z3 typed_cast_diag_push_valid_diag_ensures_push_frame_code_part11
+slow Z3 typed_cast_diag_push_valid_diag_ensures_push_frame_file_part12
 slow Z3 typed_cast_diag_push_valid_diag_ensures_push_frame_line_part12

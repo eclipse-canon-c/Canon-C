@@ -35,12 +35,14 @@ runs on every push that can change it, in `13 · Prover agreement`
   on another run: VERIFY-065 saw proofs that took over 60 s on one run time
   out on the next. So a goal is left out of the comparison when the run
   being compared takes over 30 s to prove it, or when its pins list it as
-  `slow PROVER NAME`, a proof seen to take over 60 s when the pins were
-  made. The run's notices give each slow proof's time.
+  `slow PROVER NAME`: a proof seen to take over 60 s in VERIFY-065's run 1
+  or #3, or over 30 s in #4. The run's notices give each slow proof's time.
 - **The gate.** In each unit, the goals no prover proves alone must be the
   names its proof job pins, and the goals one or two provers prove must be
   those of its pin file. `ENFORCE` in `agreement.py` turns a difference into
-  a failure; it is off until VERIFY-065's third run.
+  a failure; it is on since VERIFY-065's third run. A goal that loses or gains
+  a prover, or a new goal that only one prover proves, fails the unit's job
+  until a record lists it and its pin file says so.
 - **The check.** `agreement.py check`, in `8 · Records`, fails when a unit's
   file, memory model, preprocessing or extra options here differ from its
   proof job's, when a proof job has no unit here (but `frama-c-arena-32`

@@ -1,8 +1,8 @@
 # frama-c-hashmap: the goals that one or two provers prove alone, each prover running alone,
 # as 13 · Prover agreement #3 found them at 5ba6712 (VERIFY-065). A goal not listed is
 # proved by WP itself, by all three provers, or by none (the names its proof job pins).
-# slow: a proof seen to take over 60 s, in run 1 or #3. A slow goal is left out of the
-# comparison, as is any proof over 30 s in the run being compared.
+# slow: a proof seen to take over 60 s in run 1 or #3, or over 30 s in #4. A slow goal is
+# left out of the comparison, as is any proof over 30 s in the run being compared.
 one Alt-Ergo typed_cast_hashmap_insert_loop_invariant_7_preserved_part3
 one Alt-Ergo typed_cast_hashmap_load_factor_assert_rte_is_nan_or_infinite
 one Alt-Ergo typed_cast_hashmap_remove_loop_invariant_7_preserved_part3
@@ -31,4 +31,11 @@ slow CVC5 typed_cast_hashmap_insert_loop_invariant_7_preserved_part1
 slow CVC5 typed_cast_hashmap_insert_loop_invariant_7_preserved_part3
 slow CVC5 typed_cast_hashmap_remove_loop_assigns_2_part04
 slow CVC5 typed_cast_hashmap_remove_loop_invariant_5_preserved_part3
+slow CVC5 typed_cast_hashmap_remove_loop_invariant_6_preserved_part3
+slow CVC5 typed_cast_hashmap_remove_loop_invariant_8_preserved_part3
 slow CVC5 typed_cast_hashmap_remove_valid_ensures_part18
+slow CVC5 typed_cast_hashmap_remove_valid_ensures_part20
+slow CVC5 typed_cast_hashmap_remove_valid_ensures_part22
+slow Z3 typed_cast_hashmap_remove_loop_assigns_2_part04
+slow Z3 typed_cast_hashmap_remove_loop_variant_2_decrease_part3
+slow Z3 typed_cast_hashmap_remove_valid_ensures_part18
