@@ -31420,6 +31420,7 @@ author, as "What follows" said.
 | **ID**         | VERIFY-065 |
 | **Date**       | 2026-11-09 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run. |
+| **Status update** | 2026-11-09 — Run 1 scored: H1 MATCH; H2, H3, H5 and H6 MISS; H4 not yet scored, 14 of the 26 units matching. No proof failed: the setup's anonymous download of CVC5 was refused for 47 jobs, and for 23 of them again on a re-run. The fix, the archive kept in GitHub's cache and downloaded with the job's token, is pre-registered below with predictions F1 to F6. See "Scored: run 1". The Status above is the record as committed. |
 | **Baseline**   | 703899a (`VERIFY-064 scored: all four predictions match; the provers' agreement measured`) |
 | **Scope**      | VERIFY-064's probe moves to `tools/agreement/` and its workflow becomes `13 · Prover agreement`, run on push for the units a push can affect; `8 · Records` checks the probe's units against the proof jobs; the CI map, `docs/verification.md` and the probe's README. No code, contract, proof job or pin changes. |
 | **Category**   | What the proofs trust: the provers' agreement, measured whenever it can change, decided with the author (2026-11-09). |
@@ -31557,3 +31558,96 @@ takes about an hour and 18 runner-hours, beside the proof jobs; a change to
 one data header, a few jobs.
 
 The change is pushed with this record, in the commit after it.
+
+### Scored: run 1 (2026-11-09)
+
+The push of bde9ba0 and 5af3c72 started `1 · Build & test` #41,
+`2 · Platforms` #50, `3 · Static analysis & coverage` #41, `4 · Proofs:
+core/` #41, `5 · Proofs: semantics/` #41, `6 · Proofs: data/` #41,
+`8 · Records` #56 and `13 · Prover agreement` #2, at 05:36 UTC. 1, 2, 3
+and 8 are green; 4, 5, 6 and 13 are red.
+
+No proof failed. About 140 jobs set up Frama-C at once, the proof jobs and
+13's runs together, and each downloads CVC5's release archive from GitHub,
+anonymously. GitHub refused 47 of the downloads, and the setup's wget gave
+up after its five tries, in 21 s. Fifteen proof jobs, in 4, 5 and 6, and 32
+of 13's 78 runs failed there, before WP ran. The fourteen proof jobs that
+ran passed at their pins, and the 48 jobs of 1 to 3 gave VERIFY-063's
+numbers, job for job.
+
+The author re-ran the failed jobs of 4, 5, 6 and 13 (07:38 UTC). 23 of the
+47 failed again, at the same download: ten proof jobs and thirteen runs. A
+re-run uses the setup of the commit it runs, so it cannot fix this; the
+fix below needs a push. After the second attempt, 14 of the 26 units have
+all three runs.
+
+| # | scored |
+|---|--------|
+| H1 | **MATCH.** 1 to 6, 8 and 13 ran; 7, 9, 10, 11 and 12 did not. |
+| H2 | **MISS.** 4, 5 and 6 are red: fifteen proof jobs failed in the setup's download of CVC5, and ten again on the re-run. The proof jobs that ran passed at their pins, 1 to 3 gave VERIFY-063's numbers, and `8 · Records` passed with the new check. |
+| H3 | **MISS.** 13 selected all 26 units, as predicted, but 32 of the 78 runs failed in the setup and ended without a report, and 13 of them again on the re-run. |
+| H4 | **Not yet scored: 14 units match.** After the second attempt, 14 units have all three runs: array, bits, checked, compare, hashmap, memory, option, ptr, range, result, slice, stack, stringbuf and vec-fmt. Each sorts as in VERIFY-064, the same count in every class and pair and the same goals proved by one prover alone, with the same prover. In each, the goals no prover proves alone are its job's pinned names. The other 12 wait for the fix's run. |
+| H5 | **MISS.** Eleven proofs took a prover over 60 s. CVC5 on four goals of `range.h`, slow in both `frama-c-range` and `frama-c-vec-range`: `range_skip`'s signed-overflow checks 2, 3 and 7, and `range_skip_advance`'s `skip_inside`, part 12. CVC5 on parts 1 and 3 of `hashmap_insert`'s loop invariant 7 preserved. Alt-Ergo on `vec_int_extend_from_range`'s loop invariant 5 preserved, part 3, which only Alt-Ergo proves (VERIFY-064's table). The same goals were slow in both attempts. |
+| H6 | **MISS.** 13 is red: its runs that failed in the setup, and the units left without a report. |
+
+What run 1 found:
+
+- **The setup's anonymous download of CVC5 can be refused.** It was
+  refused when about 140 jobs set up at once, and again when 47 did. Yet
+  VERIFY-063's push had set up about 90 at once (4 to 7, the pointer probe
+  and 11's first 30) without a refusal, so the limit is not a fixed number
+  of jobs. GitHub's hosted runners share their network addresses, and
+  GitHub has limited unauthenticated requests more tightly since May 2025
+  (its changelog of 2025-05-08); it recommends authenticating.
+- **Eleven proofs take a prover over 60 s**, half the time limit. They are
+  left out of the pins' comparison by design. One is the only proof of its
+  goal: Alt-Ergo's of `vec_int_extend_from_range`'s loop invariant 5, part
+  3. A slower runner could push it past 120 s; that goal would then turn
+  into a residual, and `frama-c-vec-range` would fail its pin.
+
+### The fix, pre-registered (2026-11-09)
+
+1. **`.github/actions/framac-setup/action.yml`** keeps the CVC5 release
+   archive in GitHub's cache, under a key made of the runner's system and
+   architecture, the version and the archive's SHA-256. A job that restores
+   it downloads nothing. On a miss, the job waits a random 0 to 120 s and
+   looks again, so that the first download, saved at once, serves the
+   others. Then it downloads through GitHub's API with the job's token
+   (`gh release download`, five tries), and only if that fails,
+   anonymously, with curl retrying for up to ten minutes. The archive is
+   checked against a new input, `cvc5-sha256` (6d44abc2…d8de56, the SHA-256
+   of the official archive), and its binary's version line against
+   `cvc5-version`, before it is used or saved. A cached archive that fails
+   the check is downloaded again.
+2. **`.github/workflows/prover-agreement.yml`**: its uploads replace an
+   artifact of the same name (`overwrite: true`), so that a re-run of a job
+   does not fail on its first attempt's artifact.
+
+**Measured here.** The install step's script, run here with the archive
+from the official release: from the cache; downloaded through the API (a
+stand-in for `gh`); the API refused (a stand-in), then downloaded
+anonymously; a corrupt archive in the cache, downloaded again; a wrong
+SHA-256, which fails with its message and keeps no archive. The archive's
+SHA-256 is 6d44abc233980a14d72cc5809287d27c3335b1d6ee863381d0b5ffcbd0d8de56,
+and its binary prints `This is cvc5 version 1.2.1 [git tag 1.2.1 branch
+HEAD]`. Not measured here: the cache's restore and save inside the setup,
+and `gh` with a job's token. Only CI runs them.
+
+**The workflows.** Every workflow's paths include the setup, so its change
+starts all thirteen (`tools/which_workflows.py`), and 13 runs all 26 units.
+About 300 jobs, and the cache holds no archive when they start.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| F1 | **All thirteen workflows run.** | another set | H |
+| F2 | **No job fails in the setup**: each restores the archive or downloads it, and checks it. | a job failing in the setup | M–H: the refusals come from outside the repository; the fix uses the authenticated path GitHub recommends, and few jobs should download at all. |
+| F3 | **Most jobs do not download**: fewer than a quarter of the jobs that set up Frama-C download the archive; the others restore it. | a quarter or more download | M: how many jobs start before the first download is saved depends on GitHub's queue. |
+| F4 | **1 to 12 are green, as before**: 1 to 3 with VERIFY-063's numbers; every proof job of 4 to 7 and 11 at its pin; each probe of 9 with the result of its last run; 10 and 12 green. | a failure, or another number | H, given F2: the change does not touch Frama-C, the provers or their versions. |
+| F5 | **13 is green, every unit sorted as in VERIFY-064**: all 78 runs report; every unit has VERIFY-064's count in every class and pair and its goals proved by one prover alone, with the same prover; in each, the goals no prover proves alone are its job's pinned names. This scores H4 for the 12 units left. | a missing report, or another count, name or prover | M–H, as H4. |
+| F6 | **The slow proofs are the same.** Each of run 1's eleven is slow again; any other slow goal is in one of the twelve units that run 1 left incomplete. | one of the eleven under 60 s, or a new slow goal in one of the fourteen complete units | M: the times vary from runner to runner. |
+
+**What follows.** When F1 to F6 are scored, the pins are written from this
+run's notices, one file per unit, and pushed: run 2, which must find no
+difference. Then `ENFORCE` is set: run 3.
+
+The fix is pushed with this section, in the commit after it.
