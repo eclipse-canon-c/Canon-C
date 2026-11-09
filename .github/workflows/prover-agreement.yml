@@ -1,0 +1,149 @@
+name: "9 · Probes (manual): prover agreement"
+
+# ---------------------------------------------------------------------------
+# MANUAL TRIGGER ONLY (VERIFY-064, docs/deviations.md). An experiment: it
+# gates nothing, and it never runs on push.
+#
+# QUESTION: every proof job gives Alt-Ergo, Z3 and CVC5 together each goal
+# that Qed, WP's simplifier, does not close. The first prover to succeed
+# proves it, and WP stops the other two. So no goal's proof needs two
+# provers to agree, and the jobs do not say how many goals only one prover
+# can prove. Agreement would guard against a prover that proves a false
+# goal; one prover alone does not.
+#
+# PROBE: tools/probes/verify-064/agreement_probe.py runs each of the pointer
+# probe's 26 units three times, once with each prover alone and otherwise
+# as its job runs it, and keeps WP's JSON report of each goal. One job per
+# unit and prover, 78 in all, at most 30 at once, the longest units first;
+# each posts its run's summary. WP is stopped 340 minutes after its job
+# started, so that what it wrote is still uploaded before GitHub's six
+# hours. Then one job per unit sorts the unit's goals by how many provers
+# prove each alone, and posts the counts, and by name the goals that one
+# prover alone proves and those that none does. A last job posts the totals
+# and uploads every goal's class as agreement.tsv.
+#
+# Run it from the Actions tab (Run workflow) when no other run needs the
+# runners: it holds 30 of them for hours.
+# ---------------------------------------------------------------------------
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: "agree ${{ matrix.unit }} ${{ matrix.prover }}"
+    # Pinned, not ubuntu-latest: see the runner note in
+    # ci.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        # Longest first, by the units' jobs at 06718b0 (83 minutes for vec
+        # down to under one for error), so that the longest runs start first.
+        unit: [frama-c-vec, frama-c-bitset, frama-c-stack, frama-c-vec-fmt,
+               frama-c-hashmap, frama-c-vec-range, frama-c-region,
+               frama-c-stringbuf, frama-c-pool, frama-c-priority-queue,
+               frama-c-arena, frama-c-memory, frama-c-array, frama-c-borrow,
+               frama-c-diag, frama-c-range, frama-c-bits, frama-c-deque,
+               frama-c-slice, frama-c-ptr, frama-c-option, frama-c-result,
+               frama-c-checked, frama-c-compare, frama-c-lifetime,
+               frama-c-error]
+        prover: [alt-ergo, z3, cvc5]
+    steps:
+      - name: "The job's start, from which WP's limit is counted"
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+
+      - name: "WP, ${{ matrix.prover }} alone: ${{ matrix.unit }}"
+        run: |
+          eval $(opam env --switch=frama-c)
+          left=$(( JOB_START + 340 * 60 - $(date +%s) ))
+          if [ "$left" -lt 60 ]; then left=60; fi
+          AGREE_SECONDS=$left python3 tools/probes/verify-064/agreement_probe.py run \
+            "${{ matrix.unit }}" "${{ matrix.prover }}"
+
+      - name: Upload WP's output and report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: agree-${{ matrix.unit }}-${{ matrix.prover }}
+          path: agree_*
+          if-no-files-found: warn
+          retention-days: 90
+
+  sort:
+    name: "agreement ${{ matrix.unit }}"
+    needs: run
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        unit: [frama-c-checked, frama-c-bits, frama-c-compare, frama-c-ptr,
+               frama-c-slice, frama-c-memory, frama-c-arena, frama-c-pool,
+               frama-c-region, frama-c-lifetime, frama-c-error, frama-c-option,
+               frama-c-result, frama-c-borrow, frama-c-diag, frama-c-vec,
+               frama-c-deque, frama-c-bitset, frama-c-priority-queue,
+               frama-c-range, frama-c-vec-range, frama-c-vec-fmt,
+               frama-c-stringbuf, frama-c-stack, frama-c-array,
+               frama-c-hashmap]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          # The braces keep frama-c-vec's pattern from taking vec-range's
+          # and vec-fmt's artifacts too.
+          pattern: "agree-${{ matrix.unit }}-{alt-ergo,z3,cvc5}"
+          path: agree
+          merge-multiple: true
+      - name: "Sort ${{ matrix.unit }}'s goals by the provers that prove each alone"
+        run: python3 tools/probes/verify-064/agreement_probe.py unit "${{ matrix.unit }}" agree
+      # GitHub keeps ten notices of a step: the script writes them ten to a
+      # file, and each file is posted by a step of its own.
+      - name: "Notices: the counts, and the first names"
+        if: ${{ !cancelled() }}
+        run: cat notices_1.txt 2>/dev/null || true
+      - name: "Notices: names, continued"
+        if: ${{ !cancelled() }}
+        run: cat notices_2.txt 2>/dev/null || true
+      - name: "Notices: names, continued further"
+        if: ${{ !cancelled() }}
+        run: cat notices_3.txt 2>/dev/null || true
+      - name: "Notices: the last names"
+        if: ${{ !cancelled() }}
+        run: cat notices_4.txt 2>/dev/null || true
+
+  total:
+    name: "agreement total"
+    needs: sort
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: "agree-*"
+          path: agree
+          merge-multiple: true
+      - name: "The totals"
+        run: python3 tools/probes/verify-064/agreement_probe.py total agree
+      - name: Upload every goal's class
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: agreement
+          path: agreement.tsv
+          if-no-files-found: warn
+          retention-days: 90

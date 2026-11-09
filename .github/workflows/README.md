@@ -18,7 +18,7 @@ cite.
 | 7 | `proofs-cc.yml` | 7 · Proofs: -CC | The macro-body contracts proved under `-CC` (VERIFY-025), per family, for the six families whose driver jobs above run under `-C` (slice, option, result, borrow, vec, deque). The units written since (vec_range, vec_fmt, stack, array, hashmap) are preprocessed with `-CC` in their own jobs in `proofs-data.yml`, so their macro-body contracts are proved there and they have no job here | per family's gates |
 | 8 | `records.yml` | 8 · Records | Record coverage (argument blocks against roll-calls), the machine models' pins checked against x86_64's (VERIFY-060, `tools/machdeps/check_pins.py`), and the workflow-size guard | yes |
 | 9 | `probes.yml` | 9 · Probes | The closed experiments of VERIFY-039/040 (G4, G11, G13, G19, Count, Round 3), VERIFY-057's pointer probe (every unit with `-warn-invalid-pointer`, report-only), and VERIFY-060's char probe (arena with `char`'s signedness flipped at x86_64 and AArch64). Each runs only when its own paths change | a probe's MISS fails it; the pointer probe fails only without a summary |
-| 9 | `f4-control.yml`, `vc-identity.yml` | 9 · Probes (manual): … | Two experiments run only by hand | n/a |
+| 9 | `f4-control.yml`, `vc-identity.yml`, `prover-agreement.yml` | 9 · Probes (manual): … | Three experiments run only by hand. The third is VERIFY-064's: each unit proved once with each prover alone, to count the goals one prover alone proves; 78 jobs, at most 30 at once, for hours | n/a |
 | 10 | `machdeps.yml` | 10 · Machine models | VERIFY-060's machine models for Arm, RISC-V and big-endian PowerPC: generated with Frama-C's make-machdep from the cross-compilers, compared with the committed copies in `tools/machdeps/`; what Frama-C sees at each, whether the core/ units parse, and whether GCC mode changes their code. Runs when its own paths change | the drift check: yes (since phase C). The reads: no |
 | 11 | `proofs-machdeps.yml` | 11 · Proofs: machine models | VERIFY-060's proofs of the ten core/ units at nine machine models besides x86_64: the seven of `tools/machdeps/` (Cortex-M4 with short enums, RV32 and RV64 bare metal, 32-bit Arm, RV64 and AArch64 Linux, big-endian 32-bit PowerPC Linux) and Frama-C's `ppc_32` and `msvc_x86_64`; ninety jobs, a matrix of model and unit, at most 30 at once, each on its class's pins (`tools/machdeps/pins/`). Runs when core/, the models, its own file or the Frama-C setup change, and by hand | yes, each job on its pins (since phase C) |
 | 12 | `coq.yml` | 12 · Coq: bits.h | VERIFY-061: bits.h's twelve residual goals, proved in Coq 8.18.0, installed into the Frama-C switch in the job. It replays the twelve proof scripts of `tools/coq/session`: each compiled by Coq as Why3 runs it, then `frama-c-bits`'s command with Coq added, in WP's batch mode, at x86_64 and the nine machine models. Runs when its own paths change, and by hand | yes: each script accepted, resting only on its own declarations, and 100 / 100 with Coq credited with twelve at each of the ten models |
@@ -75,8 +75,9 @@ at the limit and warns from 480 KB.
   joined into one text.
 - `frama-c-win64` proves two units at two machine models in each leg, and
   gates on equal unproved sets.
-- `frama-c-vec` runs about three hours. The others run from minutes to about
-  an hour.
+- `frama-c-vec` runs about an hour and a half, `frama-c-bitset` and
+  `frama-c-stack` about an hour, and the others from under a minute to 45
+  minutes (at 06718b0).
 
 ## Things that stay fixed
 
