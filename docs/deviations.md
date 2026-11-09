@@ -31420,7 +31420,7 @@ author, as "What follows" said.
 | **ID**         | VERIFY-065 |
 | **Date**       | 2026-11-09 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run. |
-| **Status update** | 2026-11-09 — Run 1 scored: H1 MATCH; H2, H3, H5 and H6 MISS; H4 MATCH on the 14 units run 1 completed. The fix's run (#3, all thirteen workflows): F1 to F4 MATCH, F5 and F6 MISS. One job downloaded CVC5's archive and 239 restored it; every workflow is green, every proof job at its pin. Four goals near the time limit sorted differently from VERIFY-064. Run 2 pre-registered: the pins, from #3, and the slow threshold lowered to 30 s, with predictions R1 to R6. The Status above is the record as committed. |
+| **Status update** | 2026-11-09 — Run 1 scored: H1 MATCH; H2, H3, H5 and H6 MISS; H4 MATCH on the 14 units run 1 completed. The fix's run (#3, all thirteen workflows): F1 to F4 MATCH, F5 and F6 MISS. Run 2 (#4, the pins): R1 to R6 MATCH, no difference in any unit. Run 3 pre-registered: ENFORCE on, and the pins' slow lists gain #4's proofs over 30 s, with predictions S1 to S4. The Status above is the record as committed. |
 | **Baseline**   | 703899a (`VERIFY-064 scored: all four predictions match; the provers' agreement measured`) |
 | **Scope**      | VERIFY-064's probe moves to `tools/agreement/` and its workflow becomes `13 · Prover agreement`, run on push for the units a push can affect; `8 · Records` checks the probe's units against the proof jobs; the CI map, `docs/verification.md` and the probe's README. No code, contract, proof job or pin changes. |
 | **Category**   | What the proofs trust: the provers' agreement, measured whenever it can change, decided with the author (2026-11-09). |
@@ -31722,3 +31722,57 @@ be green with no difference. Then VERIFY-065 closes, and
 
 The pins and the change are pushed with this section, in the commit after
 it.
+
+### Scored: run 2 (2026-11-09)
+
+The push of 66be3d5 and 3485bc7 started `2 · Platforms` #52, `8 · Records`
+#58 and `13 · Prover agreement` #4 (10:40 UTC). All three are green, 123
+jobs.
+
+| # | scored |
+|---|--------|
+| R1 | **MATCH.** 2, 8 and 13 ran; the others did not. |
+| R2 | **MATCH.** 13 ran all 26 units. Each of the 78 runs restored CVC5's archive at its first look, none downloaded it, and all reported. |
+| R3 | **MATCH.** In each unit, the goals no prover proves alone are its job's pinned names. |
+| R4 | **MATCH.** No difference from the pins in any unit. Of the goals that sorted differently from #3, every one was slow, in this run or in the pins: in all, three provers prove 8080 goals here, two 326 and one 147, against #3's 8078, 329 and 146. |
+| R5 | **MATCH.** Thirteen of the pins' fifteen slow proofs were made again, each in over 30 s: from 58 s, CVC5's of `range_skip`'s signed-overflow check 7, part 3, to 115 s, CVC5's of `range_skip_advance`'s `skip_inside`, part 12, in vec-range. CVC5 did not prove the other two, `hashmap_insert`'s loop invariant 7, parts 1 and 3, which only Alt-Ergo proved here. |
+| R6 | **MATCH.** 2, 8 and 13 are green. |
+
+All six predictions match. The notices now give each slow proof's time:
+28 proofs took over 30 s, 11 of them over 60 s. Three took over 100 s:
+CVC5's of `range_skip_advance`'s `skip_inside`, part 12, at 114 s and
+115 s (in range and vec-range), and of `hashmap_remove`'s loop assigns 2,
+part 04, at 108 s. Two are the only proof of their goal (VERIFY-064's
+table): Alt-Ergo's of `vec_int_extend_from_range`'s loop invariant 5
+preserved, part 3, at 89 s, and part 4, at 38 s.
+
+### Run 3, pre-registered (2026-11-09)
+
+1. **`tools/agreement/agreement.py`**: `ENFORCE` is on. A difference from
+   the pins, unproved goals that are not the job's pinned names, or a unit
+   without all three runs or without a pin file, fails the unit's job.
+2. **`tools/agreement/pins/`**: the slow lists gain #4's fifteen other
+   proofs over 30 s, 30 slow lines in all; the lines `one` and `two` are
+   unchanged. Each file's header says where its slow lines come from.
+3. **`tools/agreement/README.md`** and the CI map's row 13 say the gate is
+   on.
+
+**Measured here.** #4's classes, read from its notices, give no difference
+from these pins with `ENFORCE` on. `agreement.py check` passes.
+
+**The workflows.** `tools/which_workflows.py`: 2, 8 and 13 run; the others
+do not. 13 runs all 26 units, because the script changes.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| S1 | **2, 8 and 13 run**; the others do not. | another set | H |
+| S2 | **13 runs all 26 units from the cache**, and all 78 runs report. | another selection, a download, or a missing report | H |
+| S3 | **No difference from the pins, enforced**: in each unit, the goals no prover proves alone are its job's pinned names, and the goals one or two provers prove are its pins', slow goals left out. | a difference, or a unit's job failing | M–H: in #4 every goal that changed class was slow. A proof that took under 30 s in #4 and never over 60 s before, and that now times out, would be a difference. |
+| S4 | **2, 8 and 13 are green.** | a failure | M–H, as S3. |
+
+**What follows.** If S1 to S4 match, VERIFY-065 closes, and
+`docs/verification.md` says the agreement is checked on every push that can
+change it. A run that fails on a slow proof's new time, rather than on a
+real change, is recorded, and its proof joins the pins' slow lines.
+
+The change is pushed with this section, in the commit after it.
