@@ -51,6 +51,13 @@
 ![IEC 61508 SIL2](https://img.shields.io/badge/IEC61508%20SIL2-Configurable-lightblue)
 ![ECSS-E-ST-40C](https://img.shields.io/badge/ECSS--E--ST--40C-Configurable-lightblue)
 
+**Reading the badges.** "Dev/Test" marks the compilers the library is
+developed and tested with. "Configurable" marks a tool or a standard a
+project can use the library with: it does not say that this repository's CI
+runs the tool, and it is not a certification, which a project still has to
+obtain for itself. What CI runs, and what each proof rests on, is in
+`docs/verification.md`, under "The proved configuration".
+
 ---
 
 ## Table of Contents
