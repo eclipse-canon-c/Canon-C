@@ -16,12 +16,13 @@ cite.
 | 5 | `proofs-semantics.yml` | 5 · Proofs: semantics/ | WP for error, option, result, borrow, diag | yes |
 | 6 | `proofs-data.yml` | 6 · Proofs: data/ | WP for vec, deque, bitset, priority_queue, range, vec_range, vec_fmt, stringbuf, stack, array, hashmap | yes |
 | 7 | `proofs-cc.yml` | 7 · Proofs: -CC | The macro-body contracts proved under `-CC` (VERIFY-025), per family, for the six families whose driver jobs above run under `-C` (slice, option, result, borrow, vec, deque). The units written since (vec_range, vec_fmt, stack, array, hashmap) are preprocessed with `-CC` in their own jobs in `proofs-data.yml`, so their macro-body contracts are proved there and they have no job here | per family's gates |
-| 8 | `records.yml` | 8 · Records | Record coverage (argument blocks against roll-calls), the machine models' pins checked against x86_64's (VERIFY-060, `tools/machdeps/check_pins.py`), and the workflow-size guard | yes |
+| 8 | `records.yml` | 8 · Records | Record coverage (argument blocks against roll-calls), the machine models' pins checked against x86_64's (VERIFY-060, `tools/machdeps/check_pins.py`), the prover agreement's units checked against the proof jobs (VERIFY-065, `tools/agreement/agreement.py check`), and the workflow-size guard | yes |
 | 9 | `probes.yml` | 9 · Probes | The closed experiments of VERIFY-039/040 (G4, G11, G13, G19, Count, Round 3), VERIFY-057's pointer probe (every unit with `-warn-invalid-pointer`, report-only), and VERIFY-060's char probe (arena with `char`'s signedness flipped at x86_64 and AArch64). Each runs only when its own paths change | a probe's MISS fails it; the pointer probe fails only without a summary |
-| 9 | `f4-control.yml`, `vc-identity.yml`, `prover-agreement.yml` | 9 · Probes (manual): … | Three experiments run only by hand. The third is VERIFY-064's: each unit proved once with each prover alone, to count the goals one prover alone proves; 78 jobs, at most 30 at once, for hours | n/a |
+| 9 | `f4-control.yml`, `vc-identity.yml` | 9 · Probes (manual): … | Two experiments run only by hand | n/a |
 | 10 | `machdeps.yml` | 10 · Machine models | VERIFY-060's machine models for Arm, RISC-V and big-endian PowerPC: generated with Frama-C's make-machdep from the cross-compilers, compared with the committed copies in `tools/machdeps/`; what Frama-C sees at each, whether the core/ units parse, and whether GCC mode changes their code. Runs when its own paths change | the drift check: yes (since phase C). The reads: no |
 | 11 | `proofs-machdeps.yml` | 11 · Proofs: machine models | VERIFY-060's proofs of the ten core/ units at nine machine models besides x86_64: the seven of `tools/machdeps/` (Cortex-M4 with short enums, RV32 and RV64 bare metal, 32-bit Arm, RV64 and AArch64 Linux, big-endian 32-bit PowerPC Linux) and Frama-C's `ppc_32` and `msvc_x86_64`; ninety jobs, a matrix of model and unit, at most 30 at once, each on its class's pins (`tools/machdeps/pins/`). Runs when core/, the models, its own file or the Frama-C setup change, and by hand | yes, each job on its pins (since phase C) |
 | 12 | `coq.yml` | 12 · Coq: bits.h | VERIFY-061: bits.h's twelve residual goals, proved in Coq 8.18.0, installed into the Frama-C switch in the job. It replays the twelve proof scripts of `tools/coq/session`: each compiled by Coq as Why3 runs it, then `frama-c-bits`'s command with Coq added, in WP's batch mode, at x86_64 and the nine machine models. Runs when its own paths change, and by hand | yes: each script accepted, resting only on its own declarations, and 100 / 100 with Coq credited with twelve at each of the ten models |
+| 13 | `prover-agreement.yml` | 13 · Prover agreement | VERIFY-064's measure, made a check by VERIFY-065: each unit a push can affect, proved once with each prover alone (`tools/agreement/`). The units are those that include a changed file, as the compiler lists them; a change to the script, the workflow, the Frama-C setup, or a header no unit includes runs all 26. Three jobs per unit, at most 30 at once (about an hour and 18 runner-hours for all 26), then one job per unit and a total | report-only until VERIFY-065's third run; then yes: the goals no prover proves alone are the job's pinned names, and those one or two prove are the unit's pins |
 
 ## Reading results
 
@@ -50,7 +51,11 @@ still there for detail.
   - the proved line and the unproved names pinned;
   - its own annotation.
 
-  Give it a "Result annotation" step like the others. Add an MC/DC cover
+  Give it a "Result annotation" step like the others. Give it an entry
+  in `tools/agreement/agreement.py` (`UNITS` and `ORDER`), which
+  `8 · Records` checks against its job, and its pin file in
+  `tools/agreement/pins/` once `13 · Prover agreement` has posted its
+  names. Add an MC/DC cover
   file (`vmacros/coverage/`, registered in `CMakeLists.txt` and run by the
   coverage job) when its conditions would otherwise land in a test file; a
   header with written-out bodies is measured in place and needs none. Either

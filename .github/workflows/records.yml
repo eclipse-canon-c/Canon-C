@@ -1,7 +1,8 @@
 name: "8 · Records"
 # The bookkeeping gates: record coverage (each argument block in
 # docs/deviations.md joined to the roll-calls that pin its goals), the
-# machine models' pins checked against x86_64's (VERIFY-060) and the
+# machine models' pins checked against x86_64's (VERIFY-060), the prover
+# agreement's units checked against the proof jobs (VERIFY-065) and the
 # workflow-size guard. Map: .github/workflows/README.md.
 on:
   push:
@@ -13,6 +14,7 @@ on:
       - 'tools/record_coverage.py'
       - 'tools/machdeps/pins/*.txt'
       - 'tools/machdeps/check_pins.py'
+      - 'tools/agreement/**'
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
@@ -51,6 +53,13 @@ jobs:
         # must be one the unit's x86_64 job pins, so that it is argued where
         # that one is (tools/machdeps/check_pins.py says how bits is read).
         run: python3 tools/machdeps/check_pins.py
+      - name: "The prover agreement's units are the proof jobs' (VERIFY-065)"
+        # Each unit's file, memory model, preprocessing and extra options
+        # in tools/agreement/agreement.py must be its proof job's, and every
+        # file a unit includes must be under 13 · Prover agreement's push
+        # paths, so that the agreement is measured as the jobs prove and
+        # runs whenever a unit's code changes.
+        run: python3 tools/agreement/agreement.py check
 
   # -------------------------------------------------------------------------
   # Workflow size guard (VERIFY-047). GitHub runs no workflow file of 500 KB

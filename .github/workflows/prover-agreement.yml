@@ -1,32 +1,47 @@
-name: "9 · Probes (manual): prover agreement"
+name: "13 · Prover agreement"
 
 # ---------------------------------------------------------------------------
-# MANUAL TRIGGER ONLY (VERIFY-064, docs/deviations.md). An experiment: it
-# gates nothing, and it never runs on push.
+# How many of the three provers prove each goal, each running alone:
+# measured by VERIFY-064, made a check on every push that can change it by
+# VERIFY-065 (docs/deviations.md). Map: .github/workflows/README.md.
 #
-# QUESTION: every proof job gives Alt-Ergo, Z3 and CVC5 together each goal
-# that Qed, WP's simplifier, does not close. The first prover to succeed
-# proves it, and WP stops the other two. So no goal's proof needs two
-# provers to agree, and the jobs do not say how many goals only one prover
-# can prove. Agreement would guard against a prover that proves a false
-# goal; one prover alone does not.
+# Every proof job gives Alt-Ergo, Z3 and CVC5 together each goal that Qed,
+# WP's simplifier, does not close. The first to succeed proves it, and WP
+# stops the other two; even with -wp-run-all-provers, WP's report keeps one
+# prover per goal. So this workflow proves each unit a push can affect three
+# times, once with each prover alone and otherwise as its job proves it, and
+# sorts the goals by how many provers prove each alone
+# (tools/agreement/agreement.py).
 #
-# PROBE: tools/probes/verify-064/agreement_probe.py runs each of the pointer
-# probe's 26 units three times, once with each prover alone and otherwise
-# as its job runs it, and keeps WP's JSON report of each goal. One job per
-# unit and prover, 78 in all, at most 30 at once, the longest units first;
-# each posts its run's summary. WP is stopped 340 minutes after its job
-# started, so that what it wrote is still uploaded before GitHub's six
-# hours. Then one job per unit sorts the unit's goals by how many provers
-# prove each alone, and posts the counts, and by name the goals that one
-# prover alone proves and those that none does. A last job posts the totals
-# and uploads every goal's class as agreement.tsv.
+# WHICH UNITS: the first job asks the compiler which repository files each
+# unit includes, with the unit's own flags, with and without Frama-C's
+# macros, and runs the units that include a changed file. A change to the
+# script, this file or the Frama-C setup, or to a header under the watched
+# folders that no unit includes, runs every unit; a change to a unit's pins
+# runs that unit; a manual run runs every unit. 8 · Records checks that the
+# script's flags are the proof jobs' and that every file a unit includes is
+# under the paths below.
 #
-# Run it from the Actions tab (Run workflow) when no other run needs the
-# runners: it holds 30 of them for hours.
+# THE GATE: in each unit, the goals no prover proves alone must be the names
+# its proof job pins, and the goals one or two provers prove must be those
+# of tools/agreement/pins/UNIT.txt; a proof slower than 60 s is listed and
+# left out. Report-only until VERIFY-065's third run (ENFORCE in the script).
+# A unit runs in three jobs, at most 30 jobs at once, the longest units
+# first; WP is stopped 340 minutes after its job started, so that what it
+# wrote is uploaded inside GitHub's six hours.
 # ---------------------------------------------------------------------------
 
 on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - 'core/**'
+      - 'semantics/**'
+      - 'data/**'
+      - 'vmacros/vdrivers/**'
+      - 'tools/agreement/**'
+      - '.github/actions/framac-setup/**'
+      - '.github/workflows/prover-agreement.yml'
   workflow_dispatch:
 
 permissions:
@@ -37,8 +52,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  changes:
+    name: "Which units the push can affect"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      units: ${{ steps.affected.outputs.units }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: affected
+        name: "The units that include a changed file"
+        env:
+          BEFORE: ${{ github.event.before }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "push" ] && [ -n "$BEFORE" ] \
+             && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+             && git fetch -q --no-tags --depth=1 origin "$BEFORE"; then
+            mapfile -t files < <(git diff --no-renames --name-only "$BEFORE" "$GITHUB_SHA")
+            printf 'changed: %s\n' "${files[@]}"
+            units=$(python3 tools/agreement/agreement.py affected "${files[@]}")
+          else
+            echo "A manual run, or no base to compare with: every unit."
+            units=$(python3 tools/agreement/agreement.py affected --all)
+          fi
+          echo "units=$units" >> "$GITHUB_OUTPUT"
+          n=$(python3 -c 'import json, sys; print(len(json.loads(sys.argv[1])))' "$units")
+          echo "::notice title=agreement units::$n unit(s): $units"
+
   run:
     name: "agree ${{ matrix.unit }} ${{ matrix.prover }}"
+    needs: changes
+    if: ${{ needs.changes.outputs.units != '[]' }}
     # Pinned, not ubuntu-latest: see the runner note in
     # ci.yml (VERIFY-039, runner pin).
     runs-on: ubuntu-24.04
@@ -47,16 +92,7 @@ jobs:
       fail-fast: false
       max-parallel: 30
       matrix:
-        # Longest first, by the units' jobs at 06718b0 (83 minutes for vec
-        # down to under one for error), so that the longest runs start first.
-        unit: [frama-c-vec, frama-c-bitset, frama-c-stack, frama-c-vec-fmt,
-               frama-c-hashmap, frama-c-vec-range, frama-c-region,
-               frama-c-stringbuf, frama-c-pool, frama-c-priority-queue,
-               frama-c-arena, frama-c-memory, frama-c-array, frama-c-borrow,
-               frama-c-diag, frama-c-range, frama-c-bits, frama-c-deque,
-               frama-c-slice, frama-c-ptr, frama-c-option, frama-c-result,
-               frama-c-checked, frama-c-compare, frama-c-lifetime,
-               frama-c-error]
+        unit: ${{ fromJSON(needs.changes.outputs.units) }}
         prover: [alt-ergo, z3, cvc5]
     steps:
       - name: "The job's start, from which WP's limit is counted"
@@ -69,7 +105,7 @@ jobs:
           eval $(opam env --switch=frama-c)
           left=$(( JOB_START + 340 * 60 - $(date +%s) ))
           if [ "$left" -lt 60 ]; then left=60; fi
-          AGREE_SECONDS=$left python3 tools/probes/verify-064/agreement_probe.py run \
+          AGREE_SECONDS=$left python3 tools/agreement/agreement.py run \
             "${{ matrix.unit }}" "${{ matrix.prover }}"
 
       - name: Upload WP's output and report
@@ -83,21 +119,14 @@ jobs:
 
   sort:
     name: "agreement ${{ matrix.unit }}"
-    needs: run
-    if: ${{ !cancelled() }}
+    needs: [changes, run]
+    if: ${{ !cancelled() && needs.changes.outputs.units != '[]' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        unit: [frama-c-checked, frama-c-bits, frama-c-compare, frama-c-ptr,
-               frama-c-slice, frama-c-memory, frama-c-arena, frama-c-pool,
-               frama-c-region, frama-c-lifetime, frama-c-error, frama-c-option,
-               frama-c-result, frama-c-borrow, frama-c-diag, frama-c-vec,
-               frama-c-deque, frama-c-bitset, frama-c-priority-queue,
-               frama-c-range, frama-c-vec-range, frama-c-vec-fmt,
-               frama-c-stringbuf, frama-c-stack, frama-c-array,
-               frama-c-hashmap]
+        unit: ${{ fromJSON(needs.changes.outputs.units) }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v7
@@ -107,8 +136,8 @@ jobs:
           pattern: "agree-${{ matrix.unit }}-{alt-ergo,z3,cvc5}"
           path: agree
           merge-multiple: true
-      - name: "Sort ${{ matrix.unit }}'s goals by the provers that prove each alone"
-        run: python3 tools/probes/verify-064/agreement_probe.py unit "${{ matrix.unit }}" agree
+      - name: "Sort ${{ matrix.unit }}'s goals, and compare them with its pins"
+        run: python3 tools/agreement/agreement.py unit "${{ matrix.unit }}" agree
       # GitHub keeps ten notices of a step: the script writes them ten to a
       # file, and each file is posted by a step of its own.
       - name: "Notices: the counts, and the first names"
@@ -126,8 +155,8 @@ jobs:
 
   total:
     name: "agreement total"
-    needs: sort
-    if: ${{ !cancelled() }}
+    needs: [changes, sort]
+    if: ${{ !cancelled() && needs.changes.outputs.units != '[]' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -138,7 +167,7 @@ jobs:
           path: agree
           merge-multiple: true
       - name: "The totals"
-        run: python3 tools/probes/verify-064/agreement_probe.py total agree
+        run: python3 tools/agreement/agreement.py total agree
       - name: Upload every goal's class
         if: always()
         uses: actions/upload-artifact@v6

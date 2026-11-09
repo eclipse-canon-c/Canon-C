@@ -458,7 +458,10 @@ to a `__FRAMAC__` branch or to the toolchain pins changes it.
   prover alone proves 145, which are 39 goals, listed there (Z3 alone for
   most of them). The other 692 are the residuals. Alone, Alt-Ergo proves
   72924 of the goals, Z3 73173 and CVC5 73130, against the 73282 they
-  prove together.
+  prove together. Since VERIFY-065, `13 · Prover agreement` measures it
+  again on every push that can change it, for the units the push can
+  affect, and compares the goals one or two provers prove with each unit's
+  pins (`tools/agreement/`); report-only until VERIFY-065's third run.
 - **Twelve of bits.h's goals are proved in Coq** (VERIFY-061): Coq 8.18.0
   with Why3's Coq library, why3-coq 1.7.2. `12 · Coq: bits.h` compiles each
   committed proof script and has WP accept it for its goal at x86_64 and the
