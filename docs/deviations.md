@@ -31186,7 +31186,7 @@ runs for it, and it is to pass.
 | **ID**         | VERIFY-064 |
 | **Date**       | 2026-11-09 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it. The probe runs only by hand; neither has run. |
-| **Status update** | 2026-11-09 — SCORED, all four predictions MATCH. G4: the push of 6dd6df8 and fdfe488 is green, every proof job at its pin. G1 to G3: `9 · Probes (manual): prover agreement` #1, at e67b050, ran all 78 runs; each unit's runs see its pinned goals, and the provers alone prove its pinned line and leave its pinned names. Measured: of the 73974 goals, 3099 need no proof obligation and Qed closes 61630; of the 8553 that need a prover, all three prove 8079, two 329, and one alone 145 (54 names, 39 goals). Whether CI pins that list is for the author. See "Scored: the push" and "Scored: the probe" below. The Status above is the record as committed. |
+| **Status update** | 2026-11-09 — SCORED, all four predictions MATCH. G4: the push of 6dd6df8 and fdfe488 is green, every proof job at its pin. G1 to G3: `9 · Probes (manual): prover agreement` #1, at e67b050, ran all 78 runs; each unit's runs see its pinned goals, and the provers alone prove its pinned line and leave its pinned names. Measured: of the 73974 goals, 3099 need no proof obligation and Qed closes 61630; of the 8553 that need a prover, all three prove 8079, two 329, and one alone 145 (54 names, 39 goals). Whether CI pins that list was for the author: VERIFY-065 made it a check on every push that can change it, `13 · Prover agreement`, enforced since its third run. See "Scored: the push" and "Scored: the probe" below. The Status above is the record as committed. |
 | **Baseline**   | 20f685d (`README: the badge note in the license note's plain style`). The proof jobs last ran at 06718b0 (VERIFY-063's change); the commits since change documentation only. |
 | **Scope**      | A new workflow that runs only by hand, `.github/workflows/prover-agreement.yml` (`9 · Probes (manual): prover agreement`); its script and README in `tools/probes/verify-064/`; the CI map, `.github/workflows/README.md`. No code, contract, proof job or pin changes. |
 | **Category**   | What the proofs trust: how many goals one prover alone proves. Item B of the plan agreed with the author (2026-11-09). |
@@ -31420,7 +31420,7 @@ author, as "What follows" said.
 | **ID**         | VERIFY-065 |
 | **Date**       | 2026-11-09 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run. |
-| **Status update** | 2026-11-09 — Run 1 scored: H1 MATCH; H2, H3, H5 and H6 MISS; H4 MATCH on the 14 units run 1 completed. The fix's run (#3, all thirteen workflows): F1 to F4 MATCH, F5 and F6 MISS. Run 2 (#4, the pins): R1 to R6 MATCH, no difference in any unit. Run 3 pre-registered: ENFORCE on, and the pins' slow lists gain #4's proofs over 30 s, with predictions S1 to S4. The Status above is the record as committed. |
+| **Status update** | 2026-11-10 — CLOSED. Run 1: H1 MATCH; H2, H3, H5 and H6 MISS, on refused downloads of CVC5; H4 MATCH on the 14 units it completed. The fix's run (#3, all thirteen workflows): F1 to F4 MATCH, F5 and F6 MISS, on proofs near the time limit. Run 2 (#4, the pins): R1 to R6 MATCH. Run 3 (#5, enforced): S1 to S4 MATCH. `13 · Prover agreement` is a gate. See "Closed" below. The Status above is the record as committed. |
 | **Baseline**   | 703899a (`VERIFY-064 scored: all four predictions match; the provers' agreement measured`) |
 | **Scope**      | VERIFY-064's probe moves to `tools/agreement/` and its workflow becomes `13 · Prover agreement`, run on push for the units a push can affect; `8 · Records` checks the probe's units against the proof jobs; the CI map, `docs/verification.md` and the probe's README. No code, contract, proof job or pin changes. |
 | **Category**   | What the proofs trust: the provers' agreement, measured whenever it can change, decided with the author (2026-11-09). |
@@ -31776,3 +31776,62 @@ change it. A run that fails on a slow proof's new time, rather than on a
 real change, is recorded, and its proof joins the pins' slow lines.
 
 The change is pushed with this section, in the commit after it.
+
+### Scored: run 3 (2026-11-10)
+
+The push of a7b337b and 2773ad6 started `2 · Platforms` #53, `8 · Records`
+#59 and `13 · Prover agreement` #5 (12:50 UTC, 2026-11-09). All three are
+green, 123 jobs.
+
+| # | scored |
+|---|--------|
+| S1 | **MATCH.** 2, 8 and 13 ran; the others did not. |
+| S2 | **MATCH.** 13 ran all 26 units. Each of the 78 runs restored CVC5's archive at its first look, and all reported. |
+| S3 | **MATCH.** Enforced, every unit passed. In each, the goals no prover proves alone are its job's pinned names, and the goals one or two provers prove are its pins', 34 slow goals left out. Every goal that sorted differently from #4 was slow: three provers prove 8081 here, two 328 and one 144, against 8080, 326 and 147. |
+| S4 | **MATCH.** 2, 8 and 13 are green. |
+
+All four predictions match. The run's slowest proofs: CVC5's of
+`range_skip_advance`'s `skip_inside`, part 12, at 114 s, and of
+`hashmap_insert`'s loop invariant 7, parts 3 and 1, at 108 s and 103 s.
+Alt-Ergo's single-prover proofs of `vec_int_extend_from_range`'s loop
+invariant 5 took 86 s, part 3, and 38 s, part 4. Nine slow proofs were not
+in the pins' slow lists, among them two of over 90 s: CVC5's of
+`range_skip_advance`'s `skip_inside`, part 04, in vec-range, at 97 s, and
+Z3's of `diag_push`'s loop invariant `copy_scanned`, part 4, at 95 s.
+
+### Closed (2026-11-10)
+
+The provers' agreement is a check on every push that can change it.
+`13 · Prover agreement` proves the units a push can affect once with each
+prover alone, and fails a unit when the goals no prover proves alone are not
+its job's pinned names, or when the goals one or two provers prove differ
+from its pins. A proof over 30 s is left out of the comparison. 8 · Records
+checks that the agreement's units are the proof jobs'.
+
+On the way, two things were found that the record did not expect:
+
+- **The setup's anonymous download of CVC5 can be refused** when many jobs
+  set up at once. The setup now keeps the archive in GitHub's cache and
+  downloads it with the job's token; in #3, one download served 240 jobs.
+- **Which provers prove a goal near the time limit changes from run to
+  run.** A prover's time on such a goal varies by two times or more, so a
+  proof over 60 s on one run can time out on the next. The proofs
+  themselves did not change: in every run, each unit's proved goals and
+  unproved names were its pins'. The agreement's pins leave such goals out,
+  and list as slow every proof seen over 30 s.
+
+This closing commit adds #5's nine new slow proofs to the pins' slow lists,
+39 lines in all, so that the next run does not fail on their times. It
+changes the pins of five units: diag, pool, priority-queue, vec-fmt and
+vec-range. `docs/verification.md` says the agreement is enforced, and
+VERIFY-064's record points here.
+
+| # | prediction for this push | falsified if | confidence |
+|---|--------------------------|--------------|------------|
+| C1 | **2, 8 and 13 run**, and 13 runs the five units whose pins change, 15 runs. | another set | H |
+| C2 | **All green**, enforced, with no difference from the pins. | a failure | M–H: a slow proof not seen before that now times out would fail its unit. |
+
+Left for later, on the list: the two single-prover proofs of
+`vec_int_extend_from_range`'s loop invariant 5 are the ones a slow runner
+could lose, which would fail `frama-c-vec-range`'s pin. A helper assertion
+or lemma that makes them easier would remove that risk.
