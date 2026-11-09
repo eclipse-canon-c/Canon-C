@@ -498,10 +498,12 @@ goals are filed as residuals.
   container's own pointer: vec's and deque's pointer is NULL exactly when
   the capacity is 0. Its phase B closed 4 queries' reads: the queue's byte
   views require `pq_wf` or no buffer, and stringbuf's and region's queries
-  require their stored pointer to point to an object that still exists. At
-  `9 · Probes` #10, 1021 of its 1073 goals are proved; the 52 unproved are
-  18 names, as VERIFY-062 sorts them: I 2, R 10 (the callers' `ctx` and
-  borrow's handles, still to be decided), T 3 and V 3.
+  require their stored pointer to point to an object that still exists.
+  VERIFY-063 closed borrow's handles the same way, and kept the callers'
+  contexts, which a caller may set to any value, with their argument. At
+  `9 · Probes` #11, 1037 of its 1073 goals are proved. The 36 unproved
+  are 14 names, each kept with its argument: I 2, the callers' contexts 6,
+  T 3 and V 3.
 - **Relational comparison and subtraction of pointers into different
   objects** (6.5.8p5, 6.5.6p9): no goal checks them. Until VERIFY-059,
   ptr.h's `ptr_in_range` and `ptr_range_in_range` documented that their

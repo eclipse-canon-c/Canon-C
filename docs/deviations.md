@@ -28471,7 +28471,7 @@ differences from its pins.
 | **ID**         | VERIFY-057 |
 | **Date**       | 2026-11-03 |
 | **Status**     | PREDICTED. This record is committed before the probe commit, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-04 — CLOSED: the probe's run on 9207897 (`9 · Probes` #3) matched every prediction; 122 of 1073 goals unproved, 44 names in five kinds. See "Scored (2026-11-04)" below. Kind P repaired by VERIFY-058 (closed 2026-11-04): the probe at a32639e (`9 · Probes` #4) reads 987 / 1073, 86 unproved, 41 names. Kinds I, R, T and V decided with the author in VERIFY-062 (2026-11-07): I, T and V kept, with their arguments; R's 19 container names closed by VERIFY-062's phase A, enforced 2026-11-08: the probe at 366832e and ba39dea (`9 · Probes` #8, #9) reads 1016 / 1073, 57 unproved, 22 names. R's four queue, stringbuf and region queries closed by VERIFY-062's phase B (2026-11-09): the probe at 6878d29 (`9 · Probes` #10) reads 1021 / 1073, 52 unproved, 18 names. The callers' `ctx` (6) and borrow's handles (4) are still to be decided. The Status above is the record as committed. |
+| **Status update** | 2026-11-04 — CLOSED: the probe's run on 9207897 (`9 · Probes` #3) matched every prediction; 122 of 1073 goals unproved, 44 names in five kinds. See "Scored (2026-11-04)" below. Kind P repaired by VERIFY-058 (closed 2026-11-04): the probe at a32639e (`9 · Probes` #4) reads 987 / 1073, 86 unproved, 41 names. Kinds I, R, T and V decided with the author in VERIFY-062 (2026-11-07): I, T and V kept, with their arguments; R's 19 container names closed by VERIFY-062's phase A, enforced 2026-11-08: the probe at 366832e and ba39dea (`9 · Probes` #8, #9) reads 1016 / 1073, 57 unproved, 22 names. R's four queue, stringbuf and region queries closed by VERIFY-062's phase B (2026-11-09): the probe at 6878d29 (`9 · Probes` #10) reads 1021 / 1073, 52 unproved, 18 names. Borrow's 4 closed by VERIFY-063 (2026-11-09), and the callers' `ctx` (6) kept with their argument: every one of the 44 names is decided, and the probe at 06718b0 (`9 · Probes` #11) reads 1037 / 1073, 36 unproved, 14 names, each kept with its argument. The Status above is the record as committed. |
 | **Baseline**   | `VERIFY-056 run 3: the first enforced run holds`, on 81220e7 (named by its subject: it is pushed with this record) |
 | **Scope**      | A probe, `pointer-probe` in `.github/workflows/probes.yml`, and its script `tools/probes/verify-057/pointer_probe.py`. No unit's source, contract, job or pin changes. |
 | **Category**   | A gap in what the proofs check, measured before anything is changed. Decided with the author (2026-11-03): probe every unit first, then tighten `ptr_offset`'s contract, each under its own predictions. |
@@ -31064,6 +31064,7 @@ runs for it, and it is to pass.
 | **ID**         | VERIFY-063 |
 | **Date**       | 2026-11-09 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-09 — CLOSED: the push of ea399a6 and 06718b0 matched five of the six predictions. F1 missed: borrow's four names were open in four units, not three, so the probe reads 1037 / 1073, 36 unproved, 14 names, where the record said 1033 and 40; every one of the four closed wherever it was open. See "Scored" below. The Status above is the record as committed. |
 | **Baseline**   | 6878d29 (`queue, stringbuf, region: the four queries require what their reads need (VERIFY-062 phase B)`), with VERIFY-062's closing commit after it, which changes documentation only |
 | **Scope**      | The contracts and documentation of `semantics/borrow.h`'s four handle functions; the documentation of the context pointer in `data/hashmap/hashmap.h`, `data/priority_queue.h` and `core/region.h`; the pointer probe's filter and README. |
 | **Category**   | The last ten names of VERIFY-057's probe, decided with the author (2026-11-09). |
@@ -31144,3 +31145,34 @@ callers' contexts' 6 are kept with their arguments: 14 names and 40 goals,
 unproved in the probe, which gates nothing.
 
 The change is pushed with this record, in the commit after it.
+
+### Scored (2026-11-09)
+
+VERIFY-062's closing commit, 6710543, was pushed first and ran only
+`8 · Records` #50, green, as that commit said. The push of ea399a6 and
+06718b0 then ran workflows 1 to 9 and 11, all `success`; 10 and 12 did not
+run. Of the 209 jobs with notices, 205 give phase B's. The other four are
+the pointer probe's units in which borrow's names were open.
+
+| # | scored |
+|---|--------|
+| F1 | **MISS.** Borrow's four names close in every unit where they were open, but there were four such units, not three: `frama-c-bitset`, which includes `borrow.h`, also had them. It now reads 110 / 112 (left: ptr.h's two). `frama-c-borrow` is at 15 / 15, `frama-c-stringbuf` at 79 / 81 and `frama-c-vec-fmt` at 83 / 86, as predicted. The other 22 units stay as at #10. In all: 1037 / 1073, 36 unproved, 14 names, where the record said 1033 and 40. The record had read the lists of three units and not of all 26. |
+| F2 | **MATCH.** Every job of 4, 5, 6, 7 and 11 gives its notice, at its pin. |
+| F3 | **MATCH.** `1 · Build & test` #39, `2 · Platforms` #48 and `3 · Static analysis & coverage` #39 are green, with phase B's numbers; clang-tidy finds nothing. |
+| F4 | **MATCH.** g4, g11, g13, g19, count, round3 and char are green, with #10's verdicts. |
+| F5 | **MATCH.** `8 · Records` #51 is green. |
+| F6 | **MATCH.** Workflows 1 to 9 and 11 ran; 10 and 12 did not. |
+
+Five of the six match. "What follows" above said 40 goals; it is 36.
+
+### Closed (2026-11-09)
+
+Every one of VERIFY-057's 44 names is now decided. VERIFY-058 repaired P's
+3. R's 27 are closed: VERIFY-062's 23, and this record's 4. I's 2, T's 3,
+V's 3 and the callers' contexts' 6 are kept, each with its argument: 14
+names and 36 goals, unproved in the probe, which gates nothing. The probe
+reads 1037 / 1073 at `9 · Probes` #11. No proof job's line moved.
+
+This closing commit changes only documentation: this record, VERIFY-057's
+status, and `docs/verification.md`'s probe paragraph. Only `8 · Records`
+runs for it, and it is to pass.
