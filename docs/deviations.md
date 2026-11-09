@@ -31410,3 +31410,150 @@ them. `docs/verification.md` gives these numbers.
 
 Whether CI pins the table above, so that a change to it is seen, is for the
 author, as "What follows" said.
+
+---
+
+## VERIFY-065: Pre-registration — Prover Agreement on Every Push That Can Change It: The Units a Push Affects, Each Prover Alone, Pinned
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-065 |
+| **Date**       | 2026-11-09 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run. |
+| **Baseline**   | 703899a (`VERIFY-064 scored: all four predictions match; the provers' agreement measured`) |
+| **Scope**      | VERIFY-064's probe moves to `tools/agreement/` and its workflow becomes `13 · Prover agreement`, run on push for the units a push can affect; `8 · Records` checks the probe's units against the proof jobs; the CI map, `docs/verification.md` and the probe's README. No code, contract, proof job or pin changes. |
+| **Category**   | What the proofs trust: the provers' agreement, measured whenever it can change, decided with the author (2026-11-09). |
+
+### What was decided
+
+VERIFY-064 measured the provers' agreement once, by hand. Asked how to keep
+it measured (2026-11-09), the author did not want a weekly run, which could
+leave a change unseen for days ("i am scared that if we do this weekly,
+dependent code parts will not be seen"), and asked for a run only when a
+change can affect it. Two ways were set out:
+
+1. run the probe on push, for the units whose code a push changes;
+2. fold it into the proof jobs: `-wp-run-all-provers`, so that WP lets all
+   three provers finish on every goal, and its JSON report.
+
+Option 2 was chosen first, on the advice given with it, that it could not
+drift. Before anything was built, WP's source showed that it does not work as
+proposed: the per-goal report is built from `Stats.results`
+(`src/plugins/wp/Stats.ml` in Frama-C 29), which keeps Qed and one prover,
+the best result, per goal. With all three provers run to the end, the report
+would still name one prover per goal. WP's other report counts every prover,
+but per property, not per goal. Option 2 would have needed a workaround: the
+results cache replayed once per prover inside every proof job. The author
+agreed to option 1.
+
+### The change
+
+1. **`tools/agreement/agreement.py`**, moved from
+   `tools/probes/verify-064/agreement_probe.py`, keeps the `run`, `unit` and
+   `total` modes and gains:
+   - `deps`: the repository files each unit includes, as `gcc -M` lists them
+     with the unit's own flags, with and without Frama-C's macros
+     (`__FRAMAC__`, `__FC_MACHDEP_X86_64`);
+   - `affected FILE...`: the units a change can affect, longest first. They
+     are the units that include a changed file. A change to the script, the
+     workflow or the Frama-C setup runs every unit, as does a change to a
+     header under `core/`, `semantics/`, `data/` or `vmacros/vdrivers/` that
+     no unit includes: if the compiler's lists missed an include, a change
+     runs too many units rather than too few. A change to a unit's pin file
+     runs that unit;
+   - in `unit`, two comparisons. The goals no prover proves alone must be the
+     names the unit's proof job pins, read by `tools/record_coverage.py`
+     (for `frama-c-stack`, those of `cc-vec`, which its job checks). The
+     goals one or two provers prove must be those of
+     `tools/agreement/pins/UNIT.txt`. A goal that a prover took more than
+     60 s to prove could fall either side of the 120 s limit on another run:
+     it is listed as slow and left out. `ENFORCE`, off, turns a difference
+     into a failure;
+   - `check`, for `8 · Records`. Each unit's file, memory model,
+     preprocessing and extra options must be those of its proof job's WP
+     command. Every proof job must have a unit, but `frama-c-arena-32` and
+     `frama-c-win64`, which prove units of the 26 at other machine models.
+     Every file a unit includes must be under the workflow's push paths and
+     under the four watched folders. Once pins exist, every unit must have a
+     pin file.
+2. **`.github/workflows/prover-agreement.yml`** becomes
+   `13 · Prover agreement`. It runs on push when `core/`, `semantics/`,
+   `data/`, `vmacros/vdrivers/`, `tools/agreement/`, the Frama-C setup or
+   itself change, and by hand. Its first job runs `affected` on the files the
+   push changed (every unit on a manual run). Then the units' three runs,
+   one per prover, at most 30 jobs at once; a job per unit for `unit`; and a
+   total.
+3. **`8 · Records`** runs `agreement.py check`, and also runs when
+   `tools/agreement/` changes.
+4. **Documentation**: the CI map (row 13; rows 8 and 9; what a new unit
+   needs), the script's README, and a sentence in `docs/verification.md`.
+   VERIFY-064's record, which cites the script's old path, is left as
+   committed.
+
+### Measured here
+
+- **The check** passes: the 26 units' flags are their jobs', every proof job
+  but the two at other machine models has a unit, and the 54 repository
+  files the units include are under the 7 push paths and the four watched
+  folders. On a copy with `-DEXTRA_FLAG` added to `frama-c-vec`'s job, and
+  `semantics/**` removed from the push paths, it fails, with 12 problems:
+  the flag, and the 11 files under `semantics/` that units include.
+- **The include lists** are the same with and without Frama-C's macros in
+  each of the 26 units.
+- **The units a change selects**, one changed file at a time:
+
+  | changed file | units |
+  |--------------|------:|
+  | `data/priority_queue.h` | 1: priority-queue |
+  | `data/vec/vec_impl.h` | 4: vec, stack, vec-fmt, vec-range |
+  | `core/arena.h` | 8 |
+  | `semantics/option/option_impl.h` | 10 |
+  | `core/primitives/checked.h` | 17 |
+  | `data/convenience/dynvec.h`, which no unit includes | 26 |
+  | `tools/agreement/agreement.py`, or the Frama-C setup | 26 |
+  | `tools/agreement/pins/frama-c-vec.txt` | 1: vec |
+  | `README.md`, `docs/deviations.md`, `tools/agreement/README.md`, `vmacros/vdrivers/cc_pins/vec.txt`, `vmacros/coverage/vec_cover.c` | 0 |
+
+- **The unit report**, on WP reports written by hand for `frama-c-option`:
+  the six goals no prover proves are found to be its job's six pinned names;
+  a goal proved by CVC5 in 75 s is listed as slow and left out; a test pin
+  file with one wrong pair and one goal that no longer exists gives two
+  differences; with `ENFORCE` on, the job fails.
+- **Records**: `tools/record_coverage.py --strict --complete --pending-from
+  703899a` and `tools/machdeps/check_pins.py` pass.
+- **clang-tidy**: the job's step finds nothing in its 61 files. No C file
+  changed since VERIFY-064.
+
+### The workflows
+
+`tools/which_workflows.py` on this record's commit and the change's: 1 to 6
+run, because files under `.github/workflows/` change; 8 and 13 run; 7, 9,
+10, 11 and 12 do not. `agreement.py affected` on the same files gives all
+26 units, because the script changes.
+
+### Predictions
+
+This is run 1: no pin file exists yet, so each unit's job reports its names
+and compares nothing. Run 2 adds the pins, written from run 1's notices, and
+checks that they hold. Run 3 sets `ENFORCE`.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| H1 | **The workflows**: 1 to 6, 8 and 13 run; 7, 9, 10, 11 and 12 do not. | another set | H |
+| H2 | **1 to 6 and 8 are green.** Every proof job is at its pin; 1 to 3 give VERIFY-063's numbers; `8 · Records` passes with the new check. | a failure, or another number | H: no code changes; the checks were run here. |
+| H3 | **13 selects all 26 units**, and all 78 runs end with a summary and a report. | another selection, or a run without its report | H for the selection; H for the runs, which took at most 53 minutes in VERIFY-064. |
+| H4 | **Each unit's goals sort as in VERIFY-064**: the same number in each class and in each pair, the same goals proved by one prover alone with the same prover, and, in each unit, the goals no prover proves alone are its job's pinned names. In all: 73974 goals, 3099 of them Terminating and Unreachable, 61630 proved by WP itself, 8079 by all three provers, 329 by two, 145 by one, 692 by none. | any other count, name or prover, or a unit whose unproved goals are not its pinned names | M–H: the headers, the tools and the commands are VERIFY-064's; a proof near the time limit could fall the other way. |
+| H5 | **No proof is slow**: no prover takes more than 60 s on a goal it proves. | a goal listed as slow | M: VERIFY-064 did not read the provers' times; VERIFY-018's runtime record found every proving goal of vec under 332 ms, in its runs of the time. |
+| H6 | **13 is green**: report-only, it fails only without data. | a failure | H |
+
+**What follows.** If H1 to H6 match, the pins are written from run 1's
+notices, one file per unit, and pushed with run 1's score. Every pin file is
+new, so run 2 runs all 26 units, and it must find no difference. Then
+`ENFORCE` is set, run 3 must be green with no difference, and VERIFY-065
+closes. From then on, a push that changes a header runs the units that
+include it, and a goal that loses a prover, or a new goal that only one
+prover proves, fails `13` until a record lists it. A run of all 26 units
+takes about an hour and 18 runner-hours, beside the proof jobs; a change to
+one data header, a few jobs.
+
+The change is pushed with this record, in the commit after it.
