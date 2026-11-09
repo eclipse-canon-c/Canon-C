@@ -166,6 +166,13 @@ formally verified using Frama-C WP with ACSL contracts, and CI enforces
 the proof state on every push to master — any drift in the named
 residual goals fails the build.
 
+The tools that do the proving (Frama-C, WP, Why3, Alt-Ergo, Z3, CVC5 and,
+for twelve goals, Coq) are trusted, not themselves proved.
+`docs/verification.md` ("The proved configuration") lists what each proof
+rests on, and the tools that are themselves verified — CompCert, which CI
+uses, and Verasco and foundational verification (issue #12), which the
+project would move to if they became usable on its code.
+
 For current numbers, see:
 
 - **`docs/verification.md`** — per-header proof obligation counts,

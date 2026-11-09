@@ -433,8 +433,9 @@ Every claim in this record, "verified", "proved", "no run-time error", is
 about the code Frama-C sees: each unit's file as its job preprocesses it,
 analysed by the tools below. This section states that configuration and the
 differences from shipped builds known when it was written (2026-11-04, at
-530381c). A change to a job's flags, to a `__FRAMAC__` branch or to the
-toolchain pins changes it.
+530381c; the Coq proofs, the paragraphs on who checks the tools, and "Tools
+that are themselves verified" added 2026-11-09). A change to a job's flags,
+to a `__FRAMAC__` branch or to the toolchain pins changes it.
 
 ### The tools, and what is trusted
 
@@ -447,7 +448,18 @@ toolchain pins changes it.
   error, option, result, deque, range) or Typed+Cast (the other units).
   `frama-c-diag` adds `-variadic-no-translation`, without which diag.h's
   stdio declarations do not bind. A goal counts as proved if WP's
-  simplifier, Qed, closes it or one prover proves it.
+  simplifier, Qed, closes it or one prover proves it. No goal needs a second
+  prover to agree, and WP's statistics credit each goal to one prover. How
+  many goals one prover alone can prove, and how many Qed alone, is not yet
+  measured.
+- **Twelve of bits.h's goals are proved in Coq** (VERIFY-061): Coq 8.18.0
+  with Why3's Coq library, why3-coq 1.7.2. `12 · Coq: bits.h` compiles each
+  committed proof script and has WP accept it for its goal at x86_64 and the
+  nine machine models below. Coq's kernel checks every step of those proofs.
+  What they prove, though, is the goal as WP generated it and Why3 printed
+  it for Coq, and the scripts rest on WP's axioms for its integer and bit
+  operations, which `tools/coq/replay.sh` checks are declared in the scripts
+  themselves.
 - **Trusted, not proved:**
   - the Frama-C kernel, its RTE and Variadic plugins, and WP's generation of
     the goals and its memory models;
@@ -463,6 +475,28 @@ toolchain pins changes it.
     axioms of diag.h's `snprintf` and `fprintf` (VERIFY-017) and
     stringbuf.h's `vsnprintf` (VERIFY-031), which merges with Frama-C's own
     specification of it.
+
+None of these tools is itself formally verified. No proof checks Frama-C,
+WP, Why3 or the provers against a semantics of C or of logic. Coq's kernel,
+which checks VERIFY-061's proofs step by step, is small and widely reviewed,
+but it is trusted too. The tools are mature and used in industrial work, and
+soundness bugs, which let a false goal be proved, have still been found in
+SMT solvers over the years. What the project adds on its own side:
+- three provers, so that a goal one of them cannot prove another often can.
+  Since one prover suffices, they do not guard against a prover that proves
+  a false goal: agreement between provers would, and is to be measured;
+- pins on every proof job, which fail when a proved or unproved goal
+  changes without a record;
+- probes that test what the tools do, and found real gaps: the pointer
+  probe (VERIFY-057) and Eva's runs in VERIFY-039's G13 and G17;
+- every unproved goal named, with its argument, in `docs/deviations.md`;
+- tests, sanitizers, fuzzing, coverage and builds by other compilers, CompCert
+  among them (see "The other builds"), none of which shares the provers'
+  code.
+
+So "proved" in this record means: proved by Frama-C 29's WP with Alt-Ergo,
+Z3 and CVC5 (and, for bits.h's twelve goals, Coq), in the configuration of
+this section, with the tools above trusted.
 
 ### What "no run-time error" covers
 
@@ -731,6 +765,46 @@ tiers.
 | `c-standards` | C11, C17 and C23 with GCC 14 and Clang, Debug, sanitizers on | the tests at those standards, where the C11 arms are compiled (`_Alignof(max_align_t)`, `_Static_assert`) |
 | `embedded` | Cortex-M, RV32, RV64 and AVR, bare metal | that the headers and tests compile there; nothing runs |
 | `lifetime-debug`, `lifetime-token-concurrency` | `CANON_LIFETIME_DEBUG`; the atomic levels, with ThreadSanitizer | the lifetime plumbing and the token generation, by tests |
+
+### Tools that are themselves verified
+
+A few tools come with a machine-checked proof of their own soundness. The
+project uses one, and would move to more if they became usable on its code:
+maintained, under a licence that allows the library's uses, and covering
+the C it is written in.
+
+- **CompCert**, a compiler proved in Coq to preserve the meaning of the C it
+  accepts. The `compcert` job builds and runs the tests with it, as
+  information: its result blocks nothing, and the configuration it builds
+  is not the proved one (issue #12 lists the differences).
+- **Eva**, Frama-C's analyzer by abstract interpretation, is designed to be
+  sound but is not itself proved, as WP is not. It needs a whole program,
+  starting from a `main()`, so the proof jobs, whose units are headers, do
+  not run it (`proofs-core.yml` says why). VERIFY-039's G13 and G17 probes
+  ran it on small programs that call the library's functions, and it found
+  real gaps there: memcmp's precondition on dangling bytes (G13) and a
+  `strlen` on any pointer (G17). A program that uses the library has a
+  `main()`, so Eva can analyse it through the library's own code, at a
+  machine model of the user's choosing.
+- **Verasco**, a static analyzer for C proved sound in Coq (Jourdan,
+  Laporte, Blazy, Leroy and Pichardie, POPL 2015): a program it analyses
+  without an alarm has no run-time error in CompCert's semantics of C. It is
+  not run here, and is not usable on this code today:
+  - its page offers version 1.3, which needs Coq 8.4;
+  - it reuses parts of CompCert, so it is not free software, and may be used
+    for evaluation, research and education but not commercially;
+  - it accepts the subset of C99 that CompCert accepts, and its 2014
+    release note says it handles neither recursion nor dynamic allocation;
+  - it does not read ACSL, so the library's contracts would not help it.
+  Sources: [its page](https://compcert.inria.fr/verasco/), [the release
+  note](https://gallium.inria.fr/blog/papers-verasco/) and [the
+  paper](https://hal.archives-ouvertes.fr/hal-01078386).
+- **Foundational verification** proves the code in a proof assistant
+  against a formal semantics of C. VST's semantics is the one CompCert
+  preserves, so VST with CompCert would give a result from the source to
+  the machine code. VST and RefinedC are in Coq, AutoCorres in
+  Isabelle/HOL. Issue #12 records what it would take, starting with
+  `ptr.h`, `memory.h` and `slice.h`. It is not scheduled.
 
 **Reading a status.** In the roadmap:
 - "✅ Verified" and "✅ Fully verified" (compare.h, no residual) mean that in
