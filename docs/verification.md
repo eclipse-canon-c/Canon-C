@@ -433,8 +433,9 @@ Every claim in this record, "verified", "proved", "no run-time error", is
 about the code Frama-C sees: each unit's file as its job preprocesses it,
 analysed by the tools below. This section states that configuration and the
 differences from shipped builds known when it was written (2026-11-04, at
-530381c; the Coq proofs, the paragraphs on who checks the tools, and "Tools
-that are themselves verified" added 2026-11-09). A change to a job's flags,
+530381c; the Coq proofs, the paragraphs on who checks the tools, "Tools
+that are themselves verified" and VERIFY-064's measure of the provers'
+agreement added 2026-11-09). A change to a job's flags,
 to a `__FRAMAC__` branch or to the toolchain pins changes it.
 
 ### The tools, and what is trusted
@@ -449,9 +450,15 @@ to a `__FRAMAC__` branch or to the toolchain pins changes it.
   `frama-c-diag` adds `-variadic-no-translation`, without which diag.h's
   stdio declarations do not bind. A goal counts as proved if WP's
   simplifier, Qed, closes it or one prover proves it. No goal needs a second
-  prover to agree, and WP's statistics credit each goal to one prover. How
-  many goals one prover alone can prove, and how many Qed alone, is not yet
-  measured.
+  prover to agree, and WP's statistics credit each goal to one prover.
+  VERIFY-064 ran each unit once with each prover alone (at e67b050). Of the
+  26 units' 73974 goals, WP counts 3099 without a proof obligation
+  ("Terminating" and "Unreachable") and Qed closes 61630. Of the 8553 that
+  need a prover, all three prove 8079 each alone, two prove 329, and one
+  prover alone proves 145, which are 39 goals, listed there (Z3 alone for
+  most of them). The other 692 are the residuals. Alone, Alt-Ergo proves
+  72924 of the goals, Z3 73173 and CVC5 73130, against the 73282 they
+  prove together.
 - **Twelve of bits.h's goals are proved in Coq** (VERIFY-061): Coq 8.18.0
   with Why3's Coq library, why3-coq 1.7.2. `12 · Coq: bits.h` compiles each
   committed proof script and has WP accept it for its goal at x86_64 and the
@@ -483,8 +490,12 @@ but it is trusted too. The tools are mature and used in industrial work, and
 soundness bugs, which let a false goal be proved, have still been found in
 SMT solvers over the years. What the project adds on its own side:
 - three provers, so that a goal one of them cannot prove another often can.
-  Since one prover suffices, they do not guard against a prover that proves
-  a false goal: agreement between provers would, and is to be measured;
+  Since one prover suffices, they guard against a prover that proves a false
+  goal only where they agree, and not against a fault they share, in WP's
+  goals or Why3's translation. VERIFY-064 measured where they agree: all
+  three on 8079 of the 8553 goals that need a prover (94.5%), two on 329,
+  and 145 (1.7%) rest on one prover. The 61630 goals Qed closes, and the
+  3099 WP counts without a proof obligation, rest on WP alone;
 - pins on every proof job, which fail when a proved or unproved goal
   changes without a record;
 - probes that test what the tools do, and found real gaps: the pointer

@@ -31186,7 +31186,7 @@ runs for it, and it is to pass.
 | **ID**         | VERIFY-064 |
 | **Date**       | 2026-11-09 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it. The probe runs only by hand; neither has run. |
-| **Status update** | 2026-11-09 — G4 scored, MATCH: the push of 6dd6df8 and fdfe488 is green, every proof job at its pin. G1 to G3 wait for the probe's first run, started by hand. See "Scored: the push" below. The Status above is the record as committed. |
+| **Status update** | 2026-11-09 — SCORED, all four predictions MATCH. G4: the push of 6dd6df8 and fdfe488 is green, every proof job at its pin. G1 to G3: `9 · Probes (manual): prover agreement` #1, at e67b050, ran all 78 runs; each unit's runs see its pinned goals, and the provers alone prove its pinned line and leave its pinned names. Measured: of the 73974 goals, 3099 need no proof obligation and Qed closes 61630; of the 8553 that need a prover, all three prove 8079, two 329, and one alone 145 (54 names, 39 goals). Whether CI pins that list is for the author. See "Scored: the push" and "Scored: the probe" below. The Status above is the record as committed. |
 | **Baseline**   | 20f685d (`README: the badge note in the license note's plain style`). The proof jobs last ran at 06718b0 (VERIFY-063's change); the commits since change documentation only. |
 | **Scope**      | A new workflow that runs only by hand, `.github/workflows/prover-agreement.yml` (`9 · Probes (manual): prover agreement`); its script and README in `tools/probes/verify-064/`; the CI map, `.github/workflows/README.md`. No code, contract, proof job or pin changes. |
 | **Category**   | What the proofs trust: how many goals one prover alone proves. Item B of the plan agreed with the author (2026-11-09). |
@@ -31336,3 +31336,77 @@ This commit also adds SparrowBerry to `docs/verification.md`'s tools that
 are themselves verified, beside Verasco, and to the README's sentence that
 names them, at the author's request (2026-11-09). It changes only
 documentation: only `8 · Records` runs for it, and it is to pass.
+
+### Scored: the probe (2026-11-09)
+
+`9 · Probes (manual): prover agreement` #1 ran on e67b050, started by hand
+at 03:56 UTC and done at 04:50. Its 105 jobs are `success`. The 78 runs took
+1055 minutes of runner time; the longest, `frama-c-vec` with Alt-Ergo alone,
+took 53.
+
+| # | scored |
+|---|--------|
+| G1 | **MATCH.** All 78 runs ended with a summary and a report, the longest after 53 minutes, against a limit of 340. |
+| G2 | **MATCH.** In each of the 26 units, the three reports list the same goals, and WP itself proves the same goals in all three runs. With Terminating and Unreachable, the reports' goals number the unit's pinned total, which each run's summary also gives. In all: 70875 goals in the reports and 3099 Terminating and Unreachable, 73974. |
+| G3 | **MATCH.** In each unit, the goals that WP itself or at least one prover alone proves, with Terminating and Unreachable, number its pinned proved count. The goals that no prover proves alone are its pinned unproved names, name for name (`frama-c-stack`'s against the 69 of `cc-vec`). In all: 73282 / 73974, 692 unproved. |
+
+All four predictions match.
+
+### Measured
+
+The 73974 goals of the 26 units, by what proves them:
+
+| proved by | goals | of all |
+|-----------|------:|-------:|
+| no proof obligation: Terminating and Unreachable, counted by WP | 3099 | 4.2% |
+| WP itself (Qed) | 61630 | 83.3% |
+| each of the three provers alone | 8079 | 10.9% |
+| two of them (CVC5 and Z3 219, Alt-Ergo and CVC5 97, Alt-Ergo and Z3 13) | 329 | 0.4% |
+| one prover only | 145 | 0.2% |
+| none: the residuals, each argued in this document | 692 | 0.9% |
+
+Of the 8553 goals that need a prover, all three prove 8079 (94.5%), two
+prove 329 (3.8%), and 145 (1.7%) rest on one prover alone. Alone, Alt-Ergo
+proves 72924 of the 73974 goals, Z3 73173 and CVC5 73130; together they
+prove 73282. Alone, each reaches the pinned line of some units only:
+Alt-Ergo of 6, Z3 of 9 and CVC5 of 8. Each is also the only one to prove
+some goals, so no two of them prove all the lines CI pins: all three are
+needed. CVC5's 26 runs took 152 minutes in all, Z3's 360 and Alt-Ergo's
+543. Z3 ended 213 goals with an error ("Failed" in WP's summary) rather
+than a timeout, among them bits.h's 12 residuals and compare.h's two goals
+that only Alt-Ergo and CVC5 prove.
+
+The 145 goals that one prover alone proves are 54 names: 39 goals, some
+proved under both memory models (`typed_` and `typed_cast_`), most of them in
+several units. Each name is proved by the same prover in every unit in which
+one prover alone proves it.
+
+| source | goals (names) | prover alone | units |
+|--------|---------------|--------------|-------|
+| `core/primitives/checked.h` | `checked_mul_isize_no_overflow`'s two ensures clauses, parts 075, 088 and 111: 6 (12) | Z3 | checked and range (Typed); arena, array, bitset, borrow, hashmap, memory, pool, priority-queue, ptr, region, stack, stringbuf, vec, vec-fmt and vec-range (Typed+Cast) |
+| `core/primitives/bits.h` | `bits_extract`'s normal ensures, part 3: 1 (2) | Z3 | bits; bitset, hashmap |
+| `data/bitset.h` | `bitset_mask_of`'s second ensures: 1 (1) | Z3 | bitset |
+| `data/range.h` | the lemma `range_div_shift`; `range_next`'s `next_count`, parts 4 and 6; `range_skip_advance`'s `skip_count`, parts 05, 06, 11 and 12, and `skip_inside`, part 04: 8 (16) | Z3 | range; vec-range |
+| `data/priority_queue.h` | `pq_push_result`'s `slot_in_buffer` and `pq_remove_at_result`'s `slots_apart` assertions; four goals of `pq_cmp_`'s preconditions at its calls in `pq_sift_down_` and `pq_sift_up_`; `pq_swap_`'s call to `mem_swap`, two of its memory accesses and two parts of its assigns: 11 (11) | Z3 | priority-queue |
+| `semantics/diag.h` | `diag_push`: a memory access, `memcpy`'s `valid_src` at its call, and two parts of `push_msg_terminated`: 4 (4) | CVC5 | diag |
+| `data/hashmap/` | `hashmap_load_factor`'s check that a floating-point value it computes is not NaN or infinite; `hashmap_remove`'s loop invariant 7 preserved, part 3: 2 (2) | Alt-Ergo | hashmap |
+| `data/vec/vec_range.h` | `vec_int_extend_from_range`: `fits_ok`, part 10; loop invariant 5 preserved, parts 3 and 4; the second ensures of its room behaviour, part 12: 4 (4) | Alt-Ergo | vec-range |
+| `data/vec/vec_fmt.h` | `vec_int_to_stringbuf`'s loop invariants 6 and 7 preserved: 2 (2) | CVC5 | vec-fmt |
+
+The total job also reports that 20 names are sorted differently in
+different units: by how many provers prove them, or by which. A unit gives
+the provers its own context, and a proof near the 120 s limit can fall
+either way; which of these accounts for them is not known. The notices do
+not name them; the run's `agreement.tsv` does.
+
+What this changes in the account of what the proofs trust: agreement
+guards against a prover's soundness bug, not against a fault the provers
+share, in WP's goals or in Why3's translation. Where all three prove a
+goal, 8079 goals, a bug in one or two of them could not alone have proved
+it if it were false; where two do, 329 goals, a bug in one could not. The
+145 of the table above rest on one prover. The 61630 that Qed closes, and
+the 3099 counted with no proof obligation, rest on WP alone: no prover sees
+them. `docs/verification.md` gives these numbers.
+
+Whether CI pins the table above, so that a change to it is seen, is for the
+author, as "What follows" said.
