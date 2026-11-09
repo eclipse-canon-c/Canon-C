@@ -31186,6 +31186,7 @@ runs for it, and it is to pass.
 | **ID**         | VERIFY-064 |
 | **Date**       | 2026-11-09 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it. The probe runs only by hand; neither has run. |
+| **Status update** | 2026-11-09 — G4 scored, MATCH: the push of 6dd6df8 and fdfe488 is green, every proof job at its pin. G1 to G3 wait for the probe's first run, started by hand. See "Scored: the push" below. The Status above is the record as committed. |
 | **Baseline**   | 20f685d (`README: the badge note in the license note's plain style`). The proof jobs last ran at 06718b0 (VERIFY-063's change); the commits since change documentation only. |
 | **Scope**      | A new workflow that runs only by hand, `.github/workflows/prover-agreement.yml` (`9 · Probes (manual): prover agreement`); its script and README in `tools/probes/verify-064/`; the CI map, `.github/workflows/README.md`. No code, contract, proof job or pin changes. |
 | **Category**   | What the proofs trust: how many goals one prover alone proves. Item B of the plan agreed with the author (2026-11-09). |
@@ -31319,3 +31320,19 @@ in a later record.
 
 The probe is pushed with this record, in the commit after it. Its first run
 is started by hand, once the push's workflows have finished.
+
+### Scored: the push (2026-11-09)
+
+The push of 6dd6df8 and fdfe488 ran workflows 1 to 6 and 8, all `success`.
+
+| # | scored |
+|---|--------|
+| G4 | **MATCH.** `1 · Build & test` #40, `2 · Platforms` #49, `3 · Static analysis & coverage` #40, `4 · Proofs: core/` #40, `5 · Proofs: semantics/` #40, `6 · Proofs: data/` #40 and `8 · Records` #53 are green. Each of the 29 proof jobs gives the notice it gave at 06718b0, at its pin. The 48 jobs of 1 to 3 give theirs, VERIFY-063's: MC/DC 2032 / 2200, MISRA real 66 and canary 3, CompCert 59 of 59 compiled and run; clang-tidy finds nothing. 7, 9, 10, 11 and 12 did not run, and `9 · Probes (manual): prover agreement` did not start. |
+
+G1 to G3 are scored on the probe's first run, which the author starts by
+hand.
+
+This commit also adds SparrowBerry to `docs/verification.md`'s tools that
+are themselves verified, beside Verasco, and to the README's sentence that
+names them, at the author's request (2026-11-09). It changes only
+documentation: only `8 · Records` runs for it, and it is to pass.

@@ -768,8 +768,9 @@ tiers.
 
 ### Tools that are themselves verified
 
-A few tools come with a machine-checked proof of their own soundness. The
-project uses one, and would move to more if they became usable on its code:
+A few tools come with a machine-checked proof of their own soundness, or
+with a proved checker that validates each of their results. The project
+uses one, and would move to more if they became usable on its code:
 maintained, under a licence that allows the library's uses, and covering
 the C it is written in.
 
@@ -799,6 +800,22 @@ the C it is written in.
   Sources: [its page](https://compcert.inria.fr/verasco/), [the release
   note](https://gallium.inria.fr/blog/papers-verasco/) and [the
   paper](https://hal.archives-ouvertes.fr/hal-01078386).
+- **SparrowBerry**, a checker proved in Coq for the results of Sparse
+  Sparrow, a static analyzer for C (Cho, Kang, Choi, Hur and Yi, Seoul
+  National University). The analyzer itself is not proved. SparrowBerry
+  checks each result it gives, and a result that passes is, by the Coq
+  proof, a correct abstract semantics of the program. It is the other way to
+  trust a large tool: prove a small checker of its results instead of the
+  tool. It is free software (GPLv3), but it is not run here, and is not
+  usable on this code today:
+  - its one release, 2.0.1 (2013), needs Coq 8.4pl2;
+  - it checks the results of a 2013 research version of Sparrow, not those
+    of the academic Sparrow maintained today, which is designed to be sound
+    but is not proved, as Eva is not, and whose README describes it as
+    detecting buffer overruns;
+  - neither reads ACSL, so the library's contracts would not help them.
+  Sources: [its page](https://ropas.snu.ac.kr/sparrowberry) and [Sparrow's
+  repository](https://github.com/prosyslab/sparrow).
 - **Foundational verification** proves the code in a proof assistant
   against a formal semantics of C. VST's semantics is the one CompCert
   preserves, so VST with CompCert would give a result from the source to
