@@ -20,8 +20,10 @@ WP's summary also counts "Terminating" and "Unreachable" goals, which are
 not in its report; they are read from the summary and added back.
 
 A proof that takes a prover more than SLOW seconds could fall either side of
-the 120 s limit on another run. Such a goal is listed as slow and left out
-of the comparison with the pins.
+the 120 s limit on another run: VERIFY-065 saw proofs that took over 60 s on
+one run time out on the next. Such a goal is listed as slow, with its time,
+and left out of the comparison with the pins, as is every goal the pins list
+as slow.
 
     agreement.py run UNIT PROVER
         WP on UNIT with PROVER alone (alt-ergo, z3 or cvc5) at 120 s, into
@@ -128,7 +130,7 @@ ORDER = ['frama-c-vec', 'frama-c-bitset', 'frama-c-stack', 'frama-c-vec-fmt', 'f
 RESIDUALS_OF = {'frama-c-stack': 'cc-vec'}
 PROVERS = ('alt-ergo', 'z3', 'cvc5')
 NAMES = {'alt-ergo': 'Alt-Ergo', 'z3': 'Z3', 'cvc5': 'CVC5'}
-SLOW = 60.0       # seconds: half the 120 s limit
+SLOW = 30.0       # seconds: a quarter of the 120 s limit (VERIFY-065, after run 1 and #3)
 CUT = 4000        # the runner cuts an annotation at 4096 characters
 PER_FILE = 10     # GitHub keeps ten notices of a step
 MAX_FILES = 4     # and fifty annotations of a job
@@ -283,7 +285,7 @@ def sort_goals(have):
             elif ok:
                 by_wp += 1
             other |= set(succ) - smt_names
-        slow = sorted(n for n, t in smt.items() if t > SLOW)
+        slow = {n: t for n, t in smt.items() if t > SLOW}
         if slow:
             o['slow'][g] = slow
         names = '+'.join(sorted(smt))
@@ -475,8 +477,9 @@ def unit_report(unit, where):
         lists.append((f'{unit} one {k} ({len(v)})', v))
     for k, v in sorted(o['two'].items()):
         lists.append((f'{unit} two {k} ({len(v)})', v))
-    for g, ns in sorted(o['slow'].items()):
-        lists.append((f'{unit} slow {"+".join(ns)} (1)', [g]))
+    for g, ts in sorted(o['slow'].items()):
+        times = ', '.join(f'{n} {t:.0f} s' for n, t in sorted(ts.items()))
+        lists.append((f'{unit} slow {"+".join(sorted(ts))} (1, {times})', [g]))
     for head, names in lists:
         if names:
             for text in chunks(head, names):

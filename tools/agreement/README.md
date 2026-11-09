@@ -31,9 +31,12 @@ runs on every push that can change it, in `13 · Prover agreement`
 - **The pins.** `pins/UNIT.txt` lists the goals that one or two provers
   prove, one per line: `one PROVER NAME` or `two PROVER+PROVER NAME`. A goal
   not listed is proved by WP itself, by all three provers, or by none. A
-  proof that took a prover more than 60 s could fall either side of the
-  120 s limit on another run: it is listed as `slow PROVER NAME` and left
-  out of the comparison.
+  proof that takes a prover long could fall either side of the 120 s limit
+  on another run: VERIFY-065 saw proofs that took over 60 s on one run time
+  out on the next. So a goal is left out of the comparison when the run
+  being compared takes over 30 s to prove it, or when its pins list it as
+  `slow PROVER NAME`, a proof seen to take over 60 s when the pins were
+  made. The run's notices give each slow proof's time.
 - **The gate.** In each unit, the goals no prover proves alone must be the
   names its proof job pins, and the goals one or two provers prove must be
   those of its pin file. `ENFORCE` in `agreement.py` turns a difference into

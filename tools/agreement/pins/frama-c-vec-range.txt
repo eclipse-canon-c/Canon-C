@@ -1,0 +1,47 @@
+# frama-c-vec-range: the goals that one or two provers prove alone, each prover running alone,
+# as 13 · Prover agreement #3 found them at 5ba6712 (VERIFY-065). A goal not listed is
+# proved by WP itself, by all three provers, or by none (the names its proof job pins).
+# slow: a proof seen to take over 60 s, in run 1 or #3. A slow goal is left out of the
+# comparison, as is any proof over 30 s in the run being compared.
+one Alt-Ergo typed_cast_vec_int_extend_from_range_ensures_fits_ok_part10
+one Alt-Ergo typed_cast_vec_int_extend_from_range_loop_invariant_5_preserved_part3
+one Alt-Ergo typed_cast_vec_int_extend_from_range_loop_invariant_5_preserved_part4
+one Alt-Ergo typed_cast_vec_int_extend_from_range_room_ensures_2_part12
+one Z3 typed_cast_checked_mul_isize_no_overflow_ensures_2_part075
+one Z3 typed_cast_checked_mul_isize_no_overflow_ensures_2_part088
+one Z3 typed_cast_checked_mul_isize_no_overflow_ensures_2_part111
+one Z3 typed_cast_checked_mul_isize_no_overflow_ensures_part075
+one Z3 typed_cast_checked_mul_isize_no_overflow_ensures_part088
+one Z3 typed_cast_checked_mul_isize_no_overflow_ensures_part111
+one Z3 typed_cast_lemma_range_div_shift
+one Z3 typed_cast_range_next_ensures_next_count_part4
+one Z3 typed_cast_range_next_ensures_next_count_part6
+one Z3 typed_cast_range_skip_advance_ensures_skip_count_part05
+one Z3 typed_cast_range_skip_advance_ensures_skip_count_part06
+one Z3 typed_cast_range_skip_advance_ensures_skip_count_part11
+one Z3 typed_cast_range_skip_advance_ensures_skip_count_part12
+one Z3 typed_cast_range_skip_advance_ensures_skip_inside_part04
+two Alt-Ergo+CVC5 typed_cast_mem_is_all_loop_invariant_2_preserved
+two Alt-Ergo+CVC5 typed_cast_mem_zero_zero_ensures_zeroed_part3
+two Alt-Ergo+CVC5 typed_cast_str_ends_with_call_memcmp_requires_initialization_s1
+two Alt-Ergo+Z3 typed_cast_range_skip_advance_ensures_skip_exhaust_part06
+two Alt-Ergo+Z3 typed_cast_range_skip_advance_ensures_skip_exhaust_part12
+two Alt-Ergo+Z3 typed_cast_range_skip_advance_ensures_skip_inside_part12
+two Alt-Ergo+Z3 typed_cast_range_skip_assert_rte_signed_overflow_3_part1
+two Alt-Ergo+Z3 typed_cast_range_skip_assert_rte_signed_overflow_6_part3
+two Alt-Ergo+Z3 typed_cast_range_skip_assert_rte_signed_overflow_6_part4
+two Alt-Ergo+Z3 typed_cast_range_skip_assert_rte_signed_overflow_7_part4
+two CVC5+Z3 typed_cast_checked_mul_isize_assert_rte_signed_overflow_3_part48
+two CVC5+Z3 typed_cast_checked_mul_isize_assert_rte_signed_overflow_4_part62
+two CVC5+Z3 typed_cast_checked_mul_isize_no_overflow_ensures_2_part007
+two CVC5+Z3 typed_cast_checked_mul_isize_no_overflow_ensures_part007
+two CVC5+Z3 typed_cast_checked_mul_no_overflow_ensures_part3
+two CVC5+Z3 typed_cast_checked_mul_overflow_ensures_part3
+two CVC5+Z3 typed_cast_checked_mul_u64_no_overflow_ensures_part3
+two CVC5+Z3 typed_cast_checked_mul_u64_overflow_ensures_part3
+two CVC5+Z3 typed_cast_lemma_range_mul_le
+slow Alt-Ergo typed_cast_vec_int_extend_from_range_loop_invariant_5_preserved_part3
+slow CVC5 typed_cast_range_skip_advance_ensures_skip_inside_part12
+slow CVC5 typed_cast_range_skip_assert_rte_signed_overflow_2_part1
+slow CVC5 typed_cast_range_skip_assert_rte_signed_overflow_3_part2
+slow CVC5 typed_cast_range_skip_assert_rte_signed_overflow_7_part3

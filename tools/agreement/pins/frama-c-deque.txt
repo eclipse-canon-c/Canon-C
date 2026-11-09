@@ -1,0 +1,17 @@
+# frama-c-deque: the goals that one or two provers prove alone, each prover running alone,
+# as 13 · Prover agreement #3 found them at 5ba6712 (VERIFY-065). A goal not listed is
+# proved by WP itself, by all three provers, or by none (the names its proof job pins).
+# slow: a proof seen to take over 60 s, in run 1 or #3. A slow goal is left out of the
+# comparison, as is any proof over 30 s in the run being compared.
+two CVC5+Z3 typed_deque_int_pop_back_ok_ensures_7_part5
+two CVC5+Z3 typed_deque_int_pop_back_ok_ensures_7_part6
+two CVC5+Z3 typed_deque_int_pop_front_ok_ensures_7_part5
+two CVC5+Z3 typed_deque_int_push_back_ok_ensures_7_part4
+two CVC5+Z3 typed_deque_int_push_back_ok_ensures_8_part4
+two CVC5+Z3 typed_deque_int_push_back_unchecked_ensures_5
+two CVC5+Z3 typed_deque_int_push_back_unchecked_ensures_6
+two CVC5+Z3 typed_deque_int_push_front_ok_ensures_8_part4
+two CVC5+Z3 typed_deque_int_push_front_unchecked_ensures_6_part1
+two CVC5+Z3 typed_deque_int_try_push_back_ok_ensures_5_part4
+two CVC5+Z3 typed_deque_int_try_push_back_ok_ensures_6_part4
+two CVC5+Z3 typed_deque_int_try_push_front_ok_ensures_6_part4
