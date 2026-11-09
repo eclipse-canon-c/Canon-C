@@ -31176,3 +31176,146 @@ reads 1037 / 1073 at `9 · Probes` #11. No proof job's line moved.
 This closing commit changes only documentation: this record, VERIFY-057's
 status, and `docs/verification.md`'s probe paragraph. Only `8 · Records`
 runs for it, and it is to pass.
+
+---
+
+## VERIFY-064: Pre-registration — Prover Agreement: Each Unit Proved Once With Each Prover Alone, as a Probe
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-064 |
+| **Date**       | 2026-11-09 |
+| **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it. The probe runs only by hand; neither has run. |
+| **Baseline**   | 20f685d (`README: the badge note in the license note's plain style`). The proof jobs last ran at 06718b0 (VERIFY-063's change); the commits since change documentation only. |
+| **Scope**      | A new workflow that runs only by hand, `.github/workflows/prover-agreement.yml` (`9 · Probes (manual): prover agreement`); its script and README in `tools/probes/verify-064/`; the CI map, `.github/workflows/README.md`. No code, contract, proof job or pin changes. |
+| **Category**   | What the proofs trust: how many goals one prover alone proves. Item B of the plan agreed with the author (2026-11-09). |
+
+### The question
+
+Every proof job runs WP with `-wp-prover alt-ergo,z3,cvc5`. For each goal
+that Qed, WP's simplifier, does not close, WP 29 starts the three provers
+together. The first to succeed proves the goal, and WP stops the other two,
+unless `-wp-run-all-provers` is set, which no job sets. A job's summary
+therefore credits each goal to the prover that proved it first. It does not
+say whether the other two could have proved it.
+
+`docs/verification.md` says so where it lists what the proofs trust: since
+one prover's success is enough, the three provers do not guard against a
+prover that proves a false goal. Agreement between provers would, and it "is
+to be measured". This record measures it.
+
+The author's direction (2026-11-09): agreement is the stronger evidence, but
+a goal that only one prover can prove is not refused for that ("Prover
+agreement is better when multiple provers agree on a thing, but shouldnt be
+limited if practically we only have one option right ?"). So agreement is
+graded evidence, not a gate. It is measured first. Then the goals that one
+prover alone proves are listed, and whether CI pins that list is decided
+with the author.
+
+### The probe
+
+`tools/probes/verify-064/agreement_probe.py` runs WP on each of the pointer
+probe's 26 units three times: with `-wp-prover alt-ergo`, with
+`-wp-prover z3` and with `-wp-prover cvc5`. Everything else is the unit's
+job: its file, memory model and preprocessing, `-wp-rte -wp-split
+-wp-timeout 120`, and `-variadic-no-translation` for `frama-c-diag`. Each
+run writes WP's report of each goal (`-wp-report-json`), and the script
+sorts each unit's goals:
+
+- **WP itself**: proved with no prover, by Qed or by WP's own passes;
+- **three**, **two** or **one**: proved by that many of the three provers,
+  each running alone;
+- **none**: proved by no prover alone.
+
+WP's summary also counts goals that are not in its report. Its total adds,
+to the goals it schedules, the terminates clauses it validates without a
+proof ("Terminating"), the goals in code it finds unreachable
+("Unreachable"), and the unreachable goals that fail, which no line of the
+summary shows (`register.ml`, read in Frama-C 28's and 32's sources). The
+script reads the Terminating and Unreachable lines from each run's summary
+and adds them back, so that each unit's numbers can be set beside its pin.
+
+The workflow has 78 jobs, one per unit and prover, at most 30 at once, the
+longest units first. Each posts its run's summary. WP is stopped 340 minutes
+after its job started, so that its output is still uploaded inside GitHub's
+six hours. Then a job per unit posts the unit's counts and, by name, the
+goals that one prover alone proves and those that no prover proves alone. A
+last job posts the totals, and uploads each goal's class as
+`agreement.tsv`.
+
+The workflow runs only by hand, like the other manual probes, so the push
+does not start it. The author starts it from the Actions tab once the push's
+own workflows have finished. It holds 30 runners for hours: at 06718b0, the
+26 units' jobs took 644 minutes of runner time in all, with the three
+provers together.
+
+Left out: `frama-c-arena-32` and `frama-c-win64`, which prove units of these
+26 at other machine models; the `-CC` families of `7 · Proofs: -CC`; and the
+machine-model jobs of `11`.
+
+### The change
+
+1. `tools/probes/verify-064/agreement_probe.py` and its `README.md`: the
+   probe.
+2. `.github/workflows/prover-agreement.yml`: its workflow.
+3. `.github/workflows/README.md`: the manual probes' row names the third;
+   and its line on how long the units' jobs run, which said three hours for
+   `frama-c-vec`, gives the durations at 06718b0 (83 minutes for vec).
+
+### Measured here
+
+There is no WP here: the local Frama-C (25) has none. What was measured:
+
+- **The sorting**, on reports written by hand in the form `register.ml`
+  writes. They include the float WP writes as `0.`, which JSON does not
+  allow (`vc-identity.yml`'s run log notes it; the script mends it). They
+  hold a goal Qed proves, one all three provers prove, one that two prove,
+  one that each prover alone proves, and one that none proves, at two units,
+  one of them with a run missing. Each goal lands in its class, the counts
+  add up with Terminating to the summaries' totals, and the missing run is
+  flagged.
+- **The run mode**, with a stand-in for `frama-c`: the summary and the
+  report are read and the notice posted. Stopped at its limit, the stand-in
+  is ended together with its child process.
+- **The units**: the script's 26 files, memory models and preprocessing are
+  the pointer probe's.
+- **The pins**: at 06718b0, the 26 units' jobs give 73282 / 73974, 692
+  unproved. Each unit's unproved names are the names it pins, as
+  `tools/record_coverage.py` reads them (for `frama-c-stack`, the 69 of
+  `cc-vec`, against which its job checks them).
+- **clang-tidy**: the job's step finds nothing in its 61 files. No code
+  changed.
+- **Records**: `tools/record_coverage.py --strict --complete --pending-from
+  20f685d` and `tools/machdeps/check_pins.py` pass.
+
+### The workflows
+
+`tools/which_workflows.py` on this record's commit and the probe's: 1 to 6
+and 8 run, because a file under `.github/workflows/` changes; 7, 9, 10, 11
+and 12 do not. The new workflow has no push trigger.
+
+### Predictions
+
+The pins are each unit's line and unproved names at 06718b0. G2 and G3 are
+scored in each unit whose three runs end.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| G1 | **All 78 runs end**, each with its summary and its report, inside its limit. | a run stopped at its limit, or one without a summary or a report | M: a prover alone spends up to 120 s on each goal it cannot prove, and how many goals each prover cannot prove is what this measures. With the three provers together, the units' jobs take up to 83 minutes. |
+| G2 | **Each unit's three runs see the same goals, as many as its pin.** The three reports list the same goals; with Terminating and Unreachable, they number the unit's pinned total; and WP itself proves the same goals in all three runs. | a goal in one report and not another, another total, or a goal WP itself proves in some runs only | H that the goals are the same: WP makes them before any prover runs. M–H for the total, which also counts unreachable goals that fail, shown on no line. |
+| G3 | **The provers alone prove what they prove together.** In each unit, the goals that WP itself or at least one prover alone proves, with Terminating and Unreachable, number its pinned proved count; and the goals that no prover proves alone are its pinned unproved names. | another count, or another name, in any unit | M–H: each prover gets the same goals and the same 120 s as in the job, but a goal proved near 120 s can fall either way. |
+| G4 | **The push's workflows**: 1 to 6 and 8 run and are green, every proof job at its pin and 1 to 3 with VERIFY-063's numbers; 7, 9, 10, 11 and 12 do not run; the new workflow does not start. | another set, a job off its pin, or a failure | H: no code changes; the checks of `8 · Records` were run here. |
+
+The classes are not predicted: how many goals three provers prove, how many
+two, and how many only one. They are the measurement.
+
+**What follows.** If G1 to G3 match, the counts stand as measured.
+`docs/verification.md`'s account of what the proofs trust gives them in
+place of "is to be measured", and lists the goals that one prover alone
+proves as evidence graded below those that two or three provers agree on.
+Whether CI pins that list, so that a change to it is seen, is decided with
+the author. A unit whose runs do not end is split by function and run again,
+in a later record.
+
+The probe is pushed with this record, in the commit after it. Its first run
+is started by hand, once the push's workflows have finished.
