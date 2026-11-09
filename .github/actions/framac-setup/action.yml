@@ -28,6 +28,9 @@ inputs:
   cvc5-version:
     description: "CVC5 CLI binary version"
     default: "1.2.1"
+  cvc5-sha256:
+    description: "SHA-256 of that version's cvc5-Linux-x86_64-static.zip (change it with the version)"
+    default: "6d44abc233980a14d72cc5809287d27c3335b1d6ee863381d0b5ffcbd0d8de56"
   altergo-version:
     description: "Alt-Ergo version (pinned — see the install step)"
     default: "2.6.3"
@@ -125,35 +128,90 @@ runs:
           why3.${WHY3_VERSION} \
           z3.${Z3_VERSION}
 
+    # The cvc5 release archive is kept in GitHub's cache (VERIFY-065). When
+    # about 140 jobs set up at once, the release site refused 47 of their
+    # anonymous downloads, and wget gave up after five tries in 21 s; a
+    # re-run of the 47 lost 23 more the same way (VERIFY-065 run 1). GitHub
+    # limits unauthenticated requests more tightly since May 2025.
+    # Restored from the cache, the archive is not downloaded at all. On a
+    # miss, a job waits a random moment and looks again, so that the first
+    # download, saved at once, serves the others. Then it downloads through
+    # GitHub's API with the job's token, and only if that fails, anonymously,
+    # retrying for up to ten minutes. The archive is checked against its
+    # SHA-256 and its binary's version before it is used or saved.
+    - name: Restore the cvc5 release archive
+      id: cvc5-cache
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/cvc5-archive
+        key: cvc5-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cvc5-version }}-${{ inputs.cvc5-sha256 }}
+
+    - name: On a miss, wait a random moment for another job's download
+      if: steps.cvc5-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        s=$(( RANDOM % 120 ))
+        echo "No cvc5 archive in the cache: waiting ${s} s before looking again"
+        sleep "${s}"
+
+    - name: Restore the cvc5 release archive, again
+      id: cvc5-cache-again
+      if: steps.cvc5-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/cvc5-archive
+        key: cvc5-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cvc5-version }}-${{ inputs.cvc5-sha256 }}
+
     - name: Install cvc5 CLI binary from GitHub releases
       # The opam `cvc5` package installs OCaml bindings, not a CLI
       # binary. WP + why3 need the standalone `cvc5` executable.
       # We fetch it from the official cvc5 GitHub release and
       # install to /usr/local/bin, which is on PATH by default.
       #
-      # Version pinned to the cvc5-version input so CI remains
-      # deterministic. Bumping the version is a one-line change
-      # that doesn't require cache invalidation (this install
-      # runs outside the opam cache).
-      #
-      # The download is ~20-30 MB and takes a few seconds. We do
-      # this on every run (cache hit or miss) because the binary
-      # lives outside ~/.opam — but it's cheap enough that this
-      # isn't worth optimizing further.
+      # Version pinned to the cvc5-version input, and the archive to
+      # cvc5-sha256, so CI remains deterministic. Bumping the version
+      # changes both inputs, and with them the cache key above.
       shell: bash
       env:
         CVC5_VERSION: ${{ inputs.cvc5-version }}
+        CVC5_SHA256: ${{ inputs.cvc5-sha256 }}
+        GH_TOKEN: ${{ github.token }}
       run: |
         CVC5_URL="https://github.com/cvc5/cvc5/releases/download/cvc5-${CVC5_VERSION}/cvc5-Linux-x86_64-static.zip"
-        echo "Downloading cvc5 ${CVC5_VERSION} from ${CVC5_URL}"
-        # The release CDN occasionally drops a connection (CI #1297: one of
-        # nineteen WP jobs failed here with wget exit 4, the other eighteen
-        # passed the same step). Retry, then fail loudly rather than let the
-        # job proceed to a cvc5 registration that cannot succeed.
-        wget -q --tries=5 --waitretry=10 --retry-connrefused \
-             "${CVC5_URL}" -O /tmp/cvc5.zip \
-          || { echo "ERROR: cvc5 ${CVC5_VERSION} download failed after 5 attempts (${CVC5_URL})"; exit 1; }
-        unzip -q /tmp/cvc5.zip -d /tmp/cvc5-release
+        ARCHIVE="${HOME}/cvc5-archive/cvc5.zip"
+        mkdir -p "${HOME}/cvc5-archive"
+        if [ -s "${ARCHIVE}" ] && echo "${CVC5_SHA256}  ${ARCHIVE}" | sha256sum -c --status -; then
+          echo "cvc5 ${CVC5_VERSION}: the archive restored from the cache, its SHA-256 checked"
+        else
+          if [ -e "${ARCHIVE}" ]; then
+            echo "The cached cvc5 archive does not match cvc5-sha256: downloading it again"
+          fi
+          rm -f "${ARCHIVE}"
+          # First through GitHub's API, with the job's token: authenticated
+          # requests are not held to the anonymous limits.
+          for i in 1 2 3 4 5; do
+            echo "Downloading cvc5 ${CVC5_VERSION} through the API, try ${i}"
+            if gh release download "cvc5-${CVC5_VERSION}" --repo cvc5/cvc5 \
+                 --pattern cvc5-Linux-x86_64-static.zip \
+                 --output "${ARCHIVE}" --clobber; then
+              break
+            fi
+            rm -f "${ARCHIVE}"
+            sleep $(( i * 20 ))
+          done
+          if [ ! -s "${ARCHIVE}" ]; then
+            echo "Downloading cvc5 ${CVC5_VERSION} from ${CVC5_URL}"
+            # curl retries on any error, the site's refusals included, waiting
+            # 1, 2, 4, ... s between tries, for up to ten minutes in all.
+            curl -fsSL --retry 10 --retry-all-errors --retry-max-time 600 \
+                 --connect-timeout 30 --max-time 300 \
+                 -o "${ARCHIVE}" "${CVC5_URL}" \
+              || { echo "ERROR: cvc5 ${CVC5_VERSION} download failed, through the API and after ten minutes of anonymous retries (${CVC5_URL})"; rm -f "${ARCHIVE}"; exit 1; }
+          fi
+          echo "${CVC5_SHA256}  ${ARCHIVE}" | sha256sum -c - \
+            || { echo "ERROR: the downloaded cvc5 archive is not the one pinned by cvc5-sha256"; rm -f "${ARCHIVE}"; exit 1; }
+        fi
+        unzip -q -o "${ARCHIVE}" -d /tmp/cvc5-release
         # The zip extracts to a directory like cvc5-Linux-x86_64-static/bin/cvc5
         CVC5_EXTRACTED=$(find /tmp/cvc5-release -name cvc5 -type f | head -1)
         if [ -z "${CVC5_EXTRACTED}" ]; then
@@ -162,11 +220,26 @@ runs:
           find /tmp/cvc5-release -type f
           exit 1
         fi
+        if ! "${CVC5_EXTRACTED}" --version 2>&1 | head -1 | grep -qF "version ${CVC5_VERSION} "; then
+          echo "ERROR: the archive's cvc5 is not version ${CVC5_VERSION}:"
+          "${CVC5_EXTRACTED}" --version 2>&1 | head -1
+          exit 1
+        fi
         echo "Found cvc5 binary at: ${CVC5_EXTRACTED}"
         sudo cp "${CVC5_EXTRACTED}" /usr/local/bin/cvc5
         sudo chmod +x /usr/local/bin/cvc5
         echo "Installed cvc5 to /usr/local/bin/cvc5"
         /usr/local/bin/cvc5 --version | head -3
+
+    - name: Save the cvc5 release archive
+      # Only a job that downloaded it, once it is checked. Another job saving
+      # the same key at the same time is reported, not an error.
+      if: steps.cvc5-cache.outputs.cache-hit != 'true' && steps.cvc5-cache-again.outputs.cache-hit != 'true'
+      continue-on-error: true
+      uses: actions/cache/save@v5
+      with:
+        path: ~/cvc5-archive
+        key: cvc5-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cvc5-version }}-${{ inputs.cvc5-sha256 }}
 
     - name: Activate opam environment and configure Why3 provers
       # why3 config detect auto-registers Alt-Ergo 2.6.3 and Z3 4.15.2

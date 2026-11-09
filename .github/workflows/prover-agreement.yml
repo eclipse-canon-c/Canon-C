@@ -116,6 +116,8 @@ jobs:
           path: agree_*
           if-no-files-found: warn
           retention-days: 90
+          # A re-run of a job replaces its first attempt's artifact.
+          overwrite: true
 
   sort:
     name: "agreement ${{ matrix.unit }}"
@@ -176,3 +178,4 @@ jobs:
           path: agreement.tsv
           if-no-files-found: warn
           retention-days: 90
+          overwrite: true
