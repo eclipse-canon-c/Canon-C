@@ -32162,3 +32162,33 @@ Six of the nine predictions match. What run 1 shows:
   the nine others, as Frama-C 25 found here at `ppc_32` and `msvc_x86_64`.
 - **Frama-C 25's `ppc_32` problem with `malloc` is not in 29**: `memory.c`
   and `vec_int_alloc` have no invalid access or call at `ppc_32` in CI.
+
+### Run 1b, pre-registered (2026-11-10)
+
+Before F1 is fixed, the error of E4 is read: the fix changes `arena.h`, and
+the three programs that stop allocate from an arena. `eva.py` now prints the
+last 80 lines of Frama-C's output for a run that does not finish, and runs
+Frama-C with `OCAMLRUNPARAM=b`, so that an internal error prints OCaml's
+backtrace. Nothing else changes: no program, option, contract or job. Tried
+here with an unknown option, the run prints Frama-C's refusal.
+
+This push also carries documentation, which no workflow reads:
+`docs/for-future.md` (RPP, Verasco, SparrowBerry, foundational verification
+and Frama-C's concurrency plug-ins, with why each waits; the three tools of
+`docs/verification.md` move there), `docs/architectures.md` (each
+architecture tested on, compiled for or proved at, with its job, and what is
+planned or not supported), and the README (Platforms becomes Operating
+systems, and Where CI checks it points to those documents).
+
+`tools/which_workflows.py`: 2, 8 and 14 run.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| D1 | **2, 8 and 14 run**, and no other. | another set | H |
+| D2 | **All three are green.** | a failure | H |
+| D3 | **14 repeats run 1**: at each model, the 23 programs that finished give the same line as in run 1, times aside, and the same three stop with exit code 125. | another line, or another set of programs | H: nothing Eva reads changes. |
+| D4 | **The three print why**: Frama-C's output ends with its internal-error message, which names the exception. | no such message | M–H |
+| D5 | **The error is raised in the analysis of a function of `arena.h`** the three programs call, at each model. | another place | L–M: a guess from what the three share. |
+
+**What follows.** Once the error is read, the fix of F1 and, if it can be
+had, of the error, are pre-registered together.
