@@ -31858,7 +31858,7 @@ Both predictions match.
 | **ID**         | VERIFY-066 |
 | **Date**       | 2026-11-10 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run. |
-| **Status update** | 2026-11-10 — Run 1 scored: E1, E2, E3, E7, E8 and E9 MATCH; E4, E5 and E6 MISS, because Frama-C 29 stops with an internal error on three programs, `region.c`, `vec.c` and `stringbuf.c`, at every model. F1 is confirmed in CI on the four programs it was predicted to stop that ran. See "Scored: run 1" below. Run 1b (#2): D1 to D4 MATCH; D5 carried to the fix's run. The fix's run (#3, with twelve workflows): F1, F2 and F4 to F9 MATCH, and D5; F3 MISS: `pool_init`'s `ensures` part 4 is no longer proved at the five ILP32 models, as at the others, and its ILP32 pin takes it. The error is raised on entering `arena_alloc`. See "Scored: the fix" below. The ILP32 pin's run: P1 to P3 MATCH. Eva's error probe is pre-registered, R1 to R13. The Status above is the record as committed. |
+| **Status update** | 2026-11-10 — Run 1 scored: E1, E2, E3, E7, E8 and E9 MATCH; E4, E5 and E6 MISS, because Frama-C 29 stops with an internal error on three programs, `region.c`, `vec.c` and `stringbuf.c`, at every model. F1 is confirmed in CI on the four programs it was predicted to stop that ran. See "Scored: run 1" below. Run 1b (#2): D1 to D4 MATCH; D5 carried to the fix's run. The fix's run (#3, with twelve workflows): F1, F2 and F4 to F9 MATCH, and D5; F3 MISS: `pool_init`'s `ensures` part 4 is no longer proved at the five ILP32 models, as at the others, and its ILP32 pin takes it. The error is raised on entering `arena_alloc`. See "Scored: the fix" below. The ILP32 pin's run: P1 to P3 MATCH. Eva's error probe (#14): R1 to R13 MATCH; the error needs a `\let` bound to an address converted to an integer, and `arena_can_fit` without `\let` avoids it. See "Scored: Eva's error probe" below. The Status above is the record as committed. |
 | **Baseline**   | 8ffe97d (`Prover agreement pins: run 3's nine new slow proofs (VERIFY-065 closing)`) |
 | **Scope**      | A program for each verified unit in `tools/eva/programs/`, compiled and run, and analysed by Eva, by `tools/eva/eva.py` in a new workflow, `14 · Eva: programs that use Canon-C`; `8 · Records` checks the programs against the units; the CI map. No library code, contract, proof job or pin changes. |
 | **Category**   | What the proofs leave to the caller: whether a program meets the contracts, measured by Eva at the proofs' machine models. Item C of the list agreed with the author (2026-11-09; started 2026-11-10). |
@@ -32474,3 +32474,60 @@ account. If R6 and R11 match, writing `arena_can_fit` without `\let` is the
 way around it that keeps its meaning: WP must prove it as before, at every
 model, in a record of its own. If not, the five programs are pinned as
 stopping, and wait for Frama-C.
+
+### Scored: Eva's error probe (2026-11-11)
+
+The push of 281277d and 2b38ddb (2026-11-10, 21:03 UTC) started `1 ·
+Build & test` #45, `2 · Platforms` #59, `3 · Static analysis & coverage`
+#45, `4 · Proofs: core/` #45, `5 · Proofs: semantics/` #45, `6 · Proofs:
+data/` #45, `8 · Records` #65 and `9 · Probes` #14, 115 jobs, all green.
+Frama-C is 29.0 (Copper), on OCaml 4.14.2.
+
+| # | scored |
+|---|--------|
+| R1 | **MATCH.** 1 to 6, 8 and 9 ran, and no other. |
+| R2 | **MATCH.** 1 to 6 and 8 are green, and each job of 1 to 6 gave its last run's notices (#44, #58, #44, #44, #44, #44). |
+| R3 | **MATCH.** The eight older probes are green: G4, G11, G13, G19, Count and Round 3 gave #12's notices, the pointer and char probes #13's. |
+| R4 | **MATCH.** `r0_full.c` stops with `Reduce_to_bottom` (exit 125), on entering `arena_alloc` from `main` (line 85). |
+| R5 | **MATCH.** `r1_min.c` stops the same way, on entering `alloc` from `main` (line 60). |
+| R6 | **MATCH.** `r2_nolet.c` finishes: one alarm, three preconditions valid. |
+| R7 | **MATCH.** `r3_nocast.c` finishes, as `r2_nolet.c`. |
+| R8 | **MATCH.** `r4_onebhv.c` stops, on entering `alloc` (line 55). |
+| R9 | **MATCH.** `r5_nobody.c` stops, on entering `alloc` (line 46). |
+| R10 | **MATCH.** `a0_control` stops as in 14, on entering `arena_alloc` from `arena.c` line 20. |
+| R11 | **MATCH.** `a1_inline` finishes and reaches the end of `main`: no alarm; `fails` from 0 to 9, the checks at lines 27, 29, 35, 40, 42, 43, 45, 46 and 50 not confirmed; program calls 0 invalid, 1 unknown; library calls 0 invalid, 2 unknown; preconditions 79 valid, 3 unknown, 0 invalid; 29 of 125 functions analysed. |
+| R12 | **MATCH.** `a2_usespec` stops, on entering `arena_alloc` from `arena.c` line 20. |
+| R13 | **MATCH.** The probe's job is green, and posted nine notices. |
+
+All thirteen match. What the run shows:
+
+- **The error needs a `\let` bound to an address converted to an
+  integer, in a behaviour's `assumes`.** Without the `\let`, the same
+  terms written out (`r2_nolet.c`), or with the `\let` bound to an integer
+  that is not an address (`r3_nocast.c`), Eva finishes. One behaviour is
+  enough (`r4_onebhv.c`), and the function's body is not needed
+  (`r5_nobody.c`, 47 lines, is the smallest program that stops). Run 1b's
+  backtrace, of the same error in `arena.c`'s programs, shows where:
+  raised in `Eva__Eval_terms.reduce_exact_location.aux` (`eval_terms.ml`
+  line 1890), from `eval_predicate` (line 2569, through
+  `Eval_op.apply_on_all_locs`), from `Active_behaviors.is_active`, from
+  `Transfer_logic.check_fct_preconditions_of_behaviors`: Eva evaluates the
+  `assumes` to know whether the behaviour is active. The probe's log keeps
+  the last 40 lines of each backtrace; its artifact, `evaerror-probe`,
+  keeps each run's whole output.
+- **`arena_can_fit` written without `\let` is a way around it that keeps
+  its meaning.** With it, `arena.c` reaches its end under Frama-C 29, as it
+  does under Frama-C 25, with the checks Eva cannot confirm after an
+  allocation: the address of the memory is converted to an integer, and Eva
+  does not know it.
+
+**What follows.**
+
+1. The error goes to the Frama-C developers from the author's account, as
+   Frama-C's own message asks ("Please report as 'crash' at
+   https://git.frama-c.com/pub/frama-c/issues"), with `r5_nobody.c`, the
+   command, the version, and the outputs of the probe's artifact.
+2. The way around it is decided with the author. Writing `arena_can_fit`
+   without `\let` changes `core/arena.h`'s contracts, so it is a record of
+   its own: WP must prove them as before, at every model, and Eva's five
+   programs should then reach their end.
