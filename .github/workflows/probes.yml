@@ -780,11 +780,16 @@ jobs:
   # standalone; r1_min.c, its smallest form; r1_min.c without \let, without
   # the conversion, with one behaviour, without a body), and on
   # tools/eva/programs/arena.c with 14 · Eva's command at x86_64: as it is,
-  # with arena_can_fit's \let written out in a copy of core/arena.h, and with
-  # arena_alloc read by its contract. Report-only: it prints each outcome,
-  # with the backtrace and the last call of each run that stops, posts one
-  # notice per variant and exits 0. Its predictions and their scores are
-  # VERIFY-066's, in docs/deviations.md.
+  # with arena_can_fit's \let as before VERIFY-067 in a copy of
+  # core/arena.h, and with arena_alloc read by its contract. Report-only: it
+  # prints each outcome, with the backtrace and the last call of each run
+  # that stops, posts one notice per variant and exits 0. Its predictions
+  # and their scores are VERIFY-066's and VERIFY-067's, in
+  # docs/deviations.md.
+  #
+  # ANSWER (#14, on 2b38ddb): a \let bound to an address converted to an
+  # integer, in a behaviour's assumes. Since VERIFY-067, core/arena.h writes
+  # arena_can_fit without \let; the probe keeps watching the error.
   # -------------------------------------------------------------------------
   evaerror-probe:
     needs: changes

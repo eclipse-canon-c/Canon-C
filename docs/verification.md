@@ -2483,12 +2483,17 @@ referenced byte range.
   tolerate NULL, like arena_alloc). The predicate is preserved by
   every mutating function — WP discharges this fully.
 
-- `arena_can_fit{L}(a, size, alignment)` uses ACSL let-bindings for
+- `arena_can_fit{L}(a, size, alignment)` used ACSL let-bindings for
   readability. The trade-off is that WP must compose the let-bound
   expressions with the C body's bitwise alignment formula, producing
   cat 2b's 26 residuals. An alternative formulation using a function
   call (e.g. `pad_for(cur, alignment)`) instead of let-bindings was
-  considered and rejected — see VERIFY-009 for the rationale.
+  considered and rejected — see VERIFY-009 for the rationale. Since
+  VERIFY-067 its terms are written out, with no `\let`: Frama-C 29's
+  Eva stops with an internal error on a `\let` bound to an address
+  converted to an integer, which the predicate has bound since
+  VERIFY-036 F4 (VERIFY-066's probe). The predicate means the same; the
+  comment above it reads it with the names the let-bindings gave.
 
 - `arena_alloc` and `arena_alloc_aligned` carry three-way behavior
   splits: `size_zero` (assumes `size == 0`, ensures `\result ==

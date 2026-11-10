@@ -2,16 +2,18 @@
 """
 eva_error_probe.py -- VERIFY-066's probe: Frama-C 29's error in Eva.
 
-Frama-C 29's Eva stops on entering core/arena.h's arena_alloc, in every
-program that calls it, with the uncaught exception
+Frama-C 29's Eva stopped on entering core/arena.h's arena_alloc, in every
+program that called it, with the uncaught exception
 Eva__Eval_terms.Reduce_to_bottom (exit 125), raised while it decides which
 of arena_alloc's behaviours is active (docs/deviations.md, VERIFY-066, the
 fix's run). The behaviours `fits` and `does_not_fit` assume arena_can_fit,
-which binds with \\let the address a->buffer + a->offset converted to an
+which bound with \\let the address a->buffer + a->offset converted to an
 integer, and a pad computed from it. Frama-C 25, which runs every program
 to its end, does not evaluate \\let; Frama-C 28 began to ("Support
 evaluation of simple \\let bindings in ACSL terms and predicates", its
-changelog).
+changelog). The probe's run on 2b38ddb found that pair to be what raises
+the error (VERIFY-066, "Scored: Eva's error probe"), and since VERIFY-067
+core/arena.h writes arena_can_fit's terms out, with no \\let.
 
 The probe runs Eva
 
@@ -21,9 +23,13 @@ The probe runs Eva
   converted to an integer (r3_nocast.c), the second behaviour (r4_onebhv.c),
   the body (r5_nobody.c);
 - on tools/eva/programs/arena.c, with 14 · Eva's command at x86_64
-  (tools/eva/eva.py): as it is (a0_control); with arena_can_fit's three
-  \\let written out, in a copy of core/arena.h (a1_inline); and with
+  (tools/eva/eva.py): as it is (a0_control); with arena_can_fit's \\let
+  as before VERIFY-067, in a copy of core/arena.h (a1_let; until VERIFY-067
+  the variant was a1_inline, the \\let written out in the copy); and with
   arena_alloc read by its contract, -eva-use-spec (a2_usespec).
+
+The small programs watch the error in Frama-C itself; a1_let watches it on
+Canon-C's own code.
 
     python3 tools/probes/verify-066/eva_error_probe.py
 
@@ -32,9 +38,10 @@ Frama-C's output (its backtrace) and the last call Eva names. One notice
 per variant goes to notices_evaerror.txt; each variant's whole output, and
 the CSV of each arena.c run, go to evaerror_out/ in the directory it is run
 from. Report-only: it exits 0, or 1 if a variant cannot be set up (a file
-missing, arena_can_fit not found as written). Frama-C 25 needs
-EVA_FRAMAC_ARGS=-c11 for arena.c, as tools/eva/README.md says; 29 does
-not. The scoring is VERIFY-066's, in docs/deviations.md.
+missing, arena_can_fit not written as core/arena.h writes it since
+VERIFY-067). Frama-C 25 needs EVA_FRAMAC_ARGS=-c11 for arena.c, as
+tools/eva/README.md says; 29 does not. The scoring is VERIFY-066's and,
+since its change, VERIFY-067's, in docs/deviations.md.
 """
 import os
 import re
@@ -60,9 +67,18 @@ SMALL = [
     ('r5_nobody', 'r1_min with no body'),
 ]
 
-# arena_can_fit as core/arena.h writes it (VERIFY-036 F4), and the same
-# predicate with its three \let written out.
-CAN_FIT = '''\
+# arena_can_fit as core/arena.h writes it since VERIFY-067, its terms
+# written out (compared without white space), and as it was from VERIFY-036
+# F4 to VERIFY-066, with three \let.
+ADDR = '(usize)(uintptr_t)(a->buffer + a->offset)'
+PAD = f'((({ADDR} + alignment - 1) & ~(alignment - 1)) - {ADDR})'
+CAN_FIT = f'''\
+  predicate arena_can_fit{{L}}(Arena *a, integer size, integer alignment) =
+      a->offset <= CANON_USIZE_MAX - {PAD} &&
+      a->offset + {PAD} <= CANON_USIZE_MAX - size &&
+      a->offset + {PAD} + size <= a->capacity;
+'''
+CAN_FIT_LET = '''\
   predicate arena_can_fit{L}(Arena *a, integer size, integer alignment) =
       \\let cur  = a->offset;
       \\let addr = (usize)(uintptr_t)(a->buffer + cur);
@@ -71,14 +87,11 @@ CAN_FIT = '''\
       cur + pad <= CANON_USIZE_MAX - size &&
       cur + pad + size <= a->capacity;
 '''
-ADDR = '(usize)(uintptr_t)(a->buffer + a->offset)'
-PAD = f'((({ADDR} + alignment - 1) & ~(alignment - 1)) - {ADDR})'
-CAN_FIT_INLINE = f'''\
-  predicate arena_can_fit{{L}}(Arena *a, integer size, integer alignment) =
-      a->offset <= CANON_USIZE_MAX - {PAD} &&
-      a->offset + {PAD} <= CANON_USIZE_MAX - size &&
-      a->offset + {PAD} + size <= a->capacity;
-'''
+
+
+def squash(text):
+    return re.sub(r'\s+', '', text)
+
 
 TAIL = 40
 LIMIT = 900
@@ -168,8 +181,9 @@ def arena(name, what, root, extra_use_spec=None):
         print(d)
 
 
-def inline_copy():
-    """A copy of what arena.c reads, with arena_can_fit's \\let written out."""
+def let_copy():
+    """A copy of what arena.c reads, with arena_can_fit's \\let as before
+    VERIFY-067."""
     files = eva.includes('arena') | {eva.source('arena')}
     outside = sorted(f for f in files if not f.startswith(('core/', 'tools/eva/programs/')))
     if outside:
@@ -180,12 +194,13 @@ def inline_copy():
     header = os.path.join(root, 'core', 'arena.h')
     with open(header) as f:
         text = f.read()
-    if text.count(CAN_FIT) != 1:
+    found = re.findall(r'  predicate arena_can_fit\{L\}\(.*?;\n', text, re.S)
+    if len(found) != 1 or squash(found[0]) != squash(CAN_FIT):
         raise SystemExit('core/arena.h: arena_can_fit is not written as this probe expects')
     with open(header, 'w') as f:
-        f.write(text.replace(CAN_FIT, CAN_FIT_INLINE))
-    print('a1_inline: arena_can_fit in the copy of core/arena.h:')
-    print(CAN_FIT_INLINE)
+        f.write(text.replace(found[0], CAN_FIT_LET))
+    print('a1_let: arena_can_fit in the copy of core/arena.h:')
+    print(CAN_FIT_LET)
     return root
 
 
@@ -195,7 +210,7 @@ def main():
     for name, what in SMALL:
         small(name, what)
     arena('a0_control', 'arena.c as it is', ROOT)
-    arena('a1_inline', 'arena.c, the \\let of arena_can_fit written out', inline_copy())
+    arena('a1_let', 'arena.c, arena_can_fit with its \\let, as before VERIFY-067', let_copy())
     arena('a2_usespec', 'arena.c, arena_alloc read by its contract', ROOT,
           extra_use_spec='arena_alloc')
     with open('notices_evaerror.txt', 'w') as f:

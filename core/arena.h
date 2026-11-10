@@ -139,14 +139,27 @@ typedef usize ArenaMark;
 
   // VERIFY-036 F4: the pad is computed from the address, as the code computes
   // it (ptr_align_padding); padding from the offset agreed only for aligned
-  // buffers.
+  // buffers. With cur the offset, addr the address cur starts at as an
+  // integer, and pad the bytes that align addr up to alignment:
+  //   cur <= max - pad, cur + pad <= max - size, cur + pad + size <= capacity.
+  // VERIFY-067: written out, with no \let. Frama-C 29's Eva stops with an
+  // internal error on a \let bound to an address converted to an integer
+  // (VERIFY-066's probe); the predicate means the same as with the \let.
   predicate arena_can_fit{L}(Arena *a, integer size, integer alignment) =
-      \let cur  = a->offset;
-      \let addr = (usize)(uintptr_t)(a->buffer + cur);
-      \let pad  = ((addr + alignment - 1) & ~(alignment - 1)) - addr;
-      cur <= CANON_USIZE_MAX - pad &&
-      cur + pad <= CANON_USIZE_MAX - size &&
-      cur + pad + size <= a->capacity;
+      a->offset <= CANON_USIZE_MAX
+          - ((((usize)(uintptr_t)(a->buffer + a->offset) + alignment - 1)
+              & ~(alignment - 1))
+             - (usize)(uintptr_t)(a->buffer + a->offset)) &&
+      a->offset
+          + ((((usize)(uintptr_t)(a->buffer + a->offset) + alignment - 1)
+              & ~(alignment - 1))
+             - (usize)(uintptr_t)(a->buffer + a->offset))
+          <= CANON_USIZE_MAX - size &&
+      a->offset
+          + ((((usize)(uintptr_t)(a->buffer + a->offset) + alignment - 1)
+              & ~(alignment - 1))
+             - (usize)(uintptr_t)(a->buffer + a->offset))
+          + size <= a->capacity;
 
   predicate mark_in_arena(Arena *a, ArenaMark mark) =
       arena_invariant(a) &&
