@@ -236,6 +236,21 @@ typedef struct {
         (m->slots[j].occupied ==> m->slots[j].hash != 0);
     predicate HASHMAP_FN(inv_)(HASHMAP_TYPE_NAME* m) =
       HASHMAP_FN(shape_)(m) && HASHMAP_FN(dist_)(m);
+
+    // VERIFY-066: shape_ and inv_ for a map read through a pointer to
+    // const. \valid(m) asks that the map be writable through m, which in
+    // Frama-C's reading of ACSL a pointer to const never is: Eva found every
+    // call of the read-only functions invalid. Those functions only read the
+    // map, so they require it readable. The other conjuncts are shape_'s,
+    // and must stay so.
+    predicate HASHMAP_FN(shape_read_)(HASHMAP_TYPE_NAME* m) =
+      \valid_read(m) &&
+      1 <= m->capacity <= 1073741824 &&
+      m->len <= m->capacity &&
+      \valid(m->slots + (0 .. m->capacity - 1)) &&
+      \separated(m, m->slots + (0 .. m->capacity - 1));
+    predicate HASHMAP_FN(inv_read_)(HASHMAP_TYPE_NAME* m) =
+      HASHMAP_FN(shape_read_)(m) && HASHMAP_FN(dist_)(m);
 */
 
 /* ============================================================================
@@ -454,7 +469,7 @@ HASHMAP_LINKAGE bool HM_IS_EMPTY_(const HASHMAP_TYPE_NAME* map) {
     return map->len == 0u;
 }
 
-/*@ requires HASHMAP_FN(inv_)(map);
+/*@ requires HASHMAP_FN(inv_read_)(map);
     assigns \nothing; */
 HASHMAP_LINKAGE f64 HM_LOAD_FACTOR_(const HASHMAP_TYPE_NAME* map) {
     require_msg(map != NULL, "hashmap_load_factor: map cannot be NULL");
@@ -581,7 +596,7 @@ HASHMAP_LINKAGE result__Bool_Error HM_INSERT_(
  * hashmap_get — lookup by key, returns Option<VAL>
  * ========================================================================= */
 
-/*@ requires HASHMAP_FN(inv_)(map);
+/*@ requires HASHMAP_FN(inv_read_)(map);
     requires \valid_read(key);
     assigns \nothing; */
 HASHMAP_LINKAGE HM_OPT_T_ HM_GET_(
@@ -665,7 +680,7 @@ HASHMAP_LINKAGE borrowed(hm_val_t*) HM_GET_OR_NULL_(
  * hashmap_contains_key
  * ========================================================================= */
 
-/*@ requires HASHMAP_FN(inv_)(map);
+/*@ requires HASHMAP_FN(inv_read_)(map);
     requires \valid_read(key);
     assigns \nothing; */
 HASHMAP_LINKAGE bool HM_CONTAINS_KEY_(
@@ -779,7 +794,7 @@ HASHMAP_LINKAGE HM_RES_T_ HM_REMOVE_(
  * hashmap_iter_next
  * ========================================================================= */
 
-/*@ requires HASHMAP_FN(inv_)(map);
+/*@ requires HASHMAP_FN(inv_read_)(map);
     requires \valid(iter);
     requires key_out == \null || \valid(key_out);
     requires val_out == \null || \valid(val_out);

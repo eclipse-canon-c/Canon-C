@@ -123,6 +123,20 @@ typedef usize ArenaMark;
       \valid(a->buffer + (0 .. a->capacity - 1)) &&
       \separated(a, a->buffer + (0 .. a->capacity - 1));
 
+  // VERIFY-066: arena_invariant for an Arena read through a pointer to
+  // const. \valid(a) asks that the Arena be writable through a, which in
+  // Frama-C's reading of ACSL a pointer to const never is: Eva rejected
+  // every call of the read-only accessors with a non-null arena. The
+  // accessors only read the Arena, so they require it readable. The other
+  // conjuncts are arena_invariant's, and must stay so.
+  predicate arena_invariant_read(Arena *a) =
+      \valid_read(a) &&
+      a->capacity > 0 &&
+      a->capacity <= CANON_ARENA_MAX_SIZE &&
+      a->offset <= a->capacity &&
+      \valid(a->buffer + (0 .. a->capacity - 1)) &&
+      \separated(a, a->buffer + (0 .. a->capacity - 1));
+
   // VERIFY-036 F4: the pad is computed from the address, as the code computes
   // it (ptr_align_padding); padding from the offset agreed only for aligned
   // buffers.
@@ -153,7 +167,7 @@ typedef struct {
 } ArenaStats;
 
 /*@
-  requires arena == \null || \valid(arena);
+  requires arena == \null || \valid_read(arena);
   assigns \nothing;
   behavior null_arena:
     assumes arena == \null;
@@ -163,7 +177,7 @@ typedef struct {
     ensures \result.peak == 0;
     ensures \result.alloc_count == 0;
   behavior non_null:
-    assumes \valid(arena);
+    assumes \valid_read(arena);
     ensures \result.used == arena->offset;
     ensures \result.remaining == arena->capacity - arena->offset;
     ensures \result.capacity == arena->capacity;
@@ -567,13 +581,13 @@ static inline bool arena_try_alloc_aligned(Arena* arena, usize size, usize align
    ============================================================================ */
 
 /*@
-  requires arena == \null || \valid(arena);
+  requires arena == \null || \valid_read(arena);
   assigns \nothing;
   behavior null_arena:
     assumes arena == \null;
     ensures \result == 0;
   behavior non_null:
-    assumes \valid(arena);
+    assumes \valid_read(arena);
     ensures \result == arena->capacity;
   complete behaviors;
   disjoint behaviors;
@@ -583,13 +597,13 @@ static inline usize arena_capacity(const Arena* arena) {
 }
 
 /*@
-  requires arena == \null || arena_invariant(arena);
+  requires arena == \null || arena_invariant_read(arena);
   assigns \nothing;
   behavior null_arena:
     assumes arena == \null;
     ensures \result == 0;
   behavior non_null:
-    assumes \valid(arena);
+    assumes \valid_read(arena);
     assumes arena->offset <= arena->capacity;
     ensures \result == arena->capacity - arena->offset;
   complete behaviors;
@@ -600,13 +614,13 @@ static inline usize arena_remaining(const Arena* arena) {
 }
 
 /*@
-  requires arena == \null || \valid(arena);
+  requires arena == \null || \valid_read(arena);
   assigns \nothing;
   behavior null_arena:
     assumes arena == \null;
     ensures \result == 0;
   behavior non_null:
-    assumes \valid(arena);
+    assumes \valid_read(arena);
     ensures \result == arena->offset;
   complete behaviors;
   disjoint behaviors;
@@ -616,13 +630,13 @@ static inline usize arena_used(const Arena* arena) {
 }
 
 /*@
-  requires arena == \null || \valid(arena);
+  requires arena == \null || \valid_read(arena);
   assigns \nothing;
   behavior null_arena:
     assumes arena == \null;
     ensures \result == \true;
   behavior non_null:
-    assumes \valid(arena);
+    assumes \valid_read(arena);
     ensures \result == (arena->offset == 0);
   complete behaviors;
   disjoint behaviors;
@@ -632,13 +646,13 @@ static inline bool arena_is_empty(const Arena* arena) {
 }
 
 /*@
-  requires arena == \null || \valid(arena);
+  requires arena == \null || \valid_read(arena);
   assigns \nothing;
   behavior null_arena:
     assumes arena == \null;
     ensures \result == \true;
   behavior non_null:
-    assumes \valid(arena);
+    assumes \valid_read(arena);
     ensures \result == (arena->offset >= arena->capacity);
   complete behaviors;
   disjoint behaviors;
@@ -652,13 +666,13 @@ static inline bool arena_is_full(const Arena* arena) {
    ============================================================================ */
 
 /*@
-  requires arena == \null || \valid(arena);
+  requires arena == \null || \valid_read(arena);
   assigns \nothing;
   behavior null_arena:
     assumes arena == \null;
     ensures \result == 0;
   behavior non_null:
-    assumes \valid(arena);
+    assumes \valid_read(arena);
     ensures \result == arena->offset;
   complete behaviors;
   disjoint behaviors;
@@ -716,7 +730,7 @@ static inline bytes_t arena_as_bytes(Arena* arena) {
 }
 
 /*@
-  requires arena_invariant(arena);
+  requires arena_invariant_read(arena);
   assigns \nothing;
   ensures \result.len == arena->offset;
   ensures \result.len == 0 || \result.ptr == arena->buffer;
@@ -738,7 +752,7 @@ static inline bytes_t arena_buffer_bytes(Arena* arena) {
 }
 
 /*@
-  requires arena_invariant(arena);
+  requires arena_invariant_read(arena);
   assigns \nothing;
   ensures \result.ptr == arena->buffer;
   ensures \result.len == arena->capacity;
@@ -764,7 +778,7 @@ static inline bytes_t arena_free_bytes(Arena* arena) {
 }
 
 /*@
-  requires arena_invariant(arena);
+  requires arena_invariant_read(arena);
   assigns \nothing;
   ensures arena->offset >= arena->capacity ==>
       (\result.ptr == \null && \result.len == 0);

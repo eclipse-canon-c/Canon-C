@@ -217,6 +217,23 @@ typedef struct {
       \separated(p, p->arena->buffer + (p->base_mark .. p->end_mark - 1)) &&
       \separated(p, p->arena) &&
       p->base_mark <= p->arena->offset;
+
+  // VERIFY-066: pool_invariant for a Pool read through a pointer to const,
+  // as arena_invariant_read is for an Arena: \valid(p) asks that the Pool be
+  // writable through p, which a pointer to const never is. The other
+  // conjuncts are pool_invariant's, and must stay so.
+  predicate pool_invariant_read(Pool *p) =
+      \valid_read(p) &&
+      arena_invariant(p->arena) &&
+      p->object_size > 0 &&
+      p->used <= p->capacity &&
+      p->capacity <= CANON_USIZE_MAX / p->object_size &&
+      p->base_mark <= p->end_mark &&
+      p->end_mark <= p->arena->capacity &&
+      p->end_mark - p->base_mark == p->capacity * p->object_size &&
+      \separated(p, p->arena->buffer + (p->base_mark .. p->end_mark - 1)) &&
+      \separated(p, p->arena) &&
+      p->base_mark <= p->arena->offset;
 */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -565,7 +582,7 @@ static inline void* pool_get(Pool* pool, usize i) {
 }
 
 /*@
-  requires pool == \null || pool_invariant(pool);
+  requires pool == \null || pool_invariant_read(pool);
   assigns  \nothing;
   behavior oob:
     assumes pool == \null || pool->arena == \null || i >= pool->used;
@@ -598,47 +615,47 @@ static inline const void* pool_get_const(const Pool* pool, usize i) {
    Query
    ════════════════════════════════════════════════════════════════════════════ */
 
-/*@ requires pool == \null || \valid(pool); assigns \nothing;
+/*@ requires pool == \null || \valid_read(pool); assigns \nothing;
     behavior null: assumes pool == \null; ensures \result == 0;
-    behavior nn:   assumes \valid(pool);   ensures \result == pool->used;
+    behavior nn:   assumes \valid_read(pool);   ensures \result == pool->used;
     complete behaviors; disjoint behaviors; */
 static inline usize pool_used(const Pool* pool)            { return pool ? pool->used     : 0u; }
 
-/*@ requires pool == \null || \valid(pool); assigns \nothing;
+/*@ requires pool == \null || \valid_read(pool); assigns \nothing;
     behavior null: assumes pool == \null; ensures \result == 0;
-    behavior nn:   assumes \valid(pool);   ensures \result == pool->capacity;
+    behavior nn:   assumes \valid_read(pool);   ensures \result == pool->capacity;
     complete behaviors; disjoint behaviors; */
 static inline usize pool_capacity(const Pool* pool)        { return pool ? pool->capacity : 0u; }
 
-/*@ requires pool == \null || pool_invariant(pool); assigns \nothing;
+/*@ requires pool == \null || pool_invariant_read(pool); assigns \nothing;
     behavior null: assumes pool == \null; ensures \result == 0;
-    behavior nn:   assumes \valid(pool) && pool->used <= pool->capacity;
+    behavior nn:   assumes \valid_read(pool) && pool->used <= pool->capacity;
                    ensures \result == pool->capacity - pool->used;
     complete behaviors; disjoint behaviors; */
 static inline usize pool_remaining(const Pool* pool)       { return pool ? (pool->capacity - pool->used) : 0u; }
 
-/*@ requires pool == \null || \valid(pool); assigns \nothing;
+/*@ requires pool == \null || \valid_read(pool); assigns \nothing;
     behavior null: assumes pool == \null; ensures \result == \true;
-    behavior nn:   assumes \valid(pool);   ensures \result == (pool->used >= pool->capacity);
+    behavior nn:   assumes \valid_read(pool);   ensures \result == (pool->used >= pool->capacity);
     complete behaviors; disjoint behaviors; */
 static inline bool  pool_is_full(const Pool* pool)         { return !pool || (pool->used >= pool->capacity); }
 
-/*@ requires pool == \null || \valid(pool); assigns \nothing;
+/*@ requires pool == \null || \valid_read(pool); assigns \nothing;
     behavior null: assumes pool == \null; ensures \result == \true;
-    behavior nn:   assumes \valid(pool);   ensures \result == (pool->used == 0);
+    behavior nn:   assumes \valid_read(pool);   ensures \result == (pool->used == 0);
     complete behaviors; disjoint behaviors; */
 static inline bool  pool_is_empty(const Pool* pool)        { return !pool || (pool->used == 0u); }
 
-/*@ requires pool == \null || \valid(pool); assigns \nothing;
+/*@ requires pool == \null || \valid_read(pool); assigns \nothing;
     behavior null: assumes pool == \null; ensures \result == 0;
-    behavior nn:   assumes \valid(pool);   ensures \result == pool->object_size;
+    behavior nn:   assumes \valid_read(pool);   ensures \result == pool->object_size;
     complete behaviors; disjoint behaviors; */
 static inline usize pool_object_size(const Pool* pool)     { return pool ? pool->object_size : 0u; }
 
-/*@ requires pool == \null || pool_invariant(pool); assigns \nothing; */
+/*@ requires pool == \null || pool_invariant_read(pool); assigns \nothing; */
 static inline usize pool_memory_used(const Pool* pool)     { return pool ? (pool->object_size * pool->used)     : 0u; }
 
-/*@ requires pool == \null || pool_invariant(pool); assigns \nothing; */
+/*@ requires pool == \null || pool_invariant_read(pool); assigns \nothing; */
 static inline usize pool_memory_reserved(const Pool* pool) { return pool ? (pool->object_size * pool->capacity) : 0u; }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -667,7 +684,7 @@ static inline bytes_t pool_as_bytes(Pool* pool) {
  * @brief Read-only twin of pool_as_bytes() — see API-001
  */
 /*@
-  requires pool == \null || pool_invariant(pool);
+  requires pool == \null || pool_invariant_read(pool);
   assigns  \nothing;
   ensures  \result.len == 0 ==> \result.ptr == \null;
 */
@@ -698,7 +715,7 @@ static inline bytes_t pool_reserved_bytes(Pool* pool) {
  * @brief Read-only twin of pool_reserved_bytes() — see API-001
  */
 /*@
-  requires pool == \null || pool_invariant(pool);
+  requires pool == \null || pool_invariant_read(pool);
   assigns  \nothing;
 */
 static inline cbytes_t pool_reserved_cbytes(const Pool* pool) {

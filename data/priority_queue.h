@@ -583,6 +583,25 @@ typedef struct {
 
   predicate pq_wf(PriorityQueue* pq) = pq_wf_buf(pq) && pq->len <= pq->capacity;
 
+  // VERIFY-066: pq_wf for a queue read through a pointer to const.
+  // \valid(pq) asks that the queue be writable through pq, which in
+  // Frama-C's reading of ACSL a pointer to const never is: Eva found every
+  // call of pq_peek invalid. pq_peek and pq_as_cbytes only read the queue,
+  // so they require it readable. The other conjuncts are pq_wf_buf's, and
+  // must stay so.
+  predicate pq_wf_read(PriorityQueue* pq) =
+       \valid_read(pq)
+    && pq->elem_size > 0
+    && pq->capacity  > 0
+    && pq->cmp != \null
+    && pq_cmp_builtin(pq)
+    && pq_cmp_fits(pq)
+    && pq->capacity <= (CANON_USIZE_MAX - 2) / 2
+    && pq->capacity <= CANON_USIZE_MAX / pq->elem_size
+    && \valid((char*)pq->data + (0 .. pq->capacity * pq->elem_size - 1))
+    && \separated(pq, (char*)pq->data + (0 .. pq->capacity * pq->elem_size - 1))
+    && pq->len <= pq->capacity;
+
   // The slot index i is inside the live prefix.
   predicate pq_in_use(PriorityQueue* pq, integer i) = 0 <= i < pq->len;
 */
@@ -1375,7 +1394,7 @@ static inline bool pq_pop(borrowed(PriorityQueue*) pq, void* out) {
 #ifdef __FRAMAC__
 /*@
   requires pq == \null || \valid_read(pq);
-  requires pq != \null && pq->len > 0 ==> pq_wf(pq);  // commit 6: when out == NULL
+  requires pq != \null && pq->len > 0 ==> pq_wf_read(pq);  // commit 6: when out == NULL
                                               // and the queue is non-empty, the
                                               // `none` branch still calls
                                               // pq_peek_raw's NONEMPTY behaviour,
@@ -1387,7 +1406,7 @@ static inline bool pq_pop(borrowed(PriorityQueue*) pq, void* out) {
     ensures \result == \false;
   behavior some:
     assumes pq != \null && pq->len > 0 && out != \null;
-    requires pq_wf(pq);
+    requires pq_wf_read(pq);
     requires \valid((char*)out + (0 .. pq->elem_size - 1));
     requires \separated((char*)out + (0 .. pq->elem_size - 1), (char*)pq->data + (0 .. pq->capacity * pq->elem_size - 1));
     assigns ((char*)out)[0 .. pq->elem_size - 1];
@@ -1586,14 +1605,14 @@ static inline bytes_t pq_as_bytes(borrowed(PriorityQueue*) pq) {
 #ifdef __FRAMAC__
 /*@
   requires pq == \null || \valid_read(pq);
-  requires pq == \null || pq->data == \null || pq_wf(pq);   // VERIFY-062
+  requires pq == \null || pq->data == \null || pq_wf_read(pq);   // VERIFY-062
   assigns \nothing;
   behavior empty:
     assumes pq == \null || pq->data == \null || pq->len == 0;
     ensures \result.len == 0;
   behavior live:
     assumes pq != \null && pq->data != \null && pq->len > 0;
-    requires pq_wf(pq);
+    requires pq_wf_read(pq);
     ensures \result.ptr == (const u8*)pq->data;
     ensures \result.len == pq->len * pq->elem_size;
   complete behaviors;
