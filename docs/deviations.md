@@ -31420,7 +31420,7 @@ author, as "What follows" said.
 | **ID**         | VERIFY-065 |
 | **Date**       | 2026-11-09 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run. |
-| **Status update** | 2026-11-10 — CLOSED. Run 1: H1 MATCH; H2, H3, H5 and H6 MISS, on refused downloads of CVC5; H4 MATCH on the 14 units it completed. The fix's run (#3, all thirteen workflows): F1 to F4 MATCH, F5 and F6 MISS, on proofs near the time limit. Run 2 (#4, the pins): R1 to R6 MATCH. Run 3 (#5, enforced): S1 to S4 MATCH. `13 · Prover agreement` is a gate. See "Closed" below. The Status above is the record as committed. |
+| **Status update** | 2026-11-10 — CLOSED. Run 1: H1 MATCH; H2, H3, H5 and H6 MISS, on refused downloads of CVC5; H4 MATCH on the 14 units it completed. The fix's run (#3, all thirteen workflows): F1 to F4 MATCH, F5 and F6 MISS, on proofs near the time limit. Run 2 (#4, the pins): R1 to R6 MATCH. Run 3 (#5, enforced): S1 to S4 MATCH. `13 · Prover agreement` is a gate. See "Closed" below. The closing push (#6): C1 and C2 MATCH. The Status above is the record as committed. |
 | **Baseline**   | 703899a (`VERIFY-064 scored: all four predictions match; the provers' agreement measured`) |
 | **Scope**      | VERIFY-064's probe moves to `tools/agreement/` and its workflow becomes `13 · Prover agreement`, run on push for the units a push can affect; `8 · Records` checks the probe's units against the proof jobs; the CI map, `docs/verification.md` and the probe's README. No code, contract, proof job or pin changes. |
 | **Category**   | What the proofs trust: the provers' agreement, measured whenever it can change, decided with the author (2026-11-09). |
@@ -31835,3 +31835,288 @@ Left for later, on the list: the two single-prover proofs of
 `vec_int_extend_from_range`'s loop invariant 5 are the ones a slow runner
 could lose, which would fail `frama-c-vec-range`'s pin. A helper assertion
 or lemma that makes them easier would remove that risk.
+
+### Scored: the closing push (2026-11-10)
+
+The push of c1c5d30 and 8ffe97d started `2 · Platforms` #54, `8 · Records`
+#60 and `13 · Prover agreement` #6 (23:26 UTC, 2026-11-09). All three are
+green.
+
+| # | scored |
+|---|--------|
+| C1 | **MATCH.** 2, 8 and 13 ran; the others did not. 13 ran the five units whose pins changed (diag, pool, priority-queue, vec-fmt and vec-range), 15 runs. |
+| C2 | **MATCH.** All green, enforced: each of the five units has no difference from its pins. |
+
+Both predictions match.
+
+---
+
+## VERIFY-066: Pre-registration — Eva on Programs That Use Canon-C: One Program per Verified Unit, at the Proofs' Ten Machine Models, Report-Only
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-066 |
+| **Date**       | 2026-11-10 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run. |
+| **Baseline**   | 8ffe97d (`Prover agreement pins: run 3's nine new slow proofs (VERIFY-065 closing)`) |
+| **Scope**      | A program for each verified unit in `tools/eva/programs/`, compiled and run, and analysed by Eva, by `tools/eva/eva.py` in a new workflow, `14 · Eva: programs that use Canon-C`; `8 · Records` checks the programs against the units; the CI map. No library code, contract, proof job or pin changes. |
+| **Category**   | What the proofs leave to the caller: whether a program meets the contracts, measured by Eva at the proofs' machine models. Item C of the list agreed with the author (2026-11-09; started 2026-11-10). |
+
+### The question
+
+WP proves each function of the 26 verified units against its contract: if
+the preconditions hold, the function has no runtime error and ensures its
+postconditions. Meeting the preconditions is the caller's part. WP checks
+it at the calls inside the code it proves; in a user's program, nothing
+checks it. Eva, Frama-C's abstract interpreter, can: it analyses a whole
+program from `main`, computes the values the program can take, and reports
+each place where a runtime error may happen (an alarm) and each call whose
+precondition may not hold. What it does not report cannot happen in the
+program it analyses, under its assumptions (the machine model, and
+Frama-C's specifications of the C library).
+
+The author's list has it as item C: Eva on programs that use the library,
+at the machine models the proofs use, report-only first; then a gate on no
+alarms, or on pinned alarms each with its argument; then a badge and a
+section on using Canon-C with Eva. This record is the first run.
+
+### The programs
+
+`tools/eva/programs/` holds 26 programs, one for each unit of
+`tools/agreement/agreement.py`, written for this record. Each includes its
+unit's file and is preprocessed with the unit's flags, as the unit's proof
+job preprocesses it, so that Eva reads the code and the contracts WP
+proves. A generic container's program includes the driver its proof
+instantiates (`vec_int` from `vmacros/vdrivers/vec_verify.h`, for example).
+Each program calls its unit's functions as a user would: with values the
+contracts allow, and with the values the functions are written to refuse
+(a full container, an index out of range, an overflow, a division by zero).
+It checks what each call returns (`CHECK`) and marks the end of `main`
+(`END`, in `eva_program.h`). Under Frama-C both call Eva builtins, which
+print what Eva computed there: the line of a check that Eva finds can fail,
+and the number of failed checks at the end. Compiled, a failed check makes
+`main` return 1.
+
+`tools/eva/eva.py`:
+
+- `native` compiles each program with GCC (`-std=c11 -Wall -Wextra -Werror`,
+  AddressSanitizer and UndefinedBehaviorSanitizer) and runs it.
+- `run MODEL` runs Eva on each program at one of the ten machine models of
+  the proofs: x86_64 and the nine of `proofs-machdeps.yml`. The options are
+  `-eva-precision 3 -eva-split-return full` for every program;
+  `-eva-use-spec ptr_align_padding` for a program that includes
+  `core/primitives/ptr.h` (see "Addresses" below); and
+  `-warn-special-float none` for `compare.c`, which sorts a NaN. Frama-C's
+  Report plugin writes the status of every property (`-report-csv`), from
+  which the script reads the alarms and the calls whose precondition Eva
+  leaves open, both those the program makes and those the library's own
+  code makes.
+- `report` gives the totals by model, and `check`, run by `8 · Records`,
+  checks that every unit has a program that includes its unit's file, and
+  that the models are those of `proofs-machdeps.yml` and of the workflow's
+  matrix.
+
+### Written here, with Frama-C 25
+
+The programs were written and run here with GCC 13.3, the runner's, and
+Frama-C 25.0-beta, the only Frama-C this machine has: it cannot reach the
+opam repository to build 29, the CI's. Frama-C 25 needs `-c11`, and cannot
+parse the `calls` annotation of `data/priority_queue.h`, which it was told to
+skip (`-kernel-warn-key annot-error=active`); 29 needs neither. What the
+programs and Eva 25 showed:
+
+- **Calls that broke their contracts, in the programs as first written.**
+  Eva found two, each as a precondition that is invalid at the call, and
+  the analysis of that path stopped there:
+  - `mem_swap_buf` given a 4-byte scratch buffer for a 16-byte swap.
+    AddressSanitizer found it too, as a stack buffer overflow.
+  - `vec_int_at` with an index past the vector's length, expecting NULL. In
+    the proofs' configuration its contract requires the index to be in
+    range, and the body returns the element's address without a check
+    (`ensure_msg` is compiled out). Natively, the check that expected NULL
+    failed; AddressSanitizer reported nothing, since the address was inside
+    the buffer, past the length.
+
+  The native runs also found six checks that expected the wrong result. In
+  five, the library does what its documentation says: `pool_init` rounds the
+  object size up to `mem_align`'s; `diag_push` returns true when it drops a
+  frame; a `StringBuf` does not grow; `hashmap_insert` refuses a new value
+  for a key it holds once the map is at its load limit, which it checks
+  first; `vec_int_to_stringbuf` writes no separators. In the sixth, a length
+  was miscounted. Each program was corrected.
+- **F1. Contracts that ask `\valid` of a pointer to const.** In Frama-C's
+  reading of ACSL, `\valid(p)` means that `*p` can be written through `p`,
+  which a pointer to const never allows. Eva evaluates such a precondition
+  as invalid at every call, and the analysis of the path stops there. WP
+  does not apply that reading, so the proofs did not show it. The contracts
+  of 27 read-only functions ask it, directly or through an invariant
+  predicate that does:
+  - `core/arena.h`, 10: `arena_stats` (compiled only with
+    `CANON_ARENA_DEBUG`), `arena_capacity`, `arena_remaining`, `arena_used`,
+    `arena_is_empty`, `arena_is_full`, `arena_mark`, `arena_as_cbytes`,
+    `arena_buffer_cbytes` and `arena_free_cbytes`;
+  - `core/pool.h`, 11: `pool_get_const`, `pool_used`, `pool_capacity`,
+    `pool_remaining`, `pool_is_full`, `pool_is_empty`, `pool_object_size`,
+    `pool_memory_used`, `pool_memory_reserved`, `pool_as_cbytes` and
+    `pool_reserved_cbytes`;
+  - `data/hashmap/hashmap_impl.h`, 4, through `inv_`: `hashmap_load_factor`,
+    `hashmap_get`, `hashmap_contains_key` and `hashmap_iter_next`;
+  - `data/priority_queue.h`, 2, through `pq_wf`: `pq_peek` and
+    `pq_as_cbytes`.
+
+  A scan of the contracts under `core/`, `semantics/`, `data/` and the
+  drivers found no other. Five programs stop at their first such call:
+  `arena.c` at `arena_capacity`, `pool.c` in `pool_init`'s call of
+  `arena_remaining`, `region.c` at `arena_is_empty`, `priority_queue.c` at
+  `pq_peek` and `hashmap.c` at `hashmap_load_factor`. The contracts are left
+  as they are in this push, so that Frama-C 29's Eva measures them in CI
+  before they change. The fix is the next push, with predictions of its
+  own: it changes proved contracts, so the proof jobs run again, and the
+  provers' agreement may move. Tried here for `arena.h` and `pool.h`: with
+  `\valid_read` in their place, and an `arena_invariant_read` and a
+  `pool_invariant_read` for the invariants, `arena.c`, `pool.c` and
+  `region.c` run to their end under Eva 25, with no invalid call.
+- **Addresses.** Eva does not know where an object lies in memory, so it
+  cannot compute an address modulo an alignment. Without help, it knows
+  nothing of `ptr_align_padding`'s result, and every allocation that
+  `arena.h`, `pool.h` and the containers built on them make is imprecise.
+  With the function's contract in place of its body (`-eva-use-spec`), the
+  padding is below the alignment, as WP proves. What Eva still cannot decide:
+  in `ptr.c`, the pointers `ptr_align_up` and `ptr_align_down` return (two
+  alarms, comparing them with NULL) and `ptr_align_up`'s precondition `fits`;
+  in `lifetime.c`, that the ids differ from `REGION_ID_STATIC`; and, with
+  F1 fixed, in `pool.c`, the pool's invariant, which relates two marks that
+  the arena's padding separates.
+- **The C library's specifications.** Frama-C 25 specifies `memcmp`'s result
+  with a logic function that Eva does not evaluate, so every check of an
+  equality the library computes with `memcmp` is undecided (`slice.c`,
+  `memory.c`, `array.c`). `vsnprintf`'s specification does not say what the
+  characters it writes are computed from, so Eva assumes that they may hold
+  the arguments' addresses, which are dangling once the call returns: in
+  `vec_fmt.c`, reading back the first character of what it formatted is an
+  alarm. The lengths of what it formats are undecided too (`vec_fmt.c`,
+  `stringbuf.c`).
+- **Frama-C 25's `ppc_32`.** At this model, Eva did not use its builtin for
+  `malloc` ("incompatible type"), and found two accesses to allocated blocks
+  invalid in `memory.c` and a call in `vec_int_alloc`. At x86_64 and
+  `msvc_x86_64` it used the builtin. Frama-C 29 has not been tried.
+- **The options.** `-eva-precision` 1 and 3 with and without
+  `-eva-split-return full`, and 6 and 11 with it, were run on the 26
+  programs, with F1 fixed in `arena.h` and `pool.h`. The split brought the
+  alarms from 7 to 3 and the undecided calls from 53 to 49, at precision 1
+  and at 3. At precision 3, Eva confirmed every check of 14 programs,
+  against 13 at 1; 6 and 11 gave what 3 gave. With 3 and the split, the 26
+  took 16 s. The split keeps apart the paths of `hashmap_init`: Eva
+  cannot show the buffer aligned, so it considers that `hashmap_init` may
+  refuse it, and joined with that path, the map's fields were uninitialized
+  (four alarms).
+
+### The change
+
+1. **`tools/eva/`**: the 26 programs and `eva_program.h`, `eva.py`, and a
+   README.
+2. **`.github/workflows/eva.yml`**, `14 · Eva: programs that use Canon-C`:
+   on push when `core/`, `semantics/`, `data/`, `vmacros/vdrivers/`,
+   `tools/eva/`, `tools/agreement/agreement.py` (whose units it reads), the
+   machine models, the Frama-C setup or itself change, and by hand. A job
+   compiles and runs the programs; a job per machine model runs Eva on all
+   26, and posts a notice for each; a last job gives the totals.
+   Report-only: `ENFORCE` in `eva.py` is off.
+3. **`8 · Records`** runs `eva.py check`, and also runs when `tools/eva/`
+   changes.
+4. **The CI map**: row 14, row 8, and what a newly verified unit needs.
+
+### Measured here
+
+- **Natively**, the 26 programs compile with GCC 13.3 and return 0 under
+  AddressSanitizer and UndefinedBehaviorSanitizer.
+- **Eva 25 at x86_64**, with this push's programs and options (F1 not
+  fixed). "Calls" counts the preconditions Eva finds invalid / cannot decide;
+  "checks" counts the program's checks Eva cannot confirm; "functions", those
+  Eva analysed.
+
+  | program | end reached | alarms | calls in the program | calls in the library | checks | functions |
+  |---------|:-----------:|-------:|:--------------------:|:--------------------:|-------:|----------:|
+  | `checked` | yes | 0 | 0 / 0 | 0 / 0 | 0 | 31 |
+  | `bits` | yes | 0 | 0 / 0 | 0 / 0 | 0 | 19 |
+  | `compare` | yes | 0 | 0 / 0 | 0 / 0 | 0 | 26 |
+  | `ptr` | yes | 2 | 0 / 1 | 0 / 1 | 2 | 22 |
+  | `slice` | yes | 0 | 0 / 0 | 0 / 0 | 5 | 23 |
+  | `memory` | yes | 0 | 0 / 0 | 0 / 0 | 7 | 37 |
+  | `arena` | no | 0 | 1 / 0 | 0 / 0 | 0 | 3 |
+  | `pool` | no | 0 | 0 / 0 | 1 / 0 | 0 | 7 |
+  | `region` | no | 0 | 1 / 0 | 0 / 0 | 0 | 16 |
+  | `lifetime` | yes | 0 | 0 / 0 | 0 / 0 | 1 | 2 |
+  | `error` | yes | 0 | 0 / 0 | 0 / 0 | 0 | 5 |
+  | `option` | yes | 0 | 0 / 0 | 0 / 0 | 0 | 24 |
+  | `result` | yes | 0 | 0 / 0 | 0 / 0 | 0 | 24 |
+  | `borrow` | yes | 0 | 0 / 4 | 0 / 0 | 0 | 32 |
+  | `diag` | yes | 0 | 0 / 3 | 0 / 1 | 2 | 16 |
+  | `vec` | yes | 0 | 0 / 0 | 0 / 0 | 0 | 55 |
+  | `deque` | yes | 0 | 0 / 0 | 0 / 0 | 0 | 25 |
+  | `bitset` | yes | 0 | 0 / 0 | 0 / 0 | 0 | 44 |
+  | `priority_queue` | no | 0 | 1 / 0 | 0 / 0 | 0 | 28 |
+  | `range` | yes | 0 | 0 / 0 | 0 / 0 | 0 | 16 |
+  | `vec_range` | yes | 0 | 0 / 0 | 0 / 0 | 0 | 15 |
+  | `vec_fmt` | yes | 1 | 0 / 3 | 0 / 3 | 5 | 14 |
+  | `stringbuf` | yes | 0 | 0 / 11 | 0 / 1 | 5 | 43 |
+  | `stack` | yes | 0 | 0 / 0 | 0 / 0 | 0 | 37 |
+  | `array` | yes | 0 | 0 / 0 | 0 / 0 | 3 | 42 |
+  | `hashmap` | no | 0 | 1 / 1 | 0 / 0 | 0 | 20 |
+
+  21 programs reach their end, 13 of them with every check confirmed. The
+  five that do not are F1's. The undecided calls: `borrow.c`'s four ask
+  `\object_pointer` of a borrow's pointer; `diag.c`'s, that each frame's
+  strings be valid strings, a quantified property; `stringbuf.c`'s and
+  `vec_fmt.c`'s, that the string be terminated at its length, which a
+  formatted append leaves undecided; `ptr.c`'s is an address's (`fits`),
+  and `hashmap.c`'s the map's invariant, which quantifies over its slots.
+- **At `ppc_32` and `msvc_x86_64`**, the two other models of the ten that
+  Frama-C 25 has: the same 21 programs reach their end. At `ppc_32`, the
+  two accesses to allocated blocks in `memory.c` are invalid, and so is the
+  call in `vec_int_alloc` (see above); `memory.c` and `vec.c` still reach
+  their end, past the allocations. At both models, `borrow.c`'s four calls
+  are valid.
+- **`eva.py check`** passes. On a copy of the workflow without `ppc_32` in
+  its matrix, it fails and names the difference.
+- **Records**: `tools/record_coverage.py --strict --complete --pending-from
+  8ffe97d`, `tools/machdeps/check_pins.py` and `agreement.py check` pass.
+- **clang-tidy**: the job's step finds nothing. No file under `test/`, the
+  files it reads, changes.
+
+### The workflows
+
+`tools/which_workflows.py` on this record's commit and the change's: 1 to
+6 run, because files under `.github/workflows/` change; 8 and 14 run; 7 and
+9 to 13 do not.
+
+### Predictions
+
+This is run 1, report-only. Nothing is pinned yet.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| E1 | **The workflows**: 1 to 6, 8 and 14 run; 7 and 9 to 13 do not. | another set | H |
+| E2 | **1 to 6 and 8 are green.** Every proof job is at its pin, and 1 to 3 give VERIFY-063's numbers; 8 passes with the new check. | a failure, or another number | H: no library code changes; the checks were run here. |
+| E3 | **Natively, all 26 programs compile and return 0** under ASan and UBSan. | a program that does not compile, or does not return 0 | H: the runner's GCC is the one used here. |
+| E4 | **Eva finishes all 260 runs**, 26 programs at 10 models, each with Eva's summary and the status file. | a run without them | M: Frama-C 29's Eva has not run these programs, and the seven models of `tools/machdeps/` have been read only by WP. |
+| E5 | **F1 stops the same five programs at x86_64**, each at the call named above; the other 21 reach their end. | another set of programs, or another call | M–H: the reading of `\valid` is Frama-C's ACSL, not Eva 25's alone. |
+| E6 | **At x86_64, the 21 programs that reach their end make no invalid call**, in their own code or in the library's, and have alarms only in `ptr.c` (two) and `vec_fmt.c` (one). | an invalid call, or alarms elsewhere | M: Frama-C 29's specifications of the C library may differ from 25's. |
+| E7 | **The models agree on which programs reach their end**: the same 21 at all ten. | a program that reaches its end at one model and not at another | M: three models were tried here. |
+| E8 | **Each model's Eva step takes under 10 minutes.** | a longer step | H: the 26 programs took 16 s here. |
+| E9 | **14 is green**: report-only, its jobs fail only on a broken step. | a failure | H |
+
+**What follows.** Run 1's score decides the fix. If E5 matches, the 27
+contracts of F1 are changed in the next push, as tried here, with a record
+that predicts the proof jobs (each at its pin), the provers' agreement
+(13 runs the units that include the four headers, and a goal may change
+class) and Eva's second run. Then each program's alarms and undecided calls
+at each model are pinned, each with its argument or its fix; a run checks
+the pins; and `ENFORCE` is set. The badge and the section on using Canon-C
+with Eva come after that.
+
+Not measured here: the library's other configuration, with `require()`
+compiled in (without `CANON_NO_REQUIRE`), whose checks run before each body;
+the programs are analysed in the proofs' configuration, the code WP proves.
+
+The change is pushed with this record, in the commit after it.
