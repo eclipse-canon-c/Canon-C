@@ -70,6 +70,22 @@ the machine code. VST and RefinedC are in Coq, AutoCorres in
 Isabelle/HOL. Issue #12 records what it would take, starting with
 `ptr.h`, `memory.h` and `slice.h`. It is not scheduled.
 
+## MISRA C:2023 and MISRA C:2025
+
+The editions of MISRA C after MISRA C:2012 and its amendments: MISRA C:2023
+gathers 2012 and its amendments in one document, and MISRA C:2025 is the
+latest. (MISRA C++:2023 is a different standard, for C++, and does not apply
+here.) The project targets MISRA C:2012: its checker in CI, Cppcheck's MISRA
+addon, is written for that edition, and it is still widely cited.
+
+Why it waits: a checker for the newer editions is needed first. If a
+commercial analyser that checks them (Astrée or the LDRA tool suite, both
+asked on 2026-11-10) can be run on Canon-C, it would give the gap.
+
+Sources: [Astrée's compliance list](https://www.absint.com/astree/compliance.htm),
+[MISRA C on Wikipedia](https://en.wikipedia.org/wiki/MISRA_C) and [LDRA on
+MISRA C:2025](https://ldra.com/ldra-blog/misra-c-2025-the-whys-and-wherefores-of-whats-new/).
+
 ## Concurrency: Mthread, DeadlockF, Conc2seq
 
 Frama-C's plug-ins for concurrent C. The library is single-threaded apart
