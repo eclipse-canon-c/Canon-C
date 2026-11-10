@@ -138,6 +138,9 @@ CONTRACT_KINDS = ('precondition', 'postcondition', 'assigns clause', 'from claus
 # unreachable', and their '(under hypotheses)' forms.
 OPEN = ('Unknown', 'Invalid')
 
+# How much of Frama-C's output a run that does not finish prints.
+TAIL = 80
+
 
 def unit_of(program):
     return agreement.UNITS[PROGRAMS[program]]
@@ -309,7 +312,9 @@ def run(model, programs):
         start = time.time()
         try:
             # Frama-C reads the directory from PWD, which cwd= does not set.
-            p = subprocess.run(cmd, cwd=ROOT, env=dict(os.environ, PWD=ROOT), capture_output=True,
+            # OCAMLRUNPARAM=b: an internal error prints OCaml's backtrace.
+            p = subprocess.run(cmd, cwd=ROOT, env=dict(os.environ, PWD=ROOT, OCAMLRUNPARAM='b'),
+                               capture_output=True,
                                text=True, errors='replace', timeout=limit)
             text, code = p.stdout + p.stderr, p.returncode
         except subprocess.TimeoutExpired as e:
@@ -323,6 +328,12 @@ def run(model, programs):
         with open(stem + '.json', 'w') as f:
             json.dump(s, f, indent=1)
         print(line(s), flush=True)
+        if s.get('aborted') or s.get('functions') is None:
+            # A run that did not finish: the end of Frama-C's own output,
+            # which says why (VERIFY-066 run 1: exit 125 on three programs).
+            print(f'  -- the last {TAIL} lines of Frama-C\'s output:')
+            for l in text.rstrip().split('\n')[-TAIL:]:
+                print('  | ' + l)
         for d in details(s):
             print(d)
         results.append(s)
