@@ -31858,7 +31858,7 @@ Both predictions match.
 | **ID**         | VERIFY-066 |
 | **Date**       | 2026-11-10 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run. |
-| **Status update** | 2026-11-10 — Run 1 scored: E1, E2, E3, E7, E8 and E9 MATCH; E4, E5 and E6 MISS, because Frama-C 29 stops with an internal error on three programs, `region.c`, `vec.c` and `stringbuf.c`, at every model. F1 is confirmed in CI on the four programs it was predicted to stop that ran. See "Scored: run 1" below. Run 1b (#2): D1 to D4 MATCH; D5 carried to the fix's run. The fix's run (#3, with twelve workflows): F1, F2 and F4 to F9 MATCH, and D5; F3 MISS: `pool_init`'s `ensures` part 4 is no longer proved at the five ILP32 models, as at the others, and its ILP32 pin takes it. The error is raised on entering `arena_alloc`. See "Scored: the fix" below. The Status above is the record as committed. |
+| **Status update** | 2026-11-10 — Run 1 scored: E1, E2, E3, E7, E8 and E9 MATCH; E4, E5 and E6 MISS, because Frama-C 29 stops with an internal error on three programs, `region.c`, `vec.c` and `stringbuf.c`, at every model. F1 is confirmed in CI on the four programs it was predicted to stop that ran. See "Scored: run 1" below. Run 1b (#2): D1 to D4 MATCH; D5 carried to the fix's run. The fix's run (#3, with twelve workflows): F1, F2 and F4 to F9 MATCH, and D5; F3 MISS: `pool_init`'s `ensures` part 4 is no longer proved at the five ILP32 models, as at the others, and its ILP32 pin takes it. The error is raised on entering `arena_alloc`. See "Scored: the fix" below. The ILP32 pin's run: P1 to P3 MATCH. Eva's error probe is pre-registered, R1 to R13. The Status above is the record as committed. |
 | **Baseline**   | 8ffe97d (`Prover agreement pins: run 3's nine new slow proofs (VERIFY-065 closing)`) |
 | **Scope**      | A program for each verified unit in `tools/eva/programs/`, compiled and run, and analysed by Eva, by `tools/eva/eva.py` in a new workflow, `14 · Eva: programs that use Canon-C`; `8 · Records` checks the programs against the units; the CI map. No library code, contract, proof job or pin changes. |
 | **Category**   | What the proofs leave to the caller: whether a program meets the contracts, measured by Eva at the proofs' machine models. Item C of the list agreed with the author (2026-11-09; started 2026-11-10). |
@@ -32398,3 +32398,79 @@ Polyspace, LDRA and Astrée as planned static analysers, and
 
 **What follows.** P1 to P3 scored, the reproducer of item 2 above is
 pre-registered.
+
+### Scored: the ILP32 pin of pool (2026-11-10)
+
+The push of 8eea261 to d503201 (06:41 UTC) started `2 · Platforms` #58,
+`8 · Records` #64, `10 · Machine models` #10 and `11 · Proofs: machine
+models` #10, 108 jobs, all green.
+
+| # | scored |
+|---|--------|
+| P1 | **MATCH.** 2, 8, 10 and 11 ran, and no other. |
+| P2 | **MATCH.** 11 is green: `frama-c-pool` proves 4069 / 4101 at the five ILP32 models, as pinned, and the other 85 jobs gave #9's notices. Part 4 went past the limit again at all five, so #9's change was not a runner's. |
+| P3 | **MATCH.** 2's 15 jobs gave #57's notices; 8, whose steps include `check_pins.py`, and 10 are green. |
+
+### Eva's error probe, pre-registered (2026-11-10)
+
+**Why.** Frama-C 29's Eva stops on entering `arena_alloc` in five of the 26
+programs, at every model (F7). The error goes to the Frama-C developers
+with a small program that reproduces it, and the way around it in this
+repository is chosen from what raises it. Two facts narrow it. Frama-C 25,
+which runs here, takes every program to its end, and says of
+`arena_alloc`'s behaviours "Behavior may be inactive, no reduction
+performed": the address converted to an integer makes `arena_can_fit`
+undecided. And Frama-C 28's changelog has "Support evaluation of simple
+\let bindings in ACSL terms and predicates": `arena_can_fit` binds that
+address, and a pad computed from it, with `\let`. It is the only `\let` of
+the library that Eva evaluates at a call: the others are in `bits.h`'s
+postconditions, over integers, and `bits.c` finishes at every model.
+
+**The probe.** `tools/probes/verify-066/eva_error_probe.py`, in `9 ·
+Probes` (`evaerror-probe`, report-only), runs Eva on nine variants
+(`tools/probes/verify-066/README.md`):
+
+- six small programs, each as `frama-c -eva FILE` and nothing else:
+  `r0_full.c`, `arena_alloc` standalone (the Arena, its invariant,
+  `arena_can_fit` as written, the three behaviours, a body); `r1_min.c`,
+  its smallest form (the address bound by `\let`, a pad, one conjunct, two
+  complementary behaviours); and `r1_min.c` without `\let` (`r2_nolet.c`),
+  with no address converted (`r3_nocast.c`), with one behaviour
+  (`r4_onebhv.c`), and with no body (`r5_nobody.c`);
+- `tools/eva/programs/arena.c` with 14's command at x86_64: as it is
+  (`a0_control`), with `arena_can_fit`'s three `\let` written out in a copy
+  of `core/arena.h` (`a1_inline`), and with `arena_alloc` read by its
+  contract, `-eva-use-spec` (`a2_usespec`).
+
+For a run that stops it prints the backtrace and the last call Eva names.
+Run here with Frama-C 25, all nine finish; `arena.c` reaches its end in all
+three, with checks Eva cannot confirm after the allocations (`fails` from 0
+to 9 in `a0_control`). Each small program compiles with `-Wall -Wextra
+-Werror` and, but for `r5_nobody.c`, runs and returns 0.
+
+**The push.** It changes `.github/workflows/probes.yml`, and every workflow
+that watches the workflow files runs: `tools/which_workflows.py` names 1 to
+6, 8 and 9. In 9, every probe runs, since each watches `probes.yml`.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| R1 | **1 to 6, 8 and 9 run**, and no other. | another set | H |
+| R2 | **1 to 6 and 8 are green**, and each job of 1 to 6 gives the notices of its last run (#44, #58, #44, #44, #44 and #44), times aside. | a failure, or another notice | H |
+| R3 | **The eight older probes are green**, each with the notices of its last run (#12; #13 for the pointer and char probes). | a failure, or another notice | M–H: a WP goal near its prover's limit could fall either way. |
+| R4 | **`r0_full.c` stops** with `Reduce_to_bottom`, on entering `arena_alloc` from `main`. | it finishes, or stops otherwise | M–H: it is `arena_alloc`'s contract as written, without Canon-C's headers. |
+| R5 | **`r1_min.c` stops** the same way, on entering `alloc`. | it finishes, or stops otherwise | M: a construct `r1_min.c` leaves out may be needed. |
+| R6 | **`r2_nolet.c` finishes.** | it stops | M: the \let is the likelier trigger, not a certain one. |
+| R7 | **`r3_nocast.c` finishes.** | it stops | M–H: with no address, the pad is 0 and `fits` is decided. |
+| R8 | **`r4_onebhv.c` stops.** | it finishes | M: the error is raised deciding a behaviour's activity, and one behaviour is enough to decide. |
+| R9 | **`r5_nobody.c` stops.** | it finishes | M: the behaviours are decided at the call, body or not. |
+| R10 | **`a0_control` stops** as in 14, on entering `arena_alloc` from `arena.c` line 20. | it finishes, or stops otherwise | H |
+| R11 | **`a1_inline` finishes and reaches the end of `main`.** | it stops, or the end is not reached | M: as R6. |
+| R12 | **`a2_usespec` stops.** | it finishes | M: as R9. |
+| R13 | **The probe's job is green**, and posts nine notices. | a failure, or another count | H |
+
+**What follows.** The smallest program that stops goes to the Frama-C
+developers, with its backtrace and Frama-C's version, from the author's
+account. If R6 and R11 match, writing `arena_can_fit` without `\let` is the
+way around it that keeps its meaning: WP must prove it as before, at every
+model, in a record of its own. If not, the five programs are pinned as
+stopping, and wait for Frama-C.
