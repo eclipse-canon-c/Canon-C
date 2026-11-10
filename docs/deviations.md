@@ -31858,7 +31858,7 @@ Both predictions match.
 | **ID**         | VERIFY-066 |
 | **Date**       | 2026-11-10 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run. |
-| **Status update** | 2026-11-10 — Run 1 scored: E1, E2, E3, E7, E8 and E9 MATCH; E4, E5 and E6 MISS, because Frama-C 29 stops with an internal error on three programs, `region.c`, `vec.c` and `stringbuf.c`, at every model. F1 is confirmed in CI on the four programs it was predicted to stop that ran. See "Scored: run 1" below. Run 1b (#2): D1 to D4 MATCH; D5 carried to the fix's run. The Status above is the record as committed. |
+| **Status update** | 2026-11-10 — Run 1 scored: E1, E2, E3, E7, E8 and E9 MATCH; E4, E5 and E6 MISS, because Frama-C 29 stops with an internal error on three programs, `region.c`, `vec.c` and `stringbuf.c`, at every model. F1 is confirmed in CI on the four programs it was predicted to stop that ran. See "Scored: run 1" below. Run 1b (#2): D1 to D4 MATCH; D5 carried to the fix's run. The fix's run (#3, with twelve workflows): F1, F2 and F4 to F9 MATCH, and D5; F3 MISS: `pool_init`'s `ensures` part 4 is no longer proved at the five ILP32 models, as at the others, and its ILP32 pin takes it. The error is raised on entering `arena_alloc`. See "Scored: the fix" below. The Status above is the record as committed. |
 | **Baseline**   | 8ffe97d (`Prover agreement pins: run 3's nine new slow proofs (VERIFY-065 closing)`) |
 | **Scope**      | A program for each verified unit in `tools/eva/programs/`, compiled and run, and analysed by Eva, by `tools/eva/eva.py` in a new workflow, `14 · Eva: programs that use Canon-C`; `8 · Records` checks the programs against the units; the CI map. No library code, contract, proof job or pin changes. |
 | **Category**   | What the proofs leave to the caller: whether a program meets the contracts, measured by Eva at the proofs' machine models. Item C of the list agreed with the author (2026-11-09; started 2026-11-10). |
@@ -32306,3 +32306,95 @@ pins; a goal that changes prover class is listed and its pin changed, in
 the record. If F7 matches, a small program that reproduces the error goes
 to the Frama-C developers, and the way around it in this repository is
 decided then.
+
+### Scored: the fix (2026-11-10)
+
+The push of eb27e6f, cc894b9, c07a86b and a46b9d7 (03:46 UTC) started
+`1 · Build & test` #44, `2 · Platforms` #57, `3 · Static analysis &
+coverage` #44, `4 · Proofs: core/` #44, `5 · Proofs: semantics/` #44,
+`6 · Proofs: data/` #44, `7 · Proofs: -CC` #26, `8 · Records` #63,
+`9 · Probes` #13, `11 · Proofs: machine models` #9, `13 · Prover
+agreement` #7 and `14 · Eva` #3, 265 jobs. Eleven are green. 11 failed, in
+five jobs (F3).
+
+| # | scored |
+|---|--------|
+| F1 | **MATCH.** 1 to 9, 11, 13 and 14 ran; 10 and 12 did not. 13 ran the ten units named, 30 runs. In 9, the char probe and the pointer probe ran, and the six probes that watch other files were skipped. |
+| F2 | **MATCH.** Each job of 1, 2 and 3 gave the notices of its last run, #43, #56 and #43, times aside. |
+| F3 | **MISS.** Every proof job of 4, 5, 6 and 7, and 85 of 11's 90, gave the notices of its last run (#43, #43, #43, #25 and #8): each at its pin. The other five are `frama-c-pool` at the five ILP32 models, `cortex_m4`, `arm_linux_gnueabihf`, `rv32_ilp32`, `ppc32_linux_gnu` and `ppc_32`: 4069 / 4101, for the pin's 4070 / 4101. The goal left is `typed_cast_pool_init_ensures_part4`, which each of the three provers left at its 120 s limit, at each of the five. Each job compares its run with its pin, so the five failed, and 11 with them. |
+| F4 | **MATCH.** The char probe's two jobs are green: arena 3539 / 3570 at x86_64 with unsigned `char`, 3537 / 3570 at AArch64 with signed `char`, the two pinned goals as pinned. The pointer probe's 26 jobs gave #12's notices. |
+| F5 | **MATCH.** 13 is green. Each of the ten units reports "Against its pins: 0 difference(s)", and the goals no prover proves alone are the names its job pins; the seven goals named above are among the pinned. Slow goals, which the comparison leaves out, came and went as from runner to runner: `vec_int_extend_from_range`'s loop invariant 5, part 3, took Z3 112 s at #6, and Z3 does not prove it within its limit now; Alt-Ergo proves it in 39 s. |
+| F6 | **MATCH.** At all ten models, `priority_queue.c` and `hashmap.c` reach their end with every check confirmed (`fails {0}`), and in the 21 programs that finish, no call is invalid, the program's or the library's. `priority_queue.c`'s 247 preconditions are all valid. `hashmap.c` leaves 17 undecided: the map's invariant, `hashmap_inv_` or `hashmap_inv_read_`, at every call after the first insertion, 16 in `main` and one in `hashmap_contains_key`'s call of `hashmap_get`; Eva does not establish it, since it quantifies over every slot. `arena.c` and `pool.c` get past their calls of F1 (`arena.c`'s line 18; `pool_init`'s call of `arena_remaining`) and stop at `arena_alloc` (F7), so Eva gives no statuses for them. |
+| F7 | **MATCH.** The five programs stop at all ten models, 50 runs, each with run 1's error, `Unexpected error (Eva__Eval_terms.Reduce_to_bottom)`, and the call named is `arena_alloc`'s in each: from `main` at `arena.c` line 20 and `region.c` line 40; from `pool_init` at `core/pool.h` line 375 (`pool.c`); from `stringbuf_init_arena` at `data/stringbuf.h` line 475 (`stringbuf.c`); from `vec_int_arena_alloc` at `vmacros/vdrivers/vec_verify.h` line 1163 (`vec.c`). |
+| F8 | **MATCH.** The 19 other programs gave run 1's lines at all ten models, times aside; so did `region.c`, `vec.c` and `stringbuf.c`, which stop as in run 1. |
+| F9 | **MATCH.** 8 and 14 are green. |
+| D5 | **MATCH** (run 1b's, carried). The error is raised in Eva's analysis of `arena_alloc`, a function of `arena.h`, which `region.c`, `vec.c` and `stringbuf.c` call, at every model. |
+
+Eight of the nine match, and D5. What the run shows:
+
+- **F1 is gone.** The two programs it stopped that reach the calls,
+  `priority_queue.c` and `hashmap.c`, reach their end at every model with
+  every check confirmed.
+- **The error is raised on entering `arena_alloc`.** Eva names a call when
+  it enters it, a call of a function it reads by its specification
+  included: run here on `arena.c` with Frama-C 25 and `-eva-show-progress`,
+  it names `arena_alloc`, then `ptr_offset` (`core/arena.h` line 389, the
+  body's first call), then `ptr_align_padding`. In CI no run names
+  `ptr_offset`, so Frama-C 29 stops before `arena_alloc`'s body makes its
+  first call. With run 1b's backtrace (`Active_behaviors.is_active`), it
+  stops deciding which of `arena_alloc`'s behaviors is active: `fits` and
+  `does_not_fit` assume `arena_can_fit`, whose `\let addr` converts the
+  address `a->buffer + cur` to an integer. Frama-C's changelog for 30
+  (Zinc) to 34 (Selenium) lists no fix of it.
+- **The change cost one proof at 32 bits: `pool_init`'s `ensures`, part 4**
+  (`pool_invariant(pool)` on success). VERIFY-060 found it proved at the
+  ILP32 models only; it is a residual at x86_64 and at the LP64 and LLP64
+  models, pinned there and argued (VERIFY-010's Category 2a, which covers
+  every conjunct of `pool_invariant`; `docs/verification.md`). Phase C of
+  VERIFY-060 said of it: "A residual that closes at 32 bits needs no new
+  argument, and the x86_64 one stands." It stands at every model now. At
+  `cortex_m4`, #8's slowest Alt-Ergo proof took 13.5 s and #9's 3.6 s, so
+  #8's was likely part 4's. The likely mechanism, not measured: WP assumes
+  a callee's preconditions after the call, and `pool_init` calls
+  `arena_remaining` and `arena_mark`, whose preconditions now say
+  `arena_invariant_read` and `\valid_read` where they said
+  `arena_invariant` and `\valid`; part 4's hypotheses changed with them.
+  In the same unit, 13 shows one goal that WP's simplifier closed before
+  left to the provers, which each prove it (Qed 3340 to 3339): likely
+  `pool_init`'s call precondition of `arena_remaining`, no longer the same
+  predicate as `pool_init`'s own.
+
+**What follows.**
+
+1. The ILP32 pin of `pool` takes part 4 (below): the pin's run is this
+   push's.
+2. The error is reported to the Frama-C developers with a small program
+   that reproduces it. Only CI runs Frama-C 29, so the reproducer is run
+   there, with variants that tell which part of the evaluation raises it,
+   pre-registered as its own run. The way around it in this repository is
+   decided with the author from that run. Until then, the five programs are
+   reported as stopping.
+3. `hashmap.c`'s 17 undecided calls are argued with the Eva pins.
+
+### The ILP32 pin of pool, pre-registered (2026-11-10)
+
+**The change.** `tools/machdeps/pins/pool.ilp32.txt`: proved 4069 / 4101,
+and `typed_cast_pool_init_ensures_part4` among the unproved names, as the
+LP64 and LLP64 pins have it; its comment says why. No proof, contract or
+job changes. `tools/machdeps/check_pins.py`, run here, finds no problem:
+the goal is one the x86_64 job pins.
+
+This push also carries documentation no proof reads: the README names
+Polyspace, LDRA and Astrée as planned static analysers, and
+`docs/for-future.md` gains MISRA C:2023 and C:2025, and package managers.
+
+`tools/which_workflows.py`: 2, 8, 10 and 11 run.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| P1 | **2, 8, 10 and 11 run**, and no other. | another set | H |
+| P2 | **11 is green.** `frama-c-pool` at the five ILP32 models proves 4069 / 4101, part 4 unproved, as pinned; the other 85 jobs give #9's notices. | a failure, or another notice | M–H: part 4 went past 120 s with each prover at all five models, and a proof just under the limit at one of them would fail its job. |
+| P3 | **2, 8 and 10 are green**: 2's jobs give #57's notices, and 8 passes `check_pins.py`. | a failure, or another notice | H |
+
+**What follows.** P1 to P3 scored, the reproducer of item 2 above is
+pre-registered.
