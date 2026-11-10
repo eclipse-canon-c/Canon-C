@@ -31858,6 +31858,7 @@ Both predictions match.
 | **ID**         | VERIFY-066 |
 | **Date**       | 2026-11-10 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run. |
+| **Status update** | 2026-11-10 — Run 1 scored: E1, E2, E3, E7, E8 and E9 MATCH; E4, E5 and E6 MISS, because Frama-C 29 stops with an internal error on three programs, `region.c`, `vec.c` and `stringbuf.c`, at every model. F1 is confirmed in CI on the four programs it was predicted to stop that ran. See "Scored: run 1" below. The Status above is the record as committed. |
 | **Baseline**   | 8ffe97d (`Prover agreement pins: run 3's nine new slow proofs (VERIFY-065 closing)`) |
 | **Scope**      | A program for each verified unit in `tools/eva/programs/`, compiled and run, and analysed by Eva, by `tools/eva/eva.py` in a new workflow, `14 · Eva: programs that use Canon-C`; `8 · Records` checks the programs against the units; the CI map. No library code, contract, proof job or pin changes. |
 | **Category**   | What the proofs leave to the caller: whether a program meets the contracts, measured by Eva at the proofs' machine models. Item C of the list agreed with the author (2026-11-09; started 2026-11-10). |
@@ -32120,3 +32121,44 @@ compiled in (without `CANON_NO_REQUIRE`), whose checks run before each body;
 the programs are analysed in the proofs' configuration, the code WP proves.
 
 The change is pushed with this record, in the commit after it.
+
+### Scored: run 1 (2026-11-10)
+
+The push of 52c596a and 5006d05 started `1 · Build & test` #43,
+`2 · Platforms` #55, `3 · Static analysis & coverage` #43,
+`4 · Proofs: core/` #43, `5 · Proofs: semantics/` #43,
+`6 · Proofs: data/` #43, `8 · Records` #61 and
+`14 · Eva: programs that use Canon-C` #1 (01:49 UTC). All eight are green,
+91 jobs. In `14`, every model's job ran Frama-C 29.0 (Copper) and took at
+most two minutes, setup included.
+
+| # | scored |
+|---|--------|
+| E1 | **MATCH.** 1 to 6, 8 and 14 ran; the others did not. |
+| E2 | **MATCH.** 1 to 6 and 8 are green. Each of the 77 jobs of 1 to 6 gave the notices of its run at VERIFY-065's fix (#42), times aside: every proof job at its pin. `8 · Records` passed with `eva.py check`. |
+| E3 | **MATCH.** All 26 programs compiled with the runner's GCC and returned 0 under AddressSanitizer and UndefinedBehaviorSanitizer. |
+| E4 | **MISS.** 230 of the 260 runs ended with Eva's summary and the status file. The other 30 are three programs at each of the ten models: Frama-C stopped on `region.c`, `vec.c` and `stringbuf.c` with exit code 125, its code for an internal error, within a second, with no summary. Frama-C 25 analysed all three here. The script printed one line for such a run, and not Frama-C's own output, which is in the run's artifact, so the error itself is not read yet. |
+| E5 | **MISS.** F1 stopped four of the five programs at x86_64, each at the call named: `arena.c` at `arena_capacity`, `pool.c` in `pool_init`'s call of `arena_remaining`, `priority_queue.c` at `pq_peek` and `hashmap.c` at `hashmap_load_factor`, each precondition "invalid or unreachable". The fifth, `region.c`, stopped with the internal error of E4 instead, so whether it reaches `arena_is_empty` is not shown. |
+| E6 | **MISS.** Of the 21 programs predicted to reach their end at x86_64, 19 did, and of those, every call was valid or undecided, and the alarms are the three predicted, two in `ptr.c` (pointers compared with NULL) and one in `vec_fmt.c` (a dangling address, after `vsnprintf`). The other two, `vec.c` and `stringbuf.c`, stopped with E4's internal error. |
+| E7 | **MATCH**, by its falsifier: the same 19 programs reach their end at all ten models, and the same 3 stop with the error. It is 19, not 21, because of E4. |
+| E8 | **MATCH.** Each model's job, setup included, took under two minutes. |
+| E9 | **MATCH.** 14 is green. |
+
+Six of the nine predictions match. What run 1 shows:
+
+- **F1 holds in Frama-C 29.** Every call of the four read-only functions
+  reached is invalid, as with Frama-C 25. The fix is the next push.
+- **Frama-C 29 stops with an internal error on three programs**, which 25
+  analysed: `region.c`, `vec.c` and `stringbuf.c`. What the three share,
+  that the others that ran do not, is an allocation from an arena:
+  `region.c` and `vec.c` call `arena_alloc`, and `stringbuf.c` makes an
+  arena-backed string. `arena.c` and `pool.c` stop at F1 before they
+  allocate. That is a lead, not a finding: the error is read in the next
+  run, where `eva.py` prints the end of Frama-C's output for a run that does
+  not finish, with OCaml's backtrace on.
+- **The models agree.** The ten give the same programs, the same alarms and
+  the same invalid calls. The one difference is `borrow.c`'s four calls,
+  undecided at x86_64 (`\object_pointer` of a borrow's pointer) and valid at
+  the nine others, as Frama-C 25 found here at `ppc_32` and `msvc_x86_64`.
+- **Frama-C 25's `ppc_32` problem with `malloc` is not in 29**: `memory.c`
+  and `vec_int_alloc` have no invalid access or call at `ppc_32` in CI.
