@@ -11,9 +11,9 @@
 
 <!-- Operating systems -->
 ### Operating systems
-![Windows](https://img.shields.io/badge/Platform-Windows-blue?logo=windows&logoColor=white)
-![Linux](https://img.shields.io/badge/Platform-Linux-green?logo=linux&logoColor=white)
-![macOS](https://img.shields.io/badge/Platform-macOS-black?logo=apple&logoColor=white)
+![Windows](https://img.shields.io/badge/OS-Windows-blue?logo=windows&logoColor=white)
+![Linux](https://img.shields.io/badge/OS-Linux-green?logo=linux&logoColor=white)
+![macOS](https://img.shields.io/badge/OS-macOS-black?logo=apple&logoColor=white)
 
 <!-- License -->
 ### License
