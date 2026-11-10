@@ -9,8 +9,8 @@
 ### Language
 ![C99](https://img.shields.io/badge/standard-C99-green.svg)
 
-<!-- Platforms -->
-### Platforms
+<!-- Operating systems -->
+### Operating systems
 ![Windows](https://img.shields.io/badge/Platform-Windows-blue?logo=windows&logoColor=white)
 ![Linux](https://img.shields.io/badge/Platform-Linux-green?logo=linux&logoColor=white)
 ![macOS](https://img.shields.io/badge/Platform-macOS-black?logo=apple&logoColor=white)
@@ -952,37 +952,22 @@ For what Canon-C intentionally omits, established C libraries exist:
 
 ## Where CI checks it
 
-Every push to master runs these. A configuration not listed is not
-checked. Which workflow file holds which job, and where a new one goes:
-[`.github/workflows/README.md`](.github/workflows/README.md).
+Every push to master runs the checks its changes can affect. A
+configuration not listed in these documents is not checked.
 
-**Builds and tests** (the full suite unless stated otherwise):
-
-| target | compilers | how |
-|--------|-----------|-----|
-| Linux x86-64 (glibc) | GCC, clang | Release, and Debug with ASan and UBSan; Valgrind; libFuzzer (clang) |
-| Linux i386 (`-m32`) | GCC | `size_t` exactly 32 bits |
-| Linux x86-64 (musl, Alpine) | GCC | Release and Debug |
-| Linux AArch64 | GCC, clang | Release, and Debug with sanitizers; `char` unsigned |
-| Linux s390x | GCC (cross) | run under qemu-user; **big-endian** |
-| Windows x64 | MSVC; MinGW GCC | Release and Debug |
-| macOS (`macos-latest`) | clang | Release, and Debug with sanitizers |
-| C11, C17 and C23 | GCC 14, clang 18 | Debug with sanitizers; C99 everywhere else |
-| bare-metal Cortex-M0+ and M4 | `arm-none-eabi-gcc`, newlib and picolibc | **compile only**, every header and test; not linked or run |
-| bare-metal RISC-V RV32, RV64 | `riscv64-unknown-elf-gcc`, picolibc | **compile only**, every header and test |
-| AVR (16-bit `size_t`) | avr-gcc 7 | **compile only**: the platform tiers' guards, see Tier 0 above |
-
-**Formal verification** (Frama-C WP, `docs/verification.md`): every
-verified unit at the x86-64 (LP64) machine model. The ten core/ units are
-also proved at nine more models (VERIFY-060): Cortex-M4 bare metal, read
-with short enums; 32-bit Arm Linux; RV32 and RV64 bare metal; RV64 and
-AArch64 Linux; big-endian 32-bit PowerPC Linux, at a generated model and at
-Frama-C's `ppc_32`; and 64-bit Windows' LLP64 model. Each leaves the
-x86-64 run's unproved goals or fewer, and is enforced on its own pins.
-`arena.h` is also proved at `gcc_x86_32`, and `memory.h` and `bits.h` at
-LLP64 in `frama-c-win64` too (VERIFY-047). The twelve of bits.h's goals the
-automatic provers leave are proved in Coq, as WP states them, at x86-64 and
-the nine models: bits.h is proved 757 / 757 (VERIFY-061, `tools/coq`).
+- **Builds and tests**: the full suite with GCC, Clang and MSVC on Linux,
+  Windows and macOS; Debug with AddressSanitizer and
+  UndefinedBehaviorSanitizer, Valgrind and libFuzzer; C99, and C11, C17 and
+  C23.
+- **Architectures**: which are tested on, compiled for, or proved at, each
+  with the job that shows it, and which are not supported and why:
+  [`docs/architectures.md`](docs/architectures.md).
+- **Formal verification**: Frama-C/WP on every verified unit, the ten core/
+  units at ten machine models; Coq for the twelve goals of bits.h the
+  provers leave; the three provers' agreement; Eva on a program for each
+  unit, report-only for now: [`docs/verification.md`](docs/verification.md).
+- **Which workflow holds which job**, and where a new one goes:
+  [`.github/workflows/README.md`](.github/workflows/README.md).
 
 ---
 
