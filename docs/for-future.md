@@ -86,6 +86,34 @@ Sources: [Astrée's compliance list](https://www.absint.com/astree/compliance.ht
 [MISRA C on Wikipedia](https://en.wikipedia.org/wiki/MISRA_C) and [LDRA on
 MISRA C:2025](https://ldra.com/ldra-blog/misra-c-2025-the-whys-and-wherefores-of-whats-new/).
 
+## Package managers
+
+Canon-C is reached today from its repository: a user copies the headers or
+adds their directory to the include path. A package manager would fetch it
+by name and version. The ones its users are likely to look in:
+
+- for C and C++ in general, vcpkg and Conan, whose recipes live in their
+  own repositories (vcpkg's registry, ConanCenter);
+- for embedded projects, PlatformIO's registry, Espressif's component
+  registry (ESP-IDF) and a Zephyr module, each described by a file in this
+  repository (`library.json`, `idf_component.yml`, `zephyr/module.yml`);
+- for systems, Debian and Ubuntu, and Homebrew, whose packages their own
+  maintainers keep.
+
+Why it waits: most of them build from a CMake target, which the project's
+`CMakeLists.txt` does not offer yet; it builds the tests only. That target,
+`Canon-C::canon`, with install rules, `find_package(CanonC)` and a
+pkg-config file, is on the project's list first, checked in CI by a small
+project that uses it. Each manager then points at a tagged release
+(`v1.3.0` is the latest), and its recipe is kept up to date there at every
+release.
+
+Sources: [vcpkg](https://github.com/microsoft/vcpkg),
+[ConanCenter](https://github.com/conan-io/conan-center-index),
+[PlatformIO's registry](https://registry.platformio.org),
+[Espressif's component registry](https://components.espressif.com) and
+[Zephyr's modules](https://docs.zephyrproject.org/latest/develop/modules.html).
+
 ## Concurrency: Mthread, DeadlockF, Conc2seq
 
 Frama-C's plug-ins for concurrent C. The library is single-threaded apart
