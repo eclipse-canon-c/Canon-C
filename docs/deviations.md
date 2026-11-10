@@ -31858,7 +31858,7 @@ Both predictions match.
 | **ID**         | VERIFY-066 |
 | **Date**       | 2026-11-10 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run. |
-| **Status update** | 2026-11-10 — Run 1 scored: E1, E2, E3, E7, E8 and E9 MATCH; E4, E5 and E6 MISS, because Frama-C 29 stops with an internal error on three programs, `region.c`, `vec.c` and `stringbuf.c`, at every model. F1 is confirmed in CI on the four programs it was predicted to stop that ran. See "Scored: run 1" below. The Status above is the record as committed. |
+| **Status update** | 2026-11-10 — Run 1 scored: E1, E2, E3, E7, E8 and E9 MATCH; E4, E5 and E6 MISS, because Frama-C 29 stops with an internal error on three programs, `region.c`, `vec.c` and `stringbuf.c`, at every model. F1 is confirmed in CI on the four programs it was predicted to stop that ran. See "Scored: run 1" below. Run 1b (#2): D1 to D4 MATCH; D5 carried to the fix's run. The Status above is the record as committed. |
 | **Baseline**   | 8ffe97d (`Prover agreement pins: run 3's nine new slow proofs (VERIFY-065 closing)`) |
 | **Scope**      | A program for each verified unit in `tools/eva/programs/`, compiled and run, and analysed by Eva, by `tools/eva/eva.py` in a new workflow, `14 · Eva: programs that use Canon-C`; `8 · Records` checks the programs against the units; the CI map. No library code, contract, proof job or pin changes. |
 | **Category**   | What the proofs leave to the caller: whether a program meets the contracts, measured by Eva at the proofs' machine models. Item C of the list agreed with the author (2026-11-09; started 2026-11-10). |
@@ -32192,3 +32192,117 @@ systems, and Where CI checks it points to those documents).
 
 **What follows.** Once the error is read, the fix of F1 and, if it can be
 had, of the error, are pre-registered together.
+
+### Scored: run 1b (2026-11-10)
+
+The push of 2f54c19 and the six commits before it started `2 · Platforms`
+#56, `8 · Records` #62 and `14 · Eva` #2 (03:26 UTC). All three are green.
+
+| # | scored |
+|---|--------|
+| D1 | **MATCH.** 2, 8 and 14 ran; the others did not. |
+| D2 | **MATCH.** All three are green. |
+| D3 | **MATCH.** Each of 14's twelve jobs gave the notices of run 1, times aside: the same lines for the 23 programs that finished, at each model, and the same three stopped with exit code 125. `2 · Platforms`' fifteen jobs, too, gave #55's. |
+| D4 | **MATCH.** All 30 runs that stopped print Frama-C's internal-error message, the same at each model: `Unexpected error (Eva__Eval_terms.Reduce_to_bottom)`, an exception Eva raises in `reduce_exact_location` (`eval_terms.ml`, line 1890) and does not catch. Frama-C asks for it to be reported as a crash. |
+| D5 | **Not scored here.** OCaml's backtrace names Eva's own code, not the function of the program Eva was analysing. It shows where in Eva: deciding whether a behavior of the called function's contract is active, by evaluating its `assumes` clause (`Active_behaviors.is_active`, from `check_fct_preconditions_of_behaviors`), on entering the call. And how deep: in `region.c`, a call from `main`; in `vec.c` and `stringbuf.c`, a call from a library function `main` calls. `arena_alloc`, whose behaviors assume `arena_can_fit`, which converts an address to an integer, fits both, but so do other calls. The fix's run scores D5, with the call named. |
+
+**What #2 shows.** The error is Frama-C 29's, in its evaluation of an
+`assumes` clause; Frama-C 25 analysed the same programs. Which clause is
+still to be found. Two things follow: the next run names the call (`eva.py`
+runs a program that stops again with Eva's progress messages, and prints
+the last call Eva entered), and, once named, the error is reported to the
+Frama-C developers with a small program that reproduces it.
+
+### The fix, pre-registered (2026-11-10)
+
+**F1, fixed.** The 27 read-only functions require what they read, readable:
+
+- in `core/arena.h`, `\valid_read(arena)` in place of `\valid(arena)`, in
+  the precondition and in the `non_null` behavior's `assumes`, of
+  `arena_stats`, `arena_capacity`, `arena_remaining`, `arena_used`,
+  `arena_is_empty`, `arena_is_full` and `arena_mark`; and a new predicate,
+  `arena_invariant_read`, which is `arena_invariant` with `\valid_read(a)`
+  for `\valid(a)`, required by `arena_remaining`, `arena_as_cbytes`,
+  `arena_buffer_cbytes` and `arena_free_cbytes`;
+- in `core/pool.h`, the same for `pool_used`, `pool_capacity`,
+  `pool_remaining`, `pool_is_full`, `pool_is_empty` and `pool_object_size`,
+  with their `nn` behaviors; and `pool_invariant_read`, required by
+  `pool_get_const`, `pool_remaining`, `pool_memory_used`,
+  `pool_memory_reserved`, `pool_as_cbytes` and `pool_reserved_cbytes`;
+- in `data/hashmap/hashmap_impl.h`, `shape_read_` and `inv_read_`, required
+  by `hashmap_load_factor`, `hashmap_get`, `hashmap_contains_key` and
+  `hashmap_iter_next` in place of `inv_`;
+- in `data/priority_queue.h`, `pq_wf_read`, required by `pq_peek` and
+  `pq_as_cbytes`, in their preconditions and in their `some` and `live`
+  behaviors, in place of `pq_wf`.
+
+Each new predicate is the old one with `\valid_read` for `\valid` on the
+object read, and each says so in a comment; the other conjuncts are the
+old predicate's, word for word. No code changes, and no other contract.
+Requiring less of a caller cannot make a caller's proof harder; each
+function only reads through the pointer, which `\valid_read` allows; and no
+goal is added or removed, so every count stays.
+
+**D5's call, named.** For a program that stops, `eva.py` runs it again with
+`-eva-show-progress` and prints the last call Eva entered, with its caller
+and its line.
+
+**Measured here, with Frama-C 25.** Every unit parses (`priority_queue.h`
+with its `calls` annotation skipped, as before). Eva on the 26 programs, at
+x86_64, with this push's options: all 26 reach their end, 16 with every
+check confirmed; no call is invalid, in the programs or in the library;
+the alarms are run 1's three, in `ptr.c` and `vec_fmt.c`.
+`priority_queue.c`'s 247 preconditions are all valid. Tried by hand on
+`region.c`, which finishes under Frama-C 25, the rerun names
+`region_is_open <- main`, called from `region.c` line 45: the last call it
+makes. WP is not in this
+machine's Frama-C 25 (Ubuntu's package has no WP), so the proofs below are
+predicted from the contracts, not run.
+
+**What the change touches in the proofs.** The goals of the 27 functions,
+in every unit that includes their header (arena's in the eight units that
+include `core/arena.h`), and the calls of them in proved code:
+`pool_init`'s calls of `arena_remaining` and `arena_mark`, and
+`hashmap_contains_key`'s of `hashmap_get`. Seven of these goals are pinned
+by the provers' agreement as proved by fewer than three provers alone:
+
+- `frama-c-priority-queue`, two (CVC5 and Z3):
+  `typed_cast_pq_peek_call_mem_copy_requires_2` and `_3`,
+  `typed_cast_pq_as_cbytes_live_ensures_2_part4` and
+  `typed_cast_pq_as_cbytes_call_cbytes_from_requires_2`;
+- `frama-c-pool`, two (CVC5 and Z3):
+  `typed_cast_pool_as_cbytes_ensures_part4` and
+  `typed_cast_pool_as_cbytes_call_cbytes_from_requires_2`;
+- `frama-c-hashmap`, one (Alt-Ergo):
+  `typed_cast_hashmap_load_factor_assert_rte_is_nan_or_infinite`.
+
+At the machine models, `pool_init`'s `ensures` part 4 is pinned unproved at
+the LP64 and LLP64 models; it is not changed.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 9, 11, 13 and 14 run; 10 and 12 do not.
+`agreement.py affected`: ten units, 30 runs: arena, pool, region, vec,
+stack, vec-fmt, vec-range, stringbuf, hashmap and priority-queue. In
+`9 · Probes`, the char probe (it watches `core/arena.h`) and the pointer
+probe (it watches `data/priority_queue.h`).
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| F1 | **The workflows**: 1 to 9, 11, 13 and 14 run; 10 and 12 do not; 13 runs the ten units above. | another set | H |
+| F2 | **1, 2 and 3 give their last runs' notices**, times aside: 1's and 3's #43, 2's #56. | another notice, or a failure | H: no code changes; comments only. |
+| F3 | **Every proof job of 4, 5, 6, 7 and 11 is at its pin**: the same proved line and the same unproved names. | a job off its pin | M–H: no goal is added or removed, and each changed goal needs no more than before; a goal near a prover's limit could fall either way. |
+| F4 | **9's char probe matches**: arena proved 3539 / 3570 at x86_64 with unsigned `char`, 3537 / 3570 at AArch64 with signed `char`, and the two pinned goals as pinned. The pointer probe reports. | a MISS | M–H: as F3. |
+| F5 | **13 is green**: in each of the ten units, the goals one or two provers prove are the pins', the seven above among them. | a unit with a difference | M: the seven goals' hypotheses change, and which provers prove a goal can move with its hypotheses. |
+| F6 | **Eva: F1 is gone.** At every model, no call of the 27 functions is invalid, and `priority_queue.c` and `hashmap.c` reach their end. | an invalid call of one of them, or either program stopping | M–H |
+| F7 | **Eva: the error is `arena_alloc`'s** (D5). `arena.c` and `pool.c`, which now get past F1, stop with run 1's internal error too, and in all five programs that stop, the call named is `arena_alloc`'s (or `arena_alloc_aligned`'s), from `main` in `arena.c` and `region.c`, and from a library function in the others. | another call named, or `arena.c` or `pool.c` finishing | L–M: the guess of run 1b. |
+| F8 | **Eva: the other 19 programs give run 1's lines**, at every model. | another line | M–H: their code does not change; `pool.h`'s and `arena.h`'s contracts are in some of their units, but their programs do not call the 27 functions. |
+| F9 | **8 and 14 are green.** | a failure | H |
+
+**What follows.** The proofs and the agreement are scored against the
+pins; a goal that changes prover class is listed and its pin changed, in
+the record. If F7 matches, a small program that reproduces the error goes
+to the Frama-C developers, and the way around it in this repository is
+decided then.
