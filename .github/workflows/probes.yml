@@ -1,12 +1,13 @@
 name: "9 · Probes (closed experiments)"
 # The probes of VERIFY-039 and VERIFY-040, merged into one workflow by
 # VERIFY-050: G4, G11, G13, G19, Count and Round 3; and VERIFY-057's pointer
-# probe and VERIFY-060's char probe, added since. Each is an experiment,
-# not a gate; its result is scored in docs/deviations.md. Each job still runs
-# only when its own paths change, as its workflow did: the `changes` job
-# compares the push with the commit it moved master from and sets one output
-# per probe. A manual run runs them all. Each job's banner keeps its old
-# workflow's header. Map: .github/workflows/README.md.
+# probe, VERIFY-060's char probe and VERIFY-066's Eva error probe, added
+# since. Each is an experiment, not a gate; its result is scored in
+# docs/deviations.md. Each job still runs only when its own paths change, as
+# its workflow did: the `changes` job compares the push with the commit it
+# moved master from and sets one output per probe. A manual run runs them
+# all. Each job's banner keeps its old workflow's header. Map:
+# .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -40,6 +41,11 @@ on:
       - 'tools/machdeps/flip_char.py'
       - 'tools/machdeps/machdep_aarch64_linux_gnu.yaml'
       - 'core/arena.h'
+      - 'tools/probes/verify-066/**'
+      - 'tools/eva/eva.py'
+      - 'tools/eva/programs/arena.c'
+      - 'tools/eva/programs/eva_program.h'
+      - 'tools/agreement/agreement.py'
   workflow_dispatch:
 
 concurrency:
@@ -63,6 +69,7 @@ jobs:
       round3: ${{ steps.f.outputs.round3 }}
       pointer: ${{ steps.f.outputs.pointer }}
       char: ${{ steps.f.outputs.char }}
+      evaerror: ${{ steps.f.outputs.evaerror }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -71,7 +78,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
-          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/ptr.h", "data/vec/**", "data/deque/**", "data/stack.h", "vmacros/vdrivers/**", "data/priority_queue.h", "data/stringbuf.h", "core/region.h", "semantics/borrow.h"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"]}'
+          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/ptr.h", "data/vec/**", "data/deque/**", "data/stack.h", "vmacros/vdrivers/**", "data/priority_queue.h", "data/stringbuf.h", "core/region.h", "semantics/borrow.h"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"]}'
         run: |
           python3 - <<'PY'
           import json, os, subprocess, fnmatch
@@ -750,4 +757,60 @@ jobs:
           path: |
             wp_output.txt
             machdep_control.yaml
+          retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # Eva error probe (VERIFY-066, Frama-C 29's error on entering arena_alloc)
+  #
+  # VERIFY-066: an experiment, not a gate. It runs when the probe, this file,
+  # the toolchain pins, core/arena.h, or what the probe reads of 14 · Eva
+  # (tools/eva/eva.py, arena.c's program, tools/agreement/agreement.py)
+  # change, and on demand.
+  #
+  # QUESTION: Frama-C 29's Eva stops on entering arena_alloc, in every
+  # program that calls it, with the uncaught exception
+  # Eva__Eval_terms.Reduce_to_bottom, while it decides which of the
+  # function's behaviours is active (VERIFY-066, the fix's run). Does a small
+  # program reproduce it, and which construct of arena_can_fit raises it: the
+  # \let, which Frama-C evaluates since 28, or the address converted to an
+  # integer? Is there a way around it that keeps the contract's meaning?
+  #
+  # PROBE: tools/probes/verify-066/eva_error_probe.py runs Eva on six small
+  # programs, each as `frama-c -eva FILE` (r0_full.c, arena_alloc
+  # standalone; r1_min.c, its smallest form; r1_min.c without \let, without
+  # the conversion, with one behaviour, without a body), and on
+  # tools/eva/programs/arena.c with 14 · Eva's command at x86_64: as it is,
+  # with arena_can_fit's \let written out in a copy of core/arena.h, and with
+  # arena_alloc read by its contract. Report-only: it prints each outcome,
+  # with the backtrace and the last call of each run that stops, posts one
+  # notice per variant and exits 0. Its predictions and their scores are
+  # VERIFY-066's, in docs/deviations.md.
+  # -------------------------------------------------------------------------
+  evaerror-probe:
+    needs: changes
+    if: needs.changes.outputs.evaerror == 'true'
+    # Pinned, not ubuntu-latest: see the runner note in
+    # ci.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    # Setup can take 47 minutes when its cache misses (VERIFY-060 run 1).
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+
+      - name: "Eva on each variant"
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-066/eva_error_probe.py
+
+      - name: "Notices"
+        if: ${{ !cancelled() }}
+        run: cat notices_evaerror.txt 2>/dev/null || true
+
+      - name: Upload each variant's output (Eva error probe)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: evaerror-probe
+          path: evaerror_out
           retention-days: 90
