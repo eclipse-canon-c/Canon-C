@@ -2,8 +2,9 @@ name: "8 · Records"
 # The bookkeeping gates: record coverage (each argument block in
 # docs/deviations.md joined to the roll-calls that pin its goals), the
 # machine models' pins checked against x86_64's (VERIFY-060), the prover
-# agreement's units checked against the proof jobs (VERIFY-065) and the
-# workflow-size guard. Map: .github/workflows/README.md.
+# agreement's units checked against the proof jobs (VERIFY-065), Eva's
+# programs checked against the units (VERIFY-066) and the workflow-size
+# guard. Map: .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -15,6 +16,7 @@ on:
       - 'tools/machdeps/pins/*.txt'
       - 'tools/machdeps/check_pins.py'
       - 'tools/agreement/**'
+      - 'tools/eva/**'
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
@@ -60,6 +62,11 @@ jobs:
         # paths, so that the agreement is measured as the jobs prove and
         # runs whenever a unit's code changes.
         run: python3 tools/agreement/agreement.py check
+      - name: "Eva's programs are the units' (VERIFY-066)"
+        # Every unit of agreement.py has a program in tools/eva/programs/,
+        # which includes the unit's file, and Eva's machine models are the
+        # proofs' and eva.yml's matrix.
+        run: python3 tools/eva/eva.py check
 
   # -------------------------------------------------------------------------
   # Workflow size guard (VERIFY-047). GitHub runs no workflow file of 500 KB

@@ -1,0 +1,128 @@
+name: "14 · Eva: programs that use Canon-C"
+
+# ---------------------------------------------------------------------------
+# VERIFY-066 (docs/deviations.md). Map: .github/workflows/README.md.
+#
+# WP proves each function against its contract. Whether a program that calls
+# the library meets the contracts is the program's question: Eva, Frama-C's
+# abstract interpreter, answers it for a program, from main. It reports each
+# place where a runtime error may happen (an alarm) and each call whose
+# precondition may not hold.
+#
+# tools/eva/programs/ holds one small program per verified unit, which
+# includes the unit's file with the unit's own flags and calls its functions
+# as a user would (tools/eva/README.md). Each is compiled with GCC and run
+# under AddressSanitizer and UndefinedBehaviorSanitizer, and analysed by Eva
+# at the ten machine models the proofs use (x86_64, and the nine of
+# proofs-machdeps.yml). Report-only until VERIFY-066's third run (ENFORCE
+# in tools/eva/eva.py).
+# ---------------------------------------------------------------------------
+
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - 'core/**'
+      - 'semantics/**'
+      - 'data/**'
+      - 'vmacros/vdrivers/**'
+      - 'tools/eva/**'
+      - 'tools/agreement/agreement.py'
+      - 'tools/machdeps/machdep_*.yaml'
+      - '.github/actions/framac-setup/**'
+      - '.github/workflows/eva.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native:
+    name: "Each program compiled and run (GCC, ASan, UBSan)"
+    # Pinned, not ubuntu-latest: see the runner note in
+    # ci.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: "Compile each program and run it"
+        run: |
+          gcc --version | head -1
+          python3 tools/eva/eva.py native
+      - name: "Notice"
+        if: ${{ !cancelled() }}
+        run: cat notices_1.txt 2>/dev/null || true
+
+  eva:
+    name: "eva @ ${{ matrix.model }}"
+    runs-on: ubuntu-24.04
+    # Setup can take 47 minutes when its cache misses (VERIFY-060 run 1).
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        # The models of tools/eva/eva.py (MODELS); 8 · Records checks that
+        # the two lists are the same.
+        model: [x86_64, cortex_m4, rv32_ilp32, rv64_lp64, arm_linux_gnueabihf,
+                rv64_linux_gnu, aarch64_linux_gnu, ppc32_linux_gnu, ppc_32,
+                msvc_x86_64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "Eva on every program at ${{ matrix.model }}"
+        run: |
+          eval $(opam env --switch=frama-c)
+          frama-c -version
+          python3 tools/eva/eva.py run "${{ matrix.model }}"
+      - name: Upload Eva's output, the statuses and the summaries
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: eva-${{ matrix.model }}
+          path: eva_out
+          if-no-files-found: warn
+          retention-days: 90
+          overwrite: true
+      # GitHub keeps ten notices of a step: the script writes them ten to a
+      # file, and each file is posted by a step of its own.
+      - name: "Notices: programs 1 to 10"
+        if: ${{ !cancelled() }}
+        run: cat notices_1.txt 2>/dev/null || true
+      - name: "Notices: programs 11 to 20"
+        if: ${{ !cancelled() }}
+        run: cat notices_2.txt 2>/dev/null || true
+      - name: "Notices: programs 21 to 26"
+        if: ${{ !cancelled() }}
+        run: cat notices_3.txt 2>/dev/null || true
+
+  total:
+    name: "eva total"
+    needs: eva
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: "eva-*"
+          path: eva_out
+          merge-multiple: true
+      - name: "The totals, by machine model"
+        run: python3 tools/eva/eva.py report eva_out
+      - name: "Notices"
+        if: ${{ !cancelled() }}
+        run: cat notices_1.txt 2>/dev/null || true
+      - name: Upload the table of every program at every model
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: eva-summary
+          path: eva_summary.tsv
+          if-no-files-found: warn
+          retention-days: 90
+          overwrite: true
