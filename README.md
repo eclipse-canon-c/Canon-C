@@ -33,7 +33,9 @@
 ### Static Analysis
 ![clang-tidy](https://img.shields.io/badge/clang--tidy-Configurable-lightgrey)
 ![Cppcheck](https://img.shields.io/badge/Cppcheck-Configurable-lightgrey)
-![Polyspace/LDRA](https://img.shields.io/badge/Polyspace%2FLDRA-Configurable-lightgrey)
+![Polyspace](https://img.shields.io/badge/Polyspace-planned-lightgrey)
+![LDRA](https://img.shields.io/badge/LDRA-planned-lightgrey)
+![Astrée](https://img.shields.io/badge/Astr%C3%A9e-planned-lightgrey)
 
 <!-- Formal Verification & Timing Analysis -->
 ### Formal Verification & Timing Analysis
@@ -51,6 +53,9 @@
 ![IEC 61508 SIL2](https://img.shields.io/badge/IEC61508%20SIL2-Configurable-lightblue)
 ![ECSS-E-ST-40C](https://img.shields.io/badge/ECSS--E--ST--40C-Configurable-lightblue)
 
+> "Planned" badges name tools the project has asked their makers to run, or
+> to let it run, on Canon-C; none has run yet.
+>
 > "Configurable" badges name tools and standards you can use Canon-C with.
 > They are not CI results and not certifications — what CI checks, and what
 > its proofs rest on, is in `docs/verification.md`.
