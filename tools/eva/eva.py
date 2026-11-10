@@ -297,6 +297,23 @@ def details(s):
     return out
 
 
+def last_call(cmd, limit):
+    """The last call Eva entered, from a run with -eva-show-progress."""
+    i = cmd.index('-then') if '-then' in cmd else len(cmd)
+    again = cmd[:1] + ['-eva-show-progress'] + cmd[1:i]
+    try:
+        p = subprocess.run(again, cwd=ROOT, env=dict(os.environ, PWD=ROOT, OCAMLRUNPARAM='b'),
+                           capture_output=True, text=True, errors='replace', timeout=limit)
+        out = p.stdout + p.stderr
+    except subprocess.TimeoutExpired:
+        return None
+    calls = re.findall(r'computing for function (.+?)\.\s*\n\s*Called from ([^\n]+?)\.\s*\n', out)
+    if not calls:
+        return None
+    callee, site = calls[-1]
+    return f'{callee}, called from {site}'
+
+
 def run(model, programs):
     out_dir = os.path.join('eva_out', model)
     os.makedirs(out_dir, exist_ok=True)
@@ -334,6 +351,11 @@ def run(model, programs):
             print(f'  -- the last {TAIL} lines of Frama-C\'s output:')
             for l in text.rstrip().split('\n')[-TAIL:]:
                 print('  | ' + l)
+            # And where: the same run again with Eva's progress messages,
+            # whose last "computing for function" names the call being
+            # analysed when it stopped (VERIFY-066 run 1b).
+            where = last_call(cmd, limit)
+            print('  -- the call Eva was analysing when it stopped: ' + (where or 'not found'))
         for d in details(s):
             print(d)
         results.append(s)
