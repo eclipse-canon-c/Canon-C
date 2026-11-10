@@ -173,9 +173,9 @@ residual goals fails the build.
 The tools that do the proving (Frama-C, WP, Why3, Alt-Ergo, Z3, CVC5 and,
 for twelve goals, Coq) are trusted, not themselves proved.
 `docs/verification.md` ("The proved configuration") lists what each proof
-rests on, and the tools that are themselves verified — CompCert, which CI
-uses, and Verasco, SparrowBerry and foundational verification (issue #12),
-which the project would move to if they became usable on its code.
+rests on, and the tools that are themselves verified, of which CI uses
+CompCert. `docs/for-future.md` lists what was checked and waits, with why:
+Verasco, SparrowBerry, foundational verification (issue #12) and others.
 
 For current numbers, see:
 
