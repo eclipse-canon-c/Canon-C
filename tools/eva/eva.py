@@ -55,8 +55,8 @@ call returns (CHECK) and marks its end (END, eva_program.h).
         lists them; each model has a pin file, with a block for every
         program and no other.
 
-Report-only until ENFORCE is set (VERIFY-066, run 3): then a program that
-does not reach its end, or is not as pinned, makes its run fail.
+Enforced since VERIFY-066's run 3 (ENFORCE): a program that does not reach
+its end, or is not as pinned, makes its run fail.
 """
 import csv
 import difflib
@@ -69,7 +69,7 @@ import subprocess
 import sys
 import time
 
-ENFORCE = False   # VERIFY-066: report-only until its third run
+ENFORCE = True    # VERIFY-066 run 3: report-only before it
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))

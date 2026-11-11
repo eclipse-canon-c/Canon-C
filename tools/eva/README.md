@@ -139,8 +139,8 @@ UndefinedBehaviorSanitizer). Eva cannot confirm the 40 because:
 | Zeros written through a pointer whose offset is a range: Eva keeps the bytes' earlier values among the possible ones. WP leaves the zeroing postconditions too, argued in VERIFY-009's Category 2c (VERIFY-039, G2 and G3) | `arena.c` 27, 29; `pool.c` 26 |
 | Zeros written through a `volatile` pointer, as secure zeroing does so that the compiler keeps the writes: Eva does not keep a value written through `volatile` | `memory.c` 35, 46 |
 
-Report-only until VERIFY-066's third run (`ENFORCE` in `eva.py`): then a
-program that does not reach its end, or is not as pinned, fails its run.
+Enforced since VERIFY-066's third run (`ENFORCE` in `eva.py`): a program
+that does not reach its end, or is not as pinned, fails its model's job.
 
     python3 tools/eva/eva.py list
     python3 tools/eva/eva.py native [PROGRAM...]

@@ -805,7 +805,11 @@ the C it is written in.
   real gaps there: memcmp's precondition on dangling bytes (G13) and a
   `strlen` on any pointer (G17). A program that uses the library has a
   `main()`, so Eva can analyse it through the library's own code, at a
-  machine model of the user's choosing.
+  machine model of the user's choosing. Since VERIFY-066, `14 · Eva` runs
+  it on a program for each unit (`tools/eva/programs/`), at the ten
+  machine models of the proofs: every program reaches its end, none with
+  an invalid call, and each program's result is pinned, every property
+  Eva leaves open argued (`tools/eva/README.md`, "Pins").
 - **Verasco**, **SparrowBerry** and **foundational verification** (issue
   #12) are not usable on this code today: `docs/for-future.md` says what
   each is, and why it waits.

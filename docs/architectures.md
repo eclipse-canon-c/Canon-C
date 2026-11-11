@@ -90,7 +90,7 @@ The seven models of `tools/machdeps/` are generated from the targets'
 compilers and checked against them for drift (`machdeps.yml`). At x86-64
 and the nine models of `proofs-machdeps.yml`, Coq also proves `bits.h`'s
 twelve goals the provers leave (`coq.yml`), and Eva runs the 26 programs of
-`tools/eva/` (`eva.yml`, report-only).
+`tools/eva/` (`eva.yml`), each result pinned.
 
 *Planned:* models for bare-metal AArch64, Cortex-R52, SPARC LEON3, TriCore
 and PowerPC e200, generated from their compilers as the seven are.

@@ -970,7 +970,8 @@ configuration not listed in these documents is not checked.
 - **Formal verification**: Frama-C/WP on every verified unit, the ten core/
   units at ten machine models; Coq for the twelve goals of bits.h the
   provers leave; the three provers' agreement; Eva on a program for each
-  unit, report-only for now: [`docs/verification.md`](docs/verification.md).
+  unit at the ten machine models, every result pinned:
+  [`docs/verification.md`](docs/verification.md).
 - **Which workflow holds which job**, and where a new one goes:
   [`.github/workflows/README.md`](.github/workflows/README.md).
 
