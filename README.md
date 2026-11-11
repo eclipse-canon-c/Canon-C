@@ -1452,10 +1452,41 @@ from their source — exactly where stale borrows become invisible bugs.
 
 ## Usage
 
-Canon-C is **header-only**. To use:
+Canon-C is **header-only**: there is no library to build or link. To use it:
+
+1. **Put the repository's root on your include path**, and include each
+   header by its path from there. Canon-C's headers include one another the
+   same way (`core/arena.h` includes `"core/primitives/types.h"`), so the
+   root itself must be on the path, not the folder that holds it.
+2. **Define `CANON_CONTRACT_IMPL` in exactly one `.c` file**, before it
+   includes Canon-C. That file holds the definition of the contract
+   handler, which the others refer to; with none, or more than one, the
+   program does not link (`core/primitives/contract.h`).
+3. **Compile as C99 or later.**
 
 ```c
-#include "Canon-c/core/arena.h"
-#include "Canon-c/semantics/option/option.h"
-``` 
-Then you’re ready to go. No runtime or build system integration required.
+/* main.c */
+#define CANON_CONTRACT_IMPL
+#include "core/arena.h"
+#include "semantics/option/option.h"
+
+static u64 backing[32];
+
+int main(void)
+{
+    Arena arena;
+    arena_init(&arena, backing, sizeof backing);
+
+    u8 *bytes = arena_alloc(&arena, 16u);
+    return bytes != NULL ? 0 : 1;
+}
+```
+
+```sh
+cc -std=c99 -I path/to/Canon-C main.c
+```
+
+With CMake: `target_include_directories(your_target PRIVATE path/to/Canon-C)`.
+The repository's own `CMakeLists.txt` builds Canon-C's tests, and has no
+target to link yet; one, with `find_package` and a pkg-config file, waits
+for a stable release (`docs/for-future.md`, "Package managers").

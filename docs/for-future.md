@@ -88,9 +88,9 @@ MISRA C:2025](https://ldra.com/ldra-blog/misra-c-2025-the-whys-and-wherefores-of
 
 ## Package managers
 
-Canon-C is reached today from its repository: a user copies the headers or
-adds their directory to the include path. A package manager would fetch it
-by name and version. The ones its users are likely to look in:
+Canon-C is reached today from its repository: a user copies the headers, or
+puts the repository's root on the include path (README, "Usage"). A
+package manager would fetch it by name and version. The ones its users are likely to look in:
 
 - for C and C++ in general, vcpkg and Conan, whose recipes live in their
   own repositories (vcpkg's registry, ConanCenter);
@@ -103,10 +103,32 @@ by name and version. The ones its users are likely to look in:
 Why it waits: most of them build from a CMake target, which the project's
 `CMakeLists.txt` does not offer yet; it builds the tests only. That target,
 `Canon-C::canon`, with install rules, `find_package(CanonC)` and a
-pkg-config file, is on the project's list first, checked in CI by a small
-project that uses it. Each manager then points at a tagged release
-(`v1.3.0` is the latest), and its recipe is kept up to date there at every
-release.
+pkg-config file, comes first, checked in CI by a small project that uses
+it. It waits for a stable release, as the managers do (decided with the
+author, 2026-11-11): its names and the installed layout are promises to
+users and to the managers' recipes, best made once the directories are
+settled, and `integrations/`, planned for AUTOSAR, will need an install
+decision of its own. Each manager then points at that release's tag, and
+its recipe is kept up to date there at every release.
+
+What a check for the target found (2026-11-11):
+
+- **The headers need only the repository's root on the include path.** Of
+  the 113 headers in `core/`, `semantics/`, `data/`, `algo/` and `util/`,
+  98 compile alone that way (gcc, `-std=c99 -Wall -Wextra -Wpedantic
+  -Werror`). The other 15 refuse by design, with an `#error`: `algo/`'s
+  nine `_impl.h` and `data/hashmap/hashmap_impl.h`, which only their
+  module's header includes, and five more of `data/hashmap/`'s, which need
+  `HASHMAP_KEY_TYPE` (or, for `hashmap_fmt.h`, `HASHMAP_FMT_KEY_FN`)
+  defined first.
+- **Those five directories, headers only, are what an install would
+  copy.** No header in them includes from `vmacros/` (the proofs' drivers),
+  `canary/`, `tools/` or `test/`.
+- **Through `add_subdirectory` or FetchContent, the target should come
+  alone.** Canon-C's tests, and the options that build them (warnings as
+  errors, sanitizers, fuzzing), belong to Canon-C as the top project only;
+  today `add_subdirectory` adds Canon-C's test programs to the user's
+  build.
 
 Sources: [vcpkg](https://github.com/microsoft/vcpkg),
 [ConanCenter](https://github.com/conan-io/conan-center-index),
