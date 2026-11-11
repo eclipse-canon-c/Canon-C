@@ -33138,7 +33138,7 @@ read and argued, and each program's line pinned; then run 3, enforced.
 | **ID**         | VERIFY-068 |
 | **Date**       | 2026-11-11 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-11 — Run 1 scored: the push of 076b1c9 and 7ecd37c matched all eleven predictions, M1 to M11; CI's 57 findings are the 57 measured here, rule, file and line. Run 2, the pins, is pre-registered below ("Run 2, the pins, pre-registered"). The Status above is the record as committed. |
+| **Status update** | 2026-11-11 — Run 1 scored: the push of 076b1c9 and 7ecd37c matched all eleven predictions, M1 to M11; CI's 57 findings are the 57 measured here, rule, file and line. Run 2 scored: the push of 0fde881 and 63b346a matched N1 to N6; the job reads its 57 findings as pinned. Run 3, enforced, is pre-registered below ("Run 3, enforced, pre-registered"). The Status above is the record as committed. |
 | **Baseline**   | 9427017 (`README: a Usage section that compiles; packaging waits for a stable release`), which changes documentation only. The workflows' last runs: `1 · Build & test` #46, `3 · Static analysis & coverage` #46 (`misra`: real 66; canary 3; total 69), `4`, `5`, `6` #46, `7` #27, `11` #11 and `13` #8, on b5042af; `2 · Platforms` #62 on b0e644d; `8 · Records` #70 and `14 · Eva` #7 on 1fd064e; the probes g4, g13 and pointer last ran in `9 · Probes` #15, on b5042af. |
 | **Scope**      | Ten findings fixed, in `core/primitives/contract.h`, `core/primitives/limits.h`, `core/memory.h`, `data/range.h`, `data/convenience/dynstring.h`, `data/vec/vec_impl.h`, `util/parse.h` and `algo/sort/sort_impl.h`, with a test of `parse_f64`'s `errno` (`test/util/parse_test.c`); the others argued in MISRA-DEV-019 to 027 and MISRA-TOOL-001 to 007; the `misra` job's text (`analysis.yml`). The job stays advisory in this run: no gate changes. |
 | **Category**   | The project's item 2 (AUTOSAR Classic), part a: MISRA C:2012 enforced with deviations. Run 1 of 3. |
@@ -33372,3 +33372,58 @@ do not ignore; 8 runs on `.github/workflows/**` and now on `tools/misra/**`.
 **What follows.** N1 to N6 scored. Run 3: `ENFORCE = True`, so that a
 difference from the pins fails the misra job; then the compliance summary,
 in the form of MISRA Compliance:2020.
+
+### Scored: run 2 (2026-11-11)
+
+The push of 0fde881 and 63b346a started `1 · Build & test` #48,
+`2 · Platforms` #64, `3 · Static analysis & coverage` #48, `4`, `5` and `6`
+#48, and `8 · Records` #72. Every job is green.
+
+| # | scored |
+|---|--------|
+| N1 | **MATCH.** 1, 2, 3, 4, 5, 6 and 8 ran; the others did not. |
+| N2 | **MATCH.** The misra job is green: "real 57; canary 3; total 60", and its new step's notice, "as pinned: 57 real finding(s) in 32 file and rule pair(s)". |
+| N3 | **MATCH.** 3's other jobs gave #47's notices. |
+| N4 | **MATCH.** Each job of 1 and 2 gave #47's and #63's notices. |
+| N5 | **MATCH.** Each proof job of 4, 5 and 6 gave #47's notices. |
+| N6 | **MATCH.** 8 is green; its new step reads "pins: 32 pair(s), 57 finding(s); 0 problem(s)". |
+
+All six match: the pins read CI's report as they read the scan here.
+
+### Run 3, enforced, pre-registered
+
+**The change.** `tools/misra/misra.py` sets `ENFORCE = True`: a real
+finding not as pinned, by file and rule, now fails the misra job. A new
+finding is then fixed, or argued in a record that its line in
+`tools/misra/pins.txt` names; `8 · Records` checks that the record exists.
+The documents that called the job advisory say what it is now: the job's
+comments in `analysis.yml`, the workflow map, `tools/misra/README.md`,
+`docs/misra-campaign.md`, the README's line for it, and the MISRA section
+of `docs/decision-families.md`, which still described one record and an
+advisory job. A summary in the form of MISRA Compliance:2020, which this
+record had planned after run 3, goes to `docs/for-future.md` instead
+(decided with the author, 2026-11-11): from cppcheck alone, it would mark a
+large share of the guidelines as not checked, and it waits, with the newer
+editions, for a qualified checker.
+
+**Measured here.** With `ENFORCE = True`: on the scan here and on #48's
+report, `report` prints "as pinned" and exits 0; with a pair removed and
+one added, it lists both and exits 1. `8 · Records`' checks pass.
+
+**The workflows.** `tools/which_workflows.py`: 1, 2, 3, 4, 5, 6 and 8 run,
+as in run 2: `analysis.yml` changes again.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| E1 | **1, 2, 3, 4, 5, 6 and 8 run**; the others do not. | another set | H |
+| E2 | **3's misra job is green, enforced**: "real 57; canary 3; total 60", and "as pinned: 57 real finding(s) in 32 file and rule pair(s)". | a failure, or another notice | H: the headers and the tool are run 2's. |
+| E3 | **3's other jobs give #48's notices.** | another notice, or a failure | H |
+| E4 | **1 and 2 are green**, each job with #48's and #64's notices. | a failure, or another notice | H |
+| E5 | **Every proof job of 4, 5 and 6 gives #48's notices.** | another line | H |
+| E6 | **8 is green**, its pins check as #72's. | a failure, or another line | H (run here) |
+
+**What follows.** E1 to E6 scored, and the record closed. Item 2's next
+parts: the two headers' checks part b still lacks (the hashmap headers,
+and each header alone with `CANON_NO_GNU_EXTENSIONS`), then code size and
+build time (item 6), then part c, the implementation-defined behaviours
+(MISRA Directive 1.1).
