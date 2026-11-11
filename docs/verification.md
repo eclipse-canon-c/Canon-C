@@ -809,7 +809,8 @@ the C it is written in.
   it on a program for each unit (`tools/eva/programs/`), at the ten
   machine models of the proofs: every program reaches its end, none with
   an invalid call, and each program's result is pinned, every property
-  Eva leaves open argued (`tools/eva/README.md`, "Pins").
+  Eva leaves open argued (`tools/eva/README.md`, "Pins"). To run it on
+  your own program: `docs/using-eva.md`.
 - **Verasco**, **SparrowBerry** and **foundational verification** (issue
   #12) are not usable on this code today: `docs/for-future.md` says what
   each is, and why it waits.

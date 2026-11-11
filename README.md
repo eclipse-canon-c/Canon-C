@@ -31,21 +31,31 @@
 
 <!-- Static Analysis -->
 ### Static Analysis
-![clang-tidy](https://img.shields.io/badge/clang--tidy-Configurable-lightgrey)
-![Cppcheck](https://img.shields.io/badge/Cppcheck-Configurable-lightgrey)
+[![clang-tidy](https://img.shields.io/badge/clang--tidy-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/analysis.yml)
+[![Cppcheck](https://img.shields.io/badge/Cppcheck-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/analysis.yml)
 ![Polyspace](https://img.shields.io/badge/Polyspace-planned-lightgrey)
 ![LDRA](https://img.shields.io/badge/LDRA-planned-lightgrey)
 ![Astrée](https://img.shields.io/badge/Astr%C3%A9e-planned-lightgrey)
 
 <!-- Formal Verification & Timing Analysis -->
 ### Formal Verification & Timing Analysis
-![Frama-C](https://img.shields.io/badge/Frama--C-Configurable-lightgrey)
-![MC/DC](https://img.shields.io/badge/MC--DC-Configurable-lightgrey)
-![aiT WCET](https://img.shields.io/badge/aiT%20WCET-Configurable-lightgrey)
+[![MC/DC](https://img.shields.io/badge/MC--DC-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/analysis.yml)
+![WCET](https://img.shields.io/badge/WCET-Configurable-lightgrey)
+
+<!-- Tools for Formal Verification & Timing Analysis -->
+### Tools for Formal Verification & Timing Analysis
+[![Frama-C WP](https://img.shields.io/badge/Frama--C%20WP-CI-green)](.github/workflows/README.md)
+[![Eva](https://img.shields.io/badge/Eva-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/eva.yml)
+[![Why3](https://img.shields.io/badge/Why3-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/prover-agreement.yml)
+[![Alt-Ergo](https://img.shields.io/badge/Alt--Ergo-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/prover-agreement.yml)
+[![Z3](https://img.shields.io/badge/Z3-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/prover-agreement.yml)
+[![CVC5](https://img.shields.io/badge/CVC5-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/prover-agreement.yml)
+[![Coq](https://img.shields.io/badge/Coq-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/coq.yml)
+[![CompCert](https://img.shields.io/badge/CompCert-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/analysis.yml)
+![aiT](https://img.shields.io/badge/aiT-Configurable-lightgrey)
 
 <!-- Production / Certification -->
 ### Production & Certification
-![CompCert](https://img.shields.io/badge/CompCert-Configurable-lightgrey)
 ![DO-178C Level C/D](https://img.shields.io/badge/DO--178C-Configurable-lightblue)
 ![ISO26262 ASIL C/B](https://img.shields.io/badge/ISO26262-Configurable-lightblue)
 ![IEC 62304](https://img.shields.io/badge/IEC62304-Configurable-lightblue)
@@ -53,6 +63,13 @@
 ![IEC 61508 SIL2](https://img.shields.io/badge/IEC61508%20SIL2-Configurable-lightblue)
 ![ECSS-E-ST-40C](https://img.shields.io/badge/ECSS--E--ST--40C-Configurable-lightblue)
 
+> "CI" badges name what CI runs on every push that touches what it checks;
+> each links to its workflow, whose page shows the last result, but Frama-C
+> WP's, which runs in several workflows, links to the workflow map. Why3 and
+> the three provers run in every proof job; their badges link to the one
+> that runs each prover alone. CompCert's job is informational: its result
+> blocks nothing.
+>
 > "Planned" badges name tools the project has asked their makers to run, or
 > to let it run, on Canon-C; none has run yet.
 >

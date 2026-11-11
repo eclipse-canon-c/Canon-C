@@ -1,5 +1,7 @@
 # Eva on programs that use Canon-C (VERIFY-066)
 
+To run Eva on your own program, see `docs/using-eva.md`.
+
 WP proves each of Canon-C's functions against its contract: given its
 preconditions, the function has no runtime error and ensures its
 postconditions. Whether a program that calls the library meets those
