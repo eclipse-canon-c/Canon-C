@@ -86,6 +86,22 @@ Sources: [Astrée's compliance list](https://www.absint.com/astree/compliance.ht
 [MISRA C on Wikipedia](https://en.wikipedia.org/wiki/MISRA_C) and [LDRA on
 MISRA C:2025](https://ldra.com/ldra-blog/misra-c-2025-the-whys-and-wherefores-of-whats-new/).
 
+## A MISRA compliance summary
+
+MISRA Compliance:2020 asks a project that claims compliance for a
+guideline compliance summary: each guideline's category, and whether the
+code complies with it, deviates from it with a record, or does not use
+what it governs. Canon-C's MISRA evidence today is the `misra` job's:
+Cppcheck's addon, which covers part of the guidelines and is not a
+qualified checker. Every finding it reports is fixed or argued, and pinned
+by file and rule; the job is enforced (VERIFY-068).
+
+Why it waits: from Cppcheck alone, the summary would mark a large share of
+the guidelines as not checked, and could not show compliance with the ones
+it checks. A qualified checker, such as those named for the newer editions
+above, would let it give each guideline's status as measured. Moved here
+from VERIFY-068's plan, decided with the author (2026-11-11).
+
 ## Package managers
 
 Canon-C is reached today from its repository: a user copies the headers, or

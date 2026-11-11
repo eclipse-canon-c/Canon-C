@@ -3,7 +3,8 @@
 This file is the namespace guide for Canon-C's ID-namespaced documents:
 `docs/design-decisions.md` (OWN-NNN), `docs/verification.md` (VERIFY-NNN),
 `docs/traceability.md` (MCDC-NNN), and `docs/deviations.md` (which
-collects entries from all three plus MISRA-CFG-NNN). It records what
+collects entries from all three plus the MISRA records, MISRA-DEV-NNN,
+MISRA-TOOL-NNN, MISRA-CFG-NNN and MISRA-SCAN-NNN). It records what
 each namespace is for, what shape its entries take, and what
 categories of decision belong in each.
 
@@ -34,7 +35,7 @@ and may produce cross-references in other files:
 | OWN-NNN        | `docs/design-decisions.md`  | Architectural and substrate decisions about ownership and lifetime    | README, CMakeLists.txt, CHANGELOG, VERIFY-* |
 | VERIFY-NNN     | `docs/verification.md`      | Per-header proof obligation accounting and manually discharged goals  | `docs/deviations.md` (unproved goals), CI   |
 | MCDC-NNN       | `docs/traceability.md`      | MC/DC coverage gaps and their dispositions (reachable vs unreachable) | `docs/deviations.md`, VERIFY-* (when WP discharges a gap) |
-| MISRA-CFG-NNN  | `docs/deviations.md`        | MISRA C:2012 deviations with rationale                                | Static analysis tooling configuration       |
+| MISRA-*-NNN    | `docs/deviations.md`        | MISRA C:2012: deviations, and the checker's findings that are not violations, each with its rationale | `tools/misra/pins.txt`, the `misra` job |
 
 The four namespaces compose: a single piece of code can have entries
 in multiple files at once. The canonical example, traceable through
@@ -565,29 +566,46 @@ either.
 
 ---
 
-## MISRA-CFG-NNN — MISRA C:2012 deviations
+## MISRA-*-NNN — MISRA C:2012
 
-MISRA-CFG-NNN entries live in `docs/deviations.md` alongside the
-unproved-goal entries cross-referenced from VERIFY-NNN. They record
-MISRA C:2012 rules that Canon-C deliberately deviates from, with
-rationale.
+The MISRA records live in `docs/deviations.md`, alongside the
+unproved-goal entries cross-referenced from VERIFY-NNN. Four prefixes:
 
-Entries to date: MISRA-CFG-001 (the Cppcheck `*_impl.h`
-macro-templated-header configuration limitation). The CI file's
-`misra` job runs MISRA advisory analysis via Cppcheck's MISRA addon
-and is currently non-blocking (*"Advisory only — does not fail the
-build"*). The job's output notes that Cppcheck covers approximately
-60-70% of MISRA C:2012 rules and that certification-grade analysis
-requires a qualified tool (Polyspace, LDRA, PC-lint, Parasoft).
+- **MISRA-DEV-NNN** (27 to date): a deviation, code that does not follow
+  a guideline on purpose, with its rationale. MISRA-DEV-001 to 018 are
+  suppressed in the `misra` job, by rule or at their sites (MISRA-DEV-013
+  is superseded); MISRA-DEV-019 to 027 are counted and pinned
+  (VERIFY-068).
+- **MISRA-TOOL-NNN** (7, VERIFY-068): a finding of the checker's that is
+  not a violation, with the evidence, from the tool's dump or its addon's
+  source.
+- **MISRA-CFG-NNN** (1): a limit of the checker's configuration
+  (MISRA-CFG-001, the `*_impl.h` templates).
+- **MISRA-SCAN-NNN** (1): the scan's scope (MISRA-SCAN-001, which headers
+  are translation units).
 
-**Pending evidence.** With a single committed entry, the namespace's
-categories are not yet describable — MISRA-CFG-001 is a tool-limitation
-deviation, but whether that's the dominant category or just the first
-one cannot be known until more entries accumulate. This namespace
-remains the least settled of the four; the MISRA job stays advisory
-and certification-tooling-dependent until a qualified checker produces
-categorized output. Categories will be documented here once enough
-deviations accumulate to describe their shape.
+Their shapes, now that there are enough entries to see them:
+
+- **Deviations** come in three shapes. A design deviation is a guideline
+  the design does not follow: a `void *` generic interface, `goto` to one
+  cleanup label, a caller's byte buffer kept as a typed array. A scope
+  deviation is a hosted convenience that exists to use what a guideline
+  forbids: `util/time.h`, `util/file.h`. Verification-only code is code
+  that only Frama-C sees: declarations under `__FRAMAC__`.
+- **The tool's findings that are not violations** come in three shapes:
+  a false positive shown from the tool itself (MISRA-TOOL-001 to 003, 005,
+  006), a configuration the scan made up (MISRA-TOOL-004, as
+  MISRA-CFG-001), and a whole-program rule read on a library without its
+  users (MISRA-TOOL-007, as MISRA-DEV-002).
+
+The `misra` job runs Cppcheck's MISRA addon, 2.13.0 on the pinned
+`ubuntu-24.04` runner, which covers roughly 60–70% of MISRA C:2012's
+guidelines and is not a qualified checker; certification-grade analysis
+requires one (Astrée's RuleChecker, Polyspace, LDRA, PC-lint, Parasoft).
+Since VERIFY-068's third run the job is enforced: each real finding is
+pinned by file and rule with its record (`tools/misra/pins.txt`), and a
+difference fails the job. A summary in the form of MISRA Compliance:2020
+waits for a qualified checker (`docs/for-future.md`).
 
 ---
 
@@ -604,12 +622,13 @@ A new section earns its place when:
    README's design philosophy.
 
 When in doubt, leave the section pending. A "Pending evidence"
-marker (as still used for MISRA-CFG- above) is more honest than a
-section that invents categories before the entries demand them. The
-OWN-, VERIFY-, and MCDC- sections have each crossed the threshold —
-four sourced OWN- categories, four VERIFY- shapes across fourteen
-entries, three MCDC- shapes across six entries. MISRA-CFG- has not,
-and is marked accordingly.
+marker is more honest than a section that invents categories before
+the entries demand them. The OWN-, VERIFY-, and MCDC- sections have
+each crossed the threshold — four sourced OWN- categories, four
+VERIFY- shapes across fourteen entries, three MCDC- shapes across six
+entries. The MISRA records, pending while MISRA-CFG-001 stood alone
+here, crossed it with VERIFY-068's sixteen: six shapes across 36
+entries.
 
 ---
 

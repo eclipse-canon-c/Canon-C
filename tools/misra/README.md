@@ -13,8 +13,8 @@ by file and rule: how many, and the record that argues them.
     python3 tools/misra/misra.py check           each pin names a record that exists
 
 The job's last step runs `report` on its `misra_report.txt` and posts the
-result as a notice: report-only in VERIFY-068's run 2; from its run 3, a
-difference fails the job. `8 · Records` runs `check`.
+result as a notice; a difference fails the job (enforced since VERIFY-068's
+run 3, report-only in its run 2). `8 · Records` runs `check`.
 
 A finding is pinned by file and rule, not by line, so an edit that moves
 it keeps its pin. A count changes only with a record that says why: a new

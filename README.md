@@ -213,7 +213,7 @@ For current numbers, see:
   states what a caller with threads of their own must do, and is explicit
   that none of it is machine-checked — WP has no concurrency model, so no
   gate in CI verifies any claim in it.
-- **`docs/misra-campaign.md`** — what the MISRA C:2012 advisory count means
+- **`docs/misra-campaign.md`** — what the MISRA C:2012 findings mean
   and what it does not. Read this one first if you are evaluating the
   evidence rather than looking up a specific finding: it explains why the
   headline reduction cannot be read as a defect count, separates the two

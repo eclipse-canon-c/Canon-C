@@ -16,9 +16,9 @@ holds them by file and rule: how many, and the record that argues them.
                                                  line names a record that exists
 
 report prints each file and rule whose count is not its pin's, a finding
-with no pin, and a pin with no finding, then one notice line; it exits 0,
-or 1 on a difference when ENFORCE is set (VERIFY-068's run 3), and 2 when
-the report cannot be read. pin keeps each pair's record and writes `?`
+with no pin, and a pin with no finding, then one notice line; it exits 1
+on a difference, which fails the misra job (enforced since VERIFY-068's
+run 3), 0 otherwise, and 2 when the report cannot be read. pin keeps each pair's record and writes `?`
 for a pair new to the file, which check refuses until a record is named.
 8 · Records runs check (records.yml). A count changes only with a record
 that says why.
@@ -38,7 +38,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 PINS = os.path.join(HERE, 'pins.txt')
 DEVIATIONS = os.path.join(ROOT, 'docs', 'deviations.md')
-ENFORCE = False   # VERIFY-068 run 2: report-only; run 3 sets it
+ENFORCE = True    # VERIFY-068 run 3: report-only before it
 
 FINDING = re.compile(
     r'^(?P<path>[^\s:][^:]*):(?P<line>\d+):(?P<col>\d+): \w+: .*'

@@ -335,9 +335,12 @@ each was established after a specific failure:
   finding set is a function of the cppcheck version that comes from the
   runner image. During an image migration the count flipped between 780 and
   1004 across pushes. Pinning the image pins the tool pins the baseline.
-- **The advisory count is pinned and echoed.** The expected real count is
-  written into the job. It is advisory — real violations do not fail the
-  build — but a change in it is visible in the log rather than silent.
+- **The count is pinned and echoed, and since VERIFY-068 enforced.** The
+  expected real count is written into the job. Until VERIFY-068 it was
+  advisory — real violations did not fail the build — and a change in it
+  was visible in the log rather than silent. Since its third run, each real
+  finding is pinned by file and rule with its record
+  (`tools/misra/pins.txt`), and a difference fails the job.
 
   **This earned its keep at CI #1262.** The bitset arc's VERIFY-020 F1
   guard, `require_msg(capacity <= CANON_USIZE_MAX - 63u, ...)`, tripped

@@ -249,18 +249,15 @@ jobs:
   #    60-70% of MISRA C:2012 rules. For certification, replace with
   #    a qualified tool: Polyspace, LDRA, PC-lint, or Parasoft C/C++test.
   #
-  #    Findings are advisory — real violations do not fail the build.
-  #    Their purpose is to track MISRA compliance progress and identify
-  #    deviations that must be documented in docs/deviations.md
-  #    (inline via `cppcheck-suppress misra-c2012-X.Y` comments,
-  #    honored through --inline-suppr).
-  #
-  #    VERIFY-068 (MISRA C:2012 enforced, item 2 of the project's list)
-  #    classifies every finding the job reports: each is a deviation
-  #    (MISRA-DEV-019..027) or a finding of cppcheck's that is not a
-  #    violation (MISRA-TOOL-001..007), or it was fixed. Its run 2 pins
-  #    them by file and rule (tools/misra/pins.txt, compared by the last
-  #    step, report-only); its run 3 makes a difference fail the job.
+  #    Enforced since VERIFY-068's run 3 (MISRA C:2012, item 2 of the
+  #    project's list). Every real finding is argued in
+  #    docs/deviations.md: a deviation (MISRA-DEV-nnn) or a finding of
+  #    cppcheck's that is not a violation (MISRA-TOOL-nnn). The last step
+  #    compares them, by file and rule, with tools/misra/pins.txt, whose
+  #    each line names its record, and a difference fails the job. A new
+  #    finding is fixed, or argued in a record that its pin names. The
+  #    project-wide deviations stay suppressed by rule, or inline via
+  #    `cppcheck-suppress misra-c2012-X.Y` comments (--inline-suppr).
   #
   #    The INSTRUMENT, however, is enforced: canary/misra_canary.h
   #    contains intentional violations, and the job FAILS if they are
@@ -495,12 +492,8 @@ jobs:
           echo "  condition it existed for and its 13 suppressions were"
           echo "  deleted, verified dead beforehand.)"
           echo "==============================================="
-          # Real violations are advisory by design. When MISRA compliance
-          # is mature, uncomment to enforce a zero-real-violations gate:
-          # if [ "$((TOTAL - CANARY))" -gt 0 ]; then
-          #   echo "FAIL: $((TOTAL - CANARY)) MISRA violations found"
-          #   exit 1
-          # fi
+          # The real findings are enforced by the last step, against their
+          # pins (VERIFY-068), not here: they are argued, not zero.
       - name: Upload MISRA report
         uses: actions/upload-artifact@v6
         with:
@@ -513,8 +506,8 @@ jobs:
       - name: "The real findings against their pins (VERIFY-068)"
         # Each real finding is fixed or argued in docs/deviations.md, and
         # tools/misra/pins.txt holds them by file and rule, each with its
-        # record. Report-only in VERIFY-068's run 2; its run 3 makes a
-        # difference fail the job.
+        # record. A difference fails the job (VERIFY-068 run 3; report-only
+        # in its run 2).
         run: python3 tools/misra/misra.py report misra_report.txt
 
   # -------------------------------------------------------------------------
