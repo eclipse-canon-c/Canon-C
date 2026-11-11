@@ -33138,6 +33138,7 @@ read and argued, and each program's line pinned; then run 3, enforced.
 | **ID**         | VERIFY-068 |
 | **Date**       | 2026-11-11 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-11 — Run 1 scored: the push of 076b1c9 and 7ecd37c matched all eleven predictions, M1 to M11; CI's 57 findings are the 57 measured here, rule, file and line. Run 2, the pins, is pre-registered below ("Run 2, the pins, pre-registered"). The Status above is the record as committed. |
 | **Baseline**   | 9427017 (`README: a Usage section that compiles; packaging waits for a stable release`), which changes documentation only. The workflows' last runs: `1 · Build & test` #46, `3 · Static analysis & coverage` #46 (`misra`: real 66; canary 3; total 69), `4`, `5`, `6` #46, `7` #27, `11` #11 and `13` #8, on b5042af; `2 · Platforms` #62 on b0e644d; `8 · Records` #70 and `14 · Eva` #7 on 1fd064e; the probes g4, g13 and pointer last ran in `9 · Probes` #15, on b5042af. |
 | **Scope**      | Ten findings fixed, in `core/primitives/contract.h`, `core/primitives/limits.h`, `core/memory.h`, `data/range.h`, `data/convenience/dynstring.h`, `data/vec/vec_impl.h`, `util/parse.h` and `algo/sort/sort_impl.h`, with a test of `parse_f64`'s `errno` (`test/util/parse_test.c`); the others argued in MISRA-DEV-019 to 027 and MISRA-TOOL-001 to 007; the `misra` job's text (`analysis.yml`). The job stays advisory in this run: no gate changes. |
 | **Category**   | The project's item 2 (AUTOSAR Classic), part a: MISRA C:2012 enforced with deviations. Run 1 of 3. |
@@ -33295,3 +33296,79 @@ difference fails the job. Then a compliance summary in the form of MISRA
 Compliance:2020: each guideline's category and status (compliant, deviated
 with its record, or not checked by cppcheck, which covers part of the
 guidelines and is not a qualified checker).
+
+### Scored: run 1 (2026-11-11)
+
+The push of 076b1c9 and 7ecd37c (2026-11-11) started `1 · Build & test`
+#47, `2 · Platforms` #63, `3 · Static analysis & coverage` #47,
+`4 · Proofs: core/` #47, `5 · Proofs: semantics/` #47, `6 · Proofs: data/`
+#47, `7 · Proofs: -CC` #28, `8 · Records` #71, `9 · Probes` #18, `11 ·
+Proofs: machine models` #12, `13 · Prover agreement` #9 and `14 · Eva` #8.
+Every job is green; the probes the push did not concern were skipped.
+
+| # | scored |
+|---|--------|
+| M1 | **MATCH.** 1 to 9, 11, 13 and 14 ran; 10 and 12 did not. 9 ran g4, g13 and pointer, and skipped its six other probes. 13 ran the 26 units, 78 runs. |
+| M2 | **MATCH.** Each job of 1 gave #46's notices. |
+| M3 | **MATCH.** Each job of 2 gave #62's notices, the embedded job's line among them. |
+| M4 | **MATCH.** "MC/DC 2039 / 2206", with #46's eight cover rows. |
+| M5 | **MATCH.** "real 57; canary 3; total 60". The job's log gives the 57 findings measured here, rule, file and line. |
+| M6 | **MATCH.** static-analysis is green on Linux, macOS and Windows, as at #46, and compcert reads "59 / 59 compiled, 59 ran". |
+| M7 | **MATCH.** Every proof job of 4, 5, 6, 7 and 11 gave its last run's notices (#46, #46, #46, #27, #11): each at its pin. |
+| M8 | **MATCH.** 13 is green, and each of the 26 units reports "Against its pins: 0 difference(s)". In the 24 runs of the eight units #8 also ran, each prover's proved count and the goals in all are #8's; in nine, only the unproved goals' split among Failed, Timeout and Unknown moved. vec-fmt's slow CVC5 goals, which the comparison leaves out, went from two to one. |
+| M9 | **MATCH.** g4, g13 and the 26 pointer jobs gave #15's notices. |
+| M10 | **MATCH.** 14 gave #7's notices: at each of the ten models, 26 of 26 programs as pinned; the native job is green. |
+| M11 | **MATCH.** 8 is green. |
+
+All eleven match. What the run shows:
+
+- **The ten fixes changed no proof, no Eva result and no test**, at any
+  platform the workflows build for. `mem_copy` without `restrict` proves
+  as before, as it would if WP reads the qualifier as nothing.
+- **The merge sort without recursion** moved MC/DC by its own conditions
+  only, all of them covered by the tests as they were.
+- **The scan here and CI's agree, finding for finding.** The pins can be
+  written from either.
+
+### Run 2, the pins, pre-registered
+
+**The change.**
+
+- **`tools/misra/misra.py`** reads the job's report and groups the real
+  findings (outside `canary/`) by file and rule. `report` compares them
+  with `tools/misra/pins.txt` and prints each pair whose count is not its
+  pin's, a finding with no pin and a pin with no finding, then one notice;
+  report-only (`ENFORCE = False`). `pin` writes the file from a report,
+  keeping each pair's record. `check` verifies that each line is well
+  formed and names a record that is a heading of this file.
+- **`tools/misra/pins.txt`**: 57 findings in 32 pairs of file and rule,
+  each naming its record (MISRA-DEV-019 to 027, MISRA-TOOL-001 to 007),
+  written from the scan here, which run 1 showed to be CI's.
+- **The misra job's last step** runs `misra.py report misra_report.txt`,
+  after the report is uploaded. **`8 · Records`** runs `misra.py check`,
+  and runs on a change under `tools/misra/`.
+- **`tools/misra/README.md`**; the workflow map; and
+  `docs/misra-campaign.md`, its count 57.
+
+**Measured here.** `misra.py report` on the scan here, and on the report in
+#47's log: "as pinned: 57 real finding(s) in 32 file and rule pair(s)",
+canary 3. With a pair removed and one added, it lists both; with ENFORCE
+set, it exits 1; with no report, 2. `misra.py check`: 32 pairs, 57
+findings, 0 problems. `8 · Records`' other checks pass.
+
+**The workflows.** `tools/which_workflows.py`: 1, 2, 3, 4, 5, 6 and 8 run;
+7, 9, 10, 11, 12, 13 and 14 do not. A workflow file changes, which 1 to 6
+do not ignore; 8 runs on `.github/workflows/**` and now on `tools/misra/**`.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| N1 | **1, 2, 3, 4, 5, 6 and 8 run**; the others do not. | another set | H |
+| N2 | **3's misra job is green**: "real 57; canary 3; total 60", and its new step's notice, "as pinned: 57 real finding(s) in 32 file and rule pair(s)". | a failure, another count, or a difference | H: the same cppcheck reads the same headers. |
+| N3 | **3's other jobs give #47's notices**: "MC/DC 2039 / 2206" with its eight rows, compcert's line, static-analysis green on the three systems. | another notice, or a failure | H: no code changes. |
+| N4 | **1 and 2 are green**, each job with #47's and #63's notices. | a failure, or another notice | H |
+| N5 | **Every proof job of 4, 5 and 6 gives #47's notices**: each at its pin. | another line | H: no code changes. |
+| N6 | **8 is green**; its new step reads "pins: 32 pair(s), 57 finding(s); 0 problem(s)". | a failure, or another line | H (run here) |
+
+**What follows.** N1 to N6 scored. Run 3: `ENFORCE = True`, so that a
+difference from the pins fails the misra job; then the compliance summary,
+in the form of MISRA Compliance:2020.
