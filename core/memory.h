@@ -501,6 +501,11 @@ static inline bool mem_is_power_of_two(usize n) {
  * No-op if dest or src is NULL, or size == 0.
  *
  * @pre dest and src must not overlap — use mem_move() for overlapping regions
+ *
+ * The parameters are not restrict-qualified (MISRA C:2012 rule 8.14,
+ * VERIFY-068): the precondition above, its ACSL form and the run-time
+ * check below state that the regions do not overlap, and memcpy's own
+ * parameters are restrict.
  */
 /*@
   requires dest == \null || src == \null || size == 0 ||
@@ -521,7 +526,7 @@ static inline bool mem_is_power_of_two(usize n) {
   complete behaviors;
   disjoint behaviors;
 */
-static inline void mem_copy(void* restrict dest, const void* restrict src, usize size) {
+static inline void mem_copy(void* dest, const void* src, usize size) {
     if (!dest || !src || (size == 0u)) { return; }
     require_msg(!mem_regions_overlap(dest, src, size),
                 "mem_copy: regions overlap — use mem_move");

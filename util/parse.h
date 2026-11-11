@@ -133,9 +133,13 @@
  *
  * Side effects:
  * ────────────────────────────────────────────────────────────────────────────
- * - errno is set to 0 before each strto* call and checked afterward.
- *   This is necessary to distinguish overflow from valid input — strtoll,
- *   strtoull, and strtod communicate overflow exclusively through errno.
+ * - errno is set to 0 before each strto* call. parse_i64 and parse_u64
+ *   check it afterward: strtoll and strtoull report overflow only through
+ *   errno, and overflow is an error. parse_f64 does not: strtod's overflow
+ *   (±HUGE_VAL) and underflow are Ok values, and errno is left as strtod
+ *   set it — ERANGE on overflow, and, as the implementation defines, on
+ *   underflow (C99 7.20.1.3) — for a caller that needs to tell them from
+ *   an input that is itself inf or 0 (VERIFY-068).
  *   Callers who depend on a prior errno value should save it before calling.
  *
  * NOT suitable for:
@@ -303,6 +307,8 @@ static inline result_u64_Error parse_u64(
  * Supports decimal notation, scientific notation (e/E), hex floats (0x, C99),
  * and special values (inf, -inf, nan). Overflow → ±HUGE_VAL (still Ok).
  * Underflow → ±0.0 (still Ok). Only returns Err if no valid prefix found.
+ * errno is set to 0 before strtod, so that ERANGE afterward marks an
+ * overflow (and an underflow, where the implementation sets it).
  * Does NOT skip leading whitespace.
  *
  * @param s       Null-terminated input string (must not be NULL — contract)
@@ -323,6 +329,7 @@ static inline result_f64_Error parse_f64(
     }
 
     char* eptr;
+    errno = 0;  /* reset before strto*: ERANGE afterward is strtod's */
     f64 val = (f64)strtod(s, &eptr);
 
     if (eptr == s) {

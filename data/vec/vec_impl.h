@@ -131,8 +131,6 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 #ifdef CANON_LIFETIME_DEBUG
-    #include <stdint.h>                       /* uintptr_t */
-
     #define VEC_LIFETIME_FIELD_                                         \
         lifetime_t lt; /**< [debug] Lifetime token: id + open */
 

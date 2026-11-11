@@ -56,6 +56,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <errno.h>
 
 /* =========================================================================
  * Portability: unused-function suppression
@@ -503,6 +504,33 @@ TEST(f64_overflow_underflow) {
 }
 
 /* =========================================================================
+ * parse_f64 — errno is set to 0 before strtod (VERIFY-068), so that ERANGE
+ * afterward marks an overflow, which an input that is itself inf does not
+ * ====================================================================== */
+
+TEST(f64_errno_marks_overflow) {
+    const char* end;
+    result_f64_Error r;
+
+    errno = EDOM;                     /* a value left from before the call */
+    r = parse_f64("1e9999", &end);
+    EXPECT(result_f64_Error_is_ok(r));
+    EXPECT(isinf(result_f64_Error_unwrap(r)));
+    EXPECT(errno == ERANGE);
+
+    errno = EDOM;
+    r = parse_f64("inf", &end);
+    EXPECT(result_f64_Error_is_ok(r));
+    EXPECT(isinf(result_f64_Error_unwrap(r)));
+    EXPECT(errno == 0);
+
+    errno = EDOM;
+    r = parse_f64("2.5", &end);
+    EXPECT(result_f64_Error_is_ok(r));
+    EXPECT(errno == 0);
+}
+
+/* =========================================================================
  * parse_f64 — error cases
  * ====================================================================== */
 
@@ -752,6 +780,7 @@ int main(void) {
     RUN(f64_scientific);
     RUN(f64_special_values);
     RUN(f64_overflow_underflow);
+    RUN(f64_errno_marks_overflow);
     RUN(f64_errors);
     RUN(f64_rejects_whitespace);
     RUN(f64_prefix_parsing);

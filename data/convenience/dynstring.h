@@ -891,6 +891,8 @@ static inline void dynstring_free(DynString* s) {
         /* No buffer to free, but still close the lifetime so the
          * contract holds regardless of whether anything was appended. */
         dynstring_lifetime_close_(s);
+    } else {
+        /* s is NULL: nothing to free or close. */
     }
 }
 

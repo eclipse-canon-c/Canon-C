@@ -296,6 +296,11 @@ static inline void contract_default_handler(
  * any concurrent code runs.
  * ========================================================================= */
 
+/* Declared in every translation unit, so that the definition below, in the
+ * one that sets CANON_CONTRACT_IMPL, has its declaration before it (MISRA
+ * C:2012 rule 8.4, VERIFY-068). */
+extern contract_handler_fn canon_contract_handler;
+
 #ifdef CANON_CONTRACT_IMPL
     /**
      * @brief The global contract violation handler
@@ -305,8 +310,6 @@ static inline void contract_default_handler(
      * Write through contract_set_handler() only.
      */
     contract_handler_fn canon_contract_handler = contract_default_handler;
-#else
-    extern contract_handler_fn canon_contract_handler;
 #endif
 
 /**

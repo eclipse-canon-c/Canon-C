@@ -428,11 +428,13 @@ bare-metal section."
  *
  * - 64-bit: 8-byte alignment → 3 tag bits
  * - 32-bit: 4-byte alignment → 2 tag bits
- * - other:  conservative 1 tag bit
+ * - other:  conservative 1 tag bit, as where there is no uintptr_t, which
+ *   C99 makes optional (7.18.1.4): UINTPTR_MAX is then not defined, and is
+ *   tested for first (MISRA C:2012 rule 20.9, VERIFY-068)
  */
-#if UINTPTR_MAX == UINT64_MAX
+#if defined(UINTPTR_MAX) && (UINTPTR_MAX == UINT64_MAX)
 #  define CANON_PTR_TAG_BITS 3
-#elif UINTPTR_MAX == UINT32_MAX
+#elif defined(UINTPTR_MAX) && (UINTPTR_MAX == UINT32_MAX)
 #  define CANON_PTR_TAG_BITS 2
 #else
 #  define CANON_PTR_TAG_BITS 1

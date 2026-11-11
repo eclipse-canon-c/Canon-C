@@ -636,6 +636,8 @@ static inline isize range_next(range* r) {
             r->current = r->end;
         } else if ((r->step < 0) && (r->current <= r->end)) {
             r->current = r->end;
+        } else {
+            /* Not past end: current keeps next_value. */
         }
     } else {
         r->current = r->end;

@@ -33,7 +33,7 @@
  *   algo_sort_swap             — swaps two elements via a fixed stack buffer
  *   algo_insertion_sort_range  — insertion sort over index range [left, right)
  *   algo_merge                 — merges [left, mid) and [mid, right) via temp
- *   algo_merge_sort_range      — recursive merge sort over [left, right)
+ *   algo_merge_sort_range      — bottom-up merge sort over [left, right)
  *
  * ALGO_SORT_LINKAGE applies only to the two public functions: algo_sort
  * and algo_is_sorted.
@@ -49,7 +49,8 @@
  *   len >= 16 + temp  → merge sort (O(n log n) guaranteed, stable)
  *   len >= 16, !temp  → insertion sort fallback (O(n²))
  *
- * Merge sort recurses, using insertion sort for sub-ranges < 16 elements.
+ * Merge sort is bottom-up: runs of 8 elements sorted by insertion, then
+ * merged in pairs, the width doubling each pass; no recursion (VERIFY-068).
  * The <= comparator in the merge step ensures stability — equal elements
  * from the left half always precede those from the right half.
  *
@@ -133,7 +134,7 @@ static inline void algo_sort_swap(void* a, void* b, usize elem_size) {
  * O(n²) worst case, O(n) best case on nearly-sorted input. Cache-friendly
  * for small ranges. Stable — equal elements preserve original relative order.
  * Used directly by algo_sort for len < 16, and by algo_merge_sort_range for
- * sub-ranges < 16 elements during recursion.
+ * its runs of 8 elements (the last may be shorter).
  *
  * @param base      Pointer to array start (borrowed, modified in place)
  * @param left      Inclusive start index
@@ -219,16 +220,26 @@ static inline void algo_merge(
 }
 
 /**
- * @brief Recursive merge sort over index range [left, right)
+ * @brief Bottom-up merge sort over index range [left, right)
  *
- * Divides the range at the midpoint and recurses on each half, then merges
- * the sorted halves via algo_merge. Sub-ranges of fewer than 16 elements
- * are sorted directly with insertion sort — this hybrid approach is faster
- * in practice because insertion sort outperforms merge sort at small sizes.
+ * Sorts [left, right) in runs of 8 elements by insertion sort (the last
+ * run may be shorter), then merges adjacent runs in pairs via algo_merge,
+ * the run width doubling each pass, until one run covers the range. The
+ * hybrid is faster in practice, insertion sort outperforming merge sort at
+ * small sizes. Runs of 8 keep the comparisons of the recursive form this
+ * replaces, whose insertion-sorted pieces had 8 to 15 elements: the same
+ * count at power-of-two lengths, and about as many elsewhere (VERIFY-068).
+ * The passes are loops: no recursion (MISRA C:2012 rule 17.2), and a fixed
+ * stack, whatever the length.
+ *
+ * Each pass leaves [left, right) in sorted runs of the pass's width, the
+ * last one possibly shorter; a last run without a partner stays as it is
+ * until a wider pass merges it. Merging adjacent runs with algo_merge's <=
+ * keeps the sort stable, as the recursive form it replaces was.
  *
  * @param base      Pointer to array start (borrowed, modified in place)
  * @param left      Inclusive start index
- * @param right     Exclusive end index
+ * @param right     Exclusive end index (right - left >= 1)
  * @param elem_size Size in bytes of each element
  * @param cmp       Comparator (borrowed)
  * @param ctx       Optional context (borrowed, may be NULL)
@@ -243,15 +254,30 @@ static inline void algo_merge_sort_range(
     void*       ctx,
     void*       temp)
 {
-    if ((right - left) <= 1u) { return; }
-    if ((right - left) < 16u) {
-        algo_insertion_sort_range(base, left, right, elem_size, cmp, ctx);
-        return;
+    usize n     = right - left;
+    usize start = left;
+    usize width = 8u;
+
+    /* Runs of 8 elements, sorted by insertion; the last may be shorter. */
+    while ((right - start) > 8u) {
+        algo_insertion_sort_range(base, start, start + 8u, elem_size, cmp, ctx);
+        start += 8u;
     }
-    usize mid = left + (right - left) / 2u;
-    algo_merge_sort_range(base, left, mid,   elem_size, cmp, ctx, temp);
-    algo_merge_sort_range(base, mid,  right, elem_size, cmp, ctx, temp);
-    algo_merge(base, left, mid, right, elem_size, cmp, ctx, temp);
+    algo_insertion_sort_range(base, start, right, elem_size, cmp, ctx);
+
+    /* Adjacent runs of `width` elements merged in pairs, the width doubling
+       each pass. No sum below overflows: each stays below right. */
+    while (width < n) {
+        usize lo = left;
+        while ((right - lo) > width) {
+            usize mid = lo + width;
+            usize hi  = ((right - mid) > width) ? (mid + width) : right;
+            algo_merge(base, lo, mid, hi, elem_size, cmp, ctx, temp);
+            lo = hi;
+        }
+        /* Past half the length, this pass made one run of [left, right). */
+        width = (width > (n / 2u)) ? n : (2u * width);
+    }
 }
 
 /* ============================================================================
@@ -290,7 +316,7 @@ static inline void algo_merge_sort_range(
  *
  * Performance:
  * - Time:  O(n log n) with temp_buffer; O(n²) without
- * - Space: O(n) temp_buffer (caller-provided); O(log n) stack for recursion
+ * - Space: O(n) temp_buffer (caller-provided); O(1) stack, no recursion
  */
 ALGO_SORT_LINKAGE void algo_sort(
     borrowed(void*)         base,

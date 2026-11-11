@@ -255,6 +255,12 @@ jobs:
   #    (inline via `cppcheck-suppress misra-c2012-X.Y` comments,
   #    honored through --inline-suppr).
   #
+  #    VERIFY-068 (MISRA C:2012 enforced, item 2 of the project's list)
+  #    classifies every finding the job reports: each is a deviation
+  #    (MISRA-DEV-019..027) or a finding of cppcheck's that is not a
+  #    violation (MISRA-TOOL-001..007), or it was fixed. Its run 2 pins
+  #    them by file and rule; its run 3 makes a difference fail the job.
+  #
   #    The INSTRUMENT, however, is enforced: canary/misra_canary.h
   #    contains intentional violations, and the job FAILS if they are
   #    not detected. Rationale: cppcheck emits MISRA addon findings at
@@ -405,7 +411,7 @@ jobs:
           echo "  Real violations:               $((TOTAL - CANARY))"
           echo "::notice title=misra::real $((TOTAL - CANARY)); canary ${CANARY}; total ${TOTAL}"   # VERIFY-050
           echo ""
-          echo "  Expected real count: 66 (pinned; cppcheck 2.13.0,"
+          echo "  Expected real count: 57 (pinned; cppcheck 2.13.0,"
           echo "  suppression set MISRA-DEV-001..012 + 014..018)."
           echo "  53 -> 54 at VERIFY-031 run 1 (f6e54ca): one 21.2 at"
           echo "  data/stringbuf.h's __FRAMAC__-only vsnprintf axiom — the"
@@ -427,12 +433,18 @@ jobs:
           echo "  misra-config: iter_next and the key and value types come"
           echo "  from hashmap.h, which a standalone scan of the header does"
           echo "  not see. Its six 15.6 (unbraced ifs) were fixed."
+          echo "  66 -> 57 at VERIFY-068 run 1 (predicted from a local"
+          echo "  scan): ten fixed (8.4, 20.9 x2, 15.7 x2, 20.1, 22.8,"
+          echo "  17.2 x2, 8.14), and one 22.9 surfaced at parse_f64,"
+          echo "  which now sets errno to 0 before strtod. The 57: 19"
+          echo "  deviations (MISRA-DEV-019..027) and 38 findings that are"
+          echo "  not violations (MISRA-TOOL-001..007)."
           echo ""
           echo "  The ledger reads as TWO SEGMENTS joined at Commit 12,"
           echo "  because MISRA-SCAN-001 re-baselined the analysis surface"
           echo "  itself (template fragments are not translation units):"
           echo "    pre-2026-07-25 surface: 1672 -> 108"
-          echo "    corrected surface:       98 ->  53 -> 54 -> 55 -> 60 -> 66"
+          echo "    corrected surface:       98 ->  53 -> 54 -> 55 -> 60 -> 66 -> 57"
           echo "  (53 at the campaign's close; each step after it is listed"
           echo "  above — recorded additions, not regressions.)"
           echo "  -10 of that step is the INSTRUMENT, not the code, and the"
