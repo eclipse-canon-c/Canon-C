@@ -8814,6 +8814,286 @@ are exactly the checks a MISRA project should want to keep.
 **Mitigation**: per-site inline suppressions; rule 2.3 stays live for genuinely
 unused typedefs.
 
+## MISRA-DEV-019: Rule 15.1 — `goto` to one cleanup label in `file_read_all_arena`
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-DEV-019 | 2026-11-11 | 5 sites: `util/file.h`, `file_read_all_arena` | Advisory rule; design deviation (VERIFY-068) |
+
+**Description**: the five `goto done;` in `file_read_all_arena` jump forward
+to one label in the same function, where the file is closed and the result
+returned.
+
+**Rationale**: one exit closes the `FILE` on every path, the pattern the
+README recommends for a function with cleanup. Rules 15.2 and 15.3
+(Required), which allow only a forward jump to a label in the enclosing
+block, hold: cppcheck reports neither.
+
+**Mitigation**: none in the code. The findings stay counted, and VERIFY-068
+pins them by file and rule from its second run.
+
+## MISRA-DEV-020: Rule 15.4 — loops with more than one exit
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-DEV-020 | 2026-11-11 | 2 loops: `data/hashmap/hashmap_impl.h:732` (`HM_REMOVE_`'s probe), `util/str/str_split.h:123` (`str_split`) | Advisory rule; design deviation (VERIFY-068) |
+
+**Description**: `remove`'s probe stops at an empty slot, at a slot whose
+probe length is shorter than the search's (in a Robin Hood table the key
+cannot be further on), or at the key: three `break`s. `str_split`'s loop
+stops at the end of the string, or when `parts_out` is full: two.
+
+**Rationale**: each exit is its own condition, stated where it applies; one
+exit would need a flag that says which. `HM_REMOVE_` is proved by WP with
+the loop's invariants and variant (the hashmap unit).
+
+**Mitigation**: none in the code; pinned, as MISRA-DEV-019.
+
+## MISRA-DEV-021: Rule 21.2 — C library functions declared for Frama-C only
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-DEV-021 | 2026-11-11 | 3 sites: `data/stringbuf.h:75` (`vsnprintf`), `semantics/diag.h:78` (`snprintf`), `semantics/diag.h:85` (`fprintf`) | Required rule; verification-only code (VERIFY-068) |
+
+**Description**: under `#ifdef __FRAMAC__`, the two headers declare
+`vsnprintf`, `snprintf` and `fprintf` again, each with the ACSL contract
+that WP proves their callers against (VERIFY-031 for `vsnprintf`; diag.h's
+trusted specifications, `docs/verification.md`). Rule 21.2 forbids declaring
+a reserved identifier.
+
+**Rationale**: `__FRAMAC__` is defined by Frama-C's preprocessing only. No
+compiler sees these declarations, and no program contains them. Each is
+compatible with the standard's prototype (C99 7.19.6.5, 7.19.6.12, 7.19.6.1;
+a parameter's `restrict` does not count, 6.7.5.3p15), so the proof and the
+build read the same function.
+
+**Mitigation**: none in the code; pinned, as MISRA-DEV-019.
+
+## MISRA-DEV-022: Rule 11.3 — hashmap's slots in the caller's byte buffer
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-DEV-022 | 2026-11-11 | 1 site: `data/hashmap/hashmap_impl.h:416`, `HM_INIT_` | Required rule; design deviation (VERIFY-068) |
+
+**Description**: `hashmap_init` takes its storage from the caller as a byte
+slice, and keeps it as the slot array: `map->slots =
+(HASHMAP_SLOT_NAME*)buf.ptr;`, a cast between pointers to different object
+types.
+
+**Rationale**: storage from the caller is how the map gets memory without
+allocating (rule 21.3). Before the cast, `HM_INIT_` returns an error unless
+the buffer holds `capacity` slots (`HM_BUFFER_SIZE_`, overflow checked) and
+its address is aligned for the slot type (VERIFY-054 H1). WP proves
+`HM_INIT_` against its contract (the hashmap unit).
+
+**Mitigation**: none in the code; pinned, as MISRA-DEV-019.
+
+## MISRA-DEV-023: Rule 11.4 — an object pointer converted to an integer
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-DEV-023 | 2026-11-11 | 2 sites: `data/hashmap/hashmap_impl.h:412` (`HM_INIT_`'s alignment test), `core/region.h:462` (`region_begin`'s id) | Advisory rule; design deviation (VERIFY-068) |
+
+**Description**: `hashmap_init` tests the buffer's alignment by its address
+value, `(uintptr_t)buf.ptr % align`; `region_begin` gives a region its
+address as its id, `(region_id_t)(uintptr_t)r`, as its contract states.
+
+**Rationale**: the address as an integer is the test, or the identity. The
+result is implementation-defined (C99 6.3.2.3p6); on every platform Canon-C
+supports, `uintptr_t` holds an object's address. MISRA-DEV-010 is the same
+for `void *` (rule 11.6). Both conversions belong on the list of the
+implementation-defined behaviours Canon-C relies on (MISRA Directive 1.1),
+part c of the project's item 2.
+
+**Mitigation**: none in the code; pinned, as MISRA-DEV-019.
+
+## MISRA-DEV-024: Rule 21.16 — `memcmp` over bytes
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-DEV-024 | 2026-11-11 | 2 sites: `core/memory.h`, `mem_compare` and `mem_equal` | Required rule; design deviation (VERIFY-068) |
+
+**Description**: `mem_compare` and `mem_equal` compare two regions of
+`size` bytes with `memcmp`. Their parameters are `const void *`, which rule
+21.16 does not admit for `memcmp` (pointers to pointers, and to essentially
+Boolean, signed, unsigned or enum types).
+
+**Rationale**: they are the byte primitives, and their contracts are about
+bytes. The rule guards against comparing structures with padding, or
+floating values, byte by byte; that is the caller's to avoid, at the type
+the caller knows.
+
+**Mitigation**: none in the code; pinned, as MISRA-DEV-019.
+
+## MISRA-DEV-025: Rule 21.8 — `abort` in the default contract handler
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-DEV-025 | 2026-11-11 | 1 site: `core/primitives/contract.h:266`, `contract_default_handler` | Required rule; design deviation (VERIFY-068) |
+
+**Description**: the default contract handler prints the contract that
+failed to `stderr`, and calls `abort`.
+
+**Rationale**: a contract handler must not return: the callers' code, and
+the proofs, rely on it. In a hosted program, `abort` is C's abnormal end.
+The handler is a default only: `contract_set_handler` replaces it, and a
+program bound by MISRA installs its own, which brings the system to its
+safe state (for AUTOSAR, part d of the project's item 2 plans one that
+reports to the Development Error Tracer). Under Frama-C, the body is a loop
+that does not end.
+
+**Mitigation**: none in the code; pinned, as MISRA-DEV-019.
+
+## MISRA-DEV-026: Rule 21.10 — `util/time.h`
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-DEV-026 | 2026-11-11 | 1 site: `util/time.h:41`, `#include <time.h>` | Required rule; scope deviation (VERIFY-068) |
+
+**Description**: `util/time.h` wraps the C library's clocks, or Windows'.
+Rule 21.10 forbids the time and date functions.
+
+**Rationale**: wrapping them is what the header is for. A program bound by
+the rule does not include it; it is one of `util/`'s hosted conveniences,
+outside the proved units, as `util/file.h` is for `<stdio.h>`
+(MISRA-DEV-016).
+
+**Mitigation**: none in the code; pinned, as MISRA-DEV-019.
+
+## MISRA-DEV-027: Rules 22.8 and 22.9 — `errno` around `ftell` and `strtod`
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-DEV-027 | 2026-11-11 | 2 sites: `util/file.h:170` (`ftell`, rule 22.8), `util/parse.h:333` (`strtod`, rule 22.9) | Required rules; design deviation (VERIFY-068) |
+
+**Description**: `file_read_all_arena` calls `ftell` without setting `errno`
+to 0 first (22.8). `parse_f64` sets `errno` to 0 before `strtod`, since
+VERIFY-068, and does not test it after (22.9).
+
+**Rationale**: `ftell` reports failure in its return value, -1L (C99
+7.19.9.4p3), which the function tests; `errno` would add nothing it uses.
+`parse_f64` returns `strtod`'s overflow and underflow as Ok values, by its
+documented design, and leaves `errno` for its caller, for whom ERANGE then
+marks them: the test is the caller's.
+
+**Mitigation**: none in the code; pinned, as MISRA-DEV-019.
+
+## MISRA-TOOL-001: Rule 4.1 — a line splice in `#error`, read as an escape
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-TOOL-001 | 2026-11-11 | 2 sites: `core/primitives/limits.h:183`, `core/primitives/types.h:102` | cppcheck 2.13 false positive (VERIFY-068) |
+
+**Description**: each site is an `#error` whose message runs over several
+lines, each ending in a backslash: a line splice, which translation phase 2
+removes. The message has no escape sequence.
+
+**Evidence**: cppcheck's dump of the directive (`--dump`) gives each splice
+as `\x` followed by the next line ("the size literals and \xcapacity
+constants…"), and the addon's `misra_4_1` then reads a hexadecimal escape
+that is not terminated. Its pairing of characters (`grouped(symbols, 2)`)
+finds `\x` only at an even offset, so the same form elsewhere may go
+unreported: a test file with one splice is not reported.
+
+## MISRA-TOOL-002: Rule 11.9 — a conditional's pointer operand
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-TOOL-002 | 2026-11-11 | 4 sites: `core/region.h:737` (`region_id`); `semantics/borrow.h:385, 563, 859` (`BORROW_LT_INIT_`, under `CANON_LIFETIME_DEBUG`) | cppcheck 2.13 false positive (VERIFY-068) |
+
+**Description**: each site is `p ? p->id : REGION_ID_STATIC`: a pointer
+tested, and an id as the result, of type `region_id_t` (`u64`);
+`REGION_ID_STATIC` is `((region_id_t)0)`. No pointer is compared with 0 or
+given 0.
+
+**Evidence**: the addon's `misra_11_9` reports a `?` whose first operand,
+the condition, is a pointer when its second, the `:` pair, is not a pointer
+and may be 0. It compares the condition with the result, which C never
+converts to each other.
+
+## MISRA-TOOL-003: Rule 10.3 — a pointer stepped, read as a value narrowed
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-TOOL-003 | 2026-11-11 | 2 sites: `algo/reverse/reverse_impl.h:152, 153`, `algo_reverse` | cppcheck 2.13 false positive (VERIFY-068) |
+
+**Description**: `left += elem_size;` and `right -= elem_size;` step two
+`u8 *` by an element's size.
+
+**Evidence**: the addon's `misra_10_3` takes the essential type of `left` to
+be its pointee's, 8-bit unsigned, and reports the 64-bit `elem_size` as
+narrowed. The essential type model is for arithmetic operands; stepping a
+pointer is rule 18.4's, deviated project-wide (MISRA-DEV-008).
+
+## MISRA-TOOL-004: Rule 17.3 and `misra-config` — `hashmap_range.h` read without `hashmap.h`
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-TOOL-004 | 2026-11-11 | 6 findings at `data/hashmap/hashmap_range.h:176, 221` (the key and value collectors): 17.3 ×2, `misra-config` ×4 | cppcheck 2.13 configuration limitation (VERIFY-068) |
+
+**Description**: `hashmap_range.h` is included after `hashmap.h`, with the
+same parameters, as its `#error` says; its two loops call the map's
+`iter_next`, which `hashmap.h` declares.
+
+**Evidence**: the scan reads each header alone. cppcheck makes up a
+configuration in which `HASHMAP_KEY_TYPE` and the other parameters are
+defined but `hashmap.h` is not included: `iter_next` then has no declaration
+(17.3), and its types are unknown (`misra-config`). A program that uses the
+header compiles it after `hashmap.h`, where calling an undeclared function
+is an error the tests' builds would report (C99 6.5.1p2; `-Wall -Werror`).
+Of the kind of MISRA-CFG-001, whose suppression covers `*_impl.h` only.
+
+## MISRA-TOOL-005: Rule 17.3 — `__builtin_expect`
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-TOOL-005 | 2026-11-11 | 2 sites: `data/convenience/dynstring.h:582, 616` (`dynstring_append`, `dynstring_append_char`) | cppcheck 2.13 false positive (VERIFY-068) |
+
+**Description**: `DYNSTRING_UNLIKELY(x)` is `__builtin_expect(!!(x), 0)`
+under GCC and Clang, and `(x)` otherwise or with `CANON_NO_GNU_EXTENSIONS`.
+
+**Evidence**: `__builtin_expect` is a builtin, declared by the compiler;
+cppcheck does not know it, and reports a call to a function with no
+declaration. It is a language extension, rule 1.2's (advisory), which
+cppcheck does not report and `CANON_NO_GNU_EXTENSIONS` removes;
+`dynstring.h` is a convenience, outside the proved units.
+
+## MISRA-TOOL-006: Rule 5.7 — one type, defined in several headers, one definition per translation unit
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-TOOL-006 | 2026-11-11 | 16 sites: `CANON_RESULT(_Bool, Error)` in 8 headers (`fold_decl.h`, `fold_impl.h`, `deque_impl.h`, `hashmap_decl.h`, `hashmap_impl.h`, `priority_queue.h`, `vec_impl.h`, `log.h`); hashmap's option, result, map and slot types, 4 in `hashmap_decl.h` and 4 in `hashmap_impl.h` | cppcheck 2.13 false positive, argued (VERIFY-068) |
+
+**Description**: each type is defined from one macro in several headers, and
+each definition is guarded so that a translation unit sees exactly one:
+`CANON_RESULT_BOOL_ERROR_DEFINED` for `result__Bool_Error`; for hashmap's
+types, the declaration and implementation headers' protocol (VERIFY-054).
+Across translation units the definitions are the same tokens, so one type.
+
+**Evidence**: the addon reports a tag defined at more than one place in the
+files it scans; it cannot see that one definition is active per translation
+unit. Rule 5.7 forbids reusing a tag for a different tag, or for another
+purpose; here each names one type. `test/integration/header_combination_test.c`
+fails if two of the headers cannot be included together (Commit 15,
+`docs/misra-campaign.md`, "Rule 5.7").
+
+## MISRA-TOOL-007: Rules 8.7 and 2.3 — the library scanned without its users
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-TOOL-007 | 2026-11-11 | 6 sites: 8.7 at `algo/search/search_impl.h:217, 278` and `data/hashmap/hashmap_impl.h:305, 369, 602`; 2.3 at `algo/fold/fold.h:164` | Advisory rules; a library analysed alone (VERIFY-068) |
+
+**Description**: in the separate-compilation form (`*_decl.h` with
+`*_defn.h`), the linkage macro is empty and the functions have external
+linkage, so that other translation units, the user's, call them; the scan
+sees only the one that defines them (8.7). `fold.h`'s `result_bool_Error`
+is a name for users, unused in the library itself (2.3).
+
+**Evidence**: both rules are about a whole program, an identifier
+referenced in one translation unit and a type declared and not used; a
+library's interface is used by programs the scan does not contain.
+MISRA-DEV-002 is the same for macros (rule 2.5).
+
 ## MCDC-013: One Outcome Platform-Dead, and a Denominator That Grew (lifetime.h)
 
 | Field          | Value |
@@ -32848,3 +33128,170 @@ All nine match. What the run shows:
 **What follows.** VERIFY-066's run 2, its pins: each alarm, each undecided
 call and each check Eva cannot confirm, in every program at every model,
 read and argued, and each program's line pinned; then run 3, enforced.
+
+---
+
+## VERIFY-068: Pre-registration — MISRA C:2012 Enforced With Deviations, Run 1: Each of the 66 Findings Fixed or Argued, Report-Only
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-068 |
+| **Date**       | 2026-11-11 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 9427017 (`README: a Usage section that compiles; packaging waits for a stable release`), which changes documentation only. The workflows' last runs: `1 · Build & test` #46, `3 · Static analysis & coverage` #46 (`misra`: real 66; canary 3; total 69), `4`, `5`, `6` #46, `7` #27, `11` #11 and `13` #8, on b5042af; `2 · Platforms` #62 on b0e644d; `8 · Records` #70 and `14 · Eva` #7 on 1fd064e; the probes g4, g13 and pointer last ran in `9 · Probes` #15, on b5042af. |
+| **Scope**      | Ten findings fixed, in `core/primitives/contract.h`, `core/primitives/limits.h`, `core/memory.h`, `data/range.h`, `data/convenience/dynstring.h`, `data/vec/vec_impl.h`, `util/parse.h` and `algo/sort/sort_impl.h`, with a test of `parse_f64`'s `errno` (`test/util/parse_test.c`); the others argued in MISRA-DEV-019 to 027 and MISRA-TOOL-001 to 007; the `misra` job's text (`analysis.yml`). The job stays advisory in this run: no gate changes. |
+| **Category**   | The project's item 2 (AUTOSAR Classic), part a: MISRA C:2012 enforced with deviations. Run 1 of 3. |
+
+### What is decided
+
+Item 2 makes Canon-C ready for AUTOSAR Classic projects, whose code is held
+to MISRA C:2012. Its part a enforces the `misra` job, which since VERIFY-050
+fails only when its canary goes unseen: its count of real findings, 66 since
+VERIFY-054's run 2, is read, not checked. Enforcing it means that a new
+finding fails the job, and first, that each of the 66 is fixed or argued. As
+VERIFY-066 did for Eva, in three runs: this one fixes what is better fixed
+and argues the rest, report-only; run 2 pins what remains, by file and rule,
+and compares; run 3 fails the job on a difference.
+
+The project's rule (`docs/misra-campaign.md`): a finding is worth acting on
+when acting on it makes the code better, not when it makes the count
+smaller. Two of the fixes change code by the author's decision (2026-11-11):
+merge sort without recursion (rule 17.2), and `mem_copy` without `restrict`
+(rule 8.14).
+
+### The 66, read site by site
+
+cppcheck 2.13.0, with the job's command, gives here what CI's #46 gives:
+real 66, canary 3, total 69. Each finding was read at its site:
+
+| rule | category | findings | where | outcome |
+|------|----------|----------|-------|---------|
+| 5.7 | Required | 16 | `CANON_RESULT(_Bool, Error)` in eight headers; hashmap's types in `hashmap_decl.h` and `hashmap_impl.h` | not a violation: MISRA-TOOL-006 |
+| 8.7 | Advisory | 5 | `search_impl.h` ×2, `hashmap_impl.h` ×3 | the library scanned without its users: MISRA-TOOL-007 |
+| 2.3 | Advisory | 1 | `fold.h` | the same: MISRA-TOOL-007 |
+| 15.1 | Advisory | 5 | `util/file.h` | deviation: MISRA-DEV-019 |
+| `misra-config` | — | 4 | `hashmap_range.h` | cppcheck's configuration: MISRA-TOOL-004 |
+| 17.3 | Mandatory | 4 | `hashmap_range.h` ×2; `dynstring.h` ×2 | not violations: MISRA-TOOL-004, MISRA-TOOL-005 |
+| 11.9 | Required | 4 | `region.h`, `borrow.h` ×3 | not violations: MISRA-TOOL-002 |
+| 21.2 | Required | 3 | `stringbuf.h`, `diag.h` ×2 | deviation: MISRA-DEV-021 |
+| 4.1 | Required | 2 | `limits.h`, `types.h` | not violations: MISRA-TOOL-001 |
+| 22.8 | Required | 2 | `util/file.h` (`ftell`); `util/parse.h` (`strtod`) | `file.h`: deviation, MISRA-DEV-027; `parse.h`: **fixed** |
+| 21.16 | Required | 2 | `memory.h` | deviation: MISRA-DEV-024 |
+| 20.9 | Required | 2 | `limits.h` | **fixed** |
+| 17.2 | Required | 2 | `sort_impl.h` | **fixed** (the author's decision) |
+| 15.7 | Required | 2 | `dynstring.h`, `range.h` | **fixed** |
+| 15.4 | Advisory | 2 | `hashmap_impl.h`, `str_split.h` | deviation: MISRA-DEV-020 |
+| 11.4 | Advisory | 2 | `hashmap_impl.h`, `region.h` | deviation: MISRA-DEV-023 |
+| 10.3 | Required | 2 | `reverse_impl.h` | not violations: MISRA-TOOL-003 |
+| 8.4 | Required | 1 | `contract.h` | **fixed** |
+| 8.14 | Required | 1 | `memory.h` | **fixed** (the author's decision) |
+| 21.8 | Required | 1 | `contract.h` | deviation: MISRA-DEV-025 |
+| 21.10 | Required | 1 | `util/time.h` | deviation: MISRA-DEV-026 |
+| 20.1 | Advisory | 1 | `vec_impl.h` | **fixed** |
+| 11.3 | Required | 1 | `hashmap_impl.h` | deviation: MISRA-DEV-022 |
+
+Ten fixed; 38 findings that are not violations, each with its evidence
+(the tool's dump, or the addon's source, `misra.py`); 18 deviations. The
+categories are MISRA C:2012's, as SciTools' rule list gives them, and, for
+the first amendment's 21.16, 22.8 and 22.9, MathWorks' pages.
+
+### The fixes
+
+- **`contract.h` (8.4).** `canon_contract_handler` is declared `extern` in
+  every translation unit, and defined, as before, in the one that sets
+  `CANON_CONTRACT_IMPL`, which now has the declaration before the
+  definition.
+- **`limits.h` (20.9 ×2).** `CANON_PTR_TAG_BITS` tests
+  `defined(UINTPTR_MAX)` before its value. `uintptr_t` is optional in C99
+  (7.18.1.4); without it, the old test read `UINTPTR_MAX` as 0 and took the
+  last branch, as the new one does: no platform changes value.
+- **`range.h`, `dynstring.h` (15.7 ×2).** Each `if … else if` chain ends
+  with an `else` whose comment says why it does nothing.
+- **`vec_impl.h` (20.1).** The `#include <stdint.h>` under
+  `CANON_LIFETIME_DEBUG` goes: `types.h`, included at the top, includes it.
+- **`parse.h` (22.8).** `parse_f64` sets `errno` to 0 before `strtod`, as
+  the header's text said every parse did; a caller can now tell an overflow
+  (ERANGE) from an input that is itself `inf`. It leaves the test to the
+  caller, by design, and rule 22.9 reports that at the same call
+  (MISRA-DEV-027). The header's text is corrected: `parse_i64` and
+  `parse_u64` test `errno`, `parse_f64` leaves it. A test,
+  `f64_errno_marks_overflow`, sets `errno` to EDOM before each call and
+  expects ERANGE after "1e9999", 0 after "inf" and after "2.5"; with the
+  baseline's `parse.h`, its two checks of 0 fail.
+- **`sort_impl.h` (17.2 ×2).** `algo_merge_sort_range` is bottom-up: runs
+  of 8 elements sorted by insertion, then merged in pairs, the width
+  doubling each pass. Loops, no recursion, and a fixed stack. Merging with
+  `algo_merge`'s `<=` keeps it stable, so for a comparator that orders
+  consistently, the result is the array the recursive form gave. Runs of 8,
+  because the recursive form's insertion-sorted pieces had 8 to 15
+  elements: on random keys at eleven lengths from 16 to 100 003, runs of 8
+  make the same number of comparisons at the power-of-two lengths (49 at
+  16, 45 743 at 4 096, 995 116 at 65 536), and 1% fewer in all (2 740 263
+  against 2 768 830); runs of 16 made 7% more.
+- **`memory.h` (8.14).** `mem_copy`'s parameters lose `restrict`. Its ACSL
+  precondition (`!regions_overlap`) and its run-time check say that the
+  regions do not overlap, and `memcpy`'s parameters are `restrict`: nothing
+  changes at run time.
+
+### Measured here
+
+Frama-C 25.0-beta (Manganese) runs here, without WP: the proofs are
+predicted, not run.
+
+- **Tests**: 58 of 58 pass with gcc in Debug (ASan, UBSan) and Release,
+  clang in Debug and Release, and gcc with `CANON_LIFETIME=debug` (ASan,
+  UBSan).
+- **The sort alone**: at every length from 0 to 700 and nine from 1 000 to
+  100 003, with keys drawn from 1 to 4 000 000 000 values, 12-byte
+  elements, the result is sorted, stable and a permutation of the input;
+  1-byte elements at lengths 0 to 300 are sorted. With gcc under ASan and
+  UBSan, and with clang and gcc 14 at `-O2`.
+- **The `misra` job's command**: real 57, canary 3, total 60. The ten fixed
+  findings are gone and one 22.9 comes, at `util/parse.h:333`; the other 56
+  are at their sites, `memory.h`'s two 21.16 five lines lower (709, 759),
+  below `mem_copy`'s new comment.
+- **The coverage job's commands** (gcc 14): MC/DC 2039 / 2206, from
+  2032 / 2200, which they give here on the baseline as #46 does:
+  `sort_impl.h` from 31 / 32 to 38 / 38, every other file and the eight
+  cover rows unchanged.
+- **clang-tidy**, the static-analysis job's step: no warning. **cppcheck**,
+  its Linux command: exit 0.
+- **Embedded**: `tools/embedded_compile_check.sh`'s two newlib targets
+  (arm-none-eabi-gcc, Cortex-M0+ and Cortex-M4), each at `-O0`, `-Os` and
+  `-O2`: 136 of 136 compile at each. Its picolibc and RISC-V targets are not
+  installed here.
+- **Eva**: `eva.py native`, 26 of 26 programs compile and return 0 under
+  ASan and UBSan; at x86_64 and `msvc_x86_64`, 26 of 26 as pinned.
+- **`8 · Records`' checks** pass.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 9, 11, 13 and 14 run; 10 and 12 do not.
+In 9, g4 and g13 (`core/memory.h`) and pointer (`data/vec/**`). 13 takes
+all 26 units (`agreement.py affected`): `data/convenience/dynstring.h` is a
+header no unit includes, for which the script runs every unit, and
+`contract.h` alone is among 21 units' files. 78 runs, three provers each.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| M1 | **1 to 9, 11, 13 and 14 run**; 10 and 12 do not. 9 runs g4, g13 and pointer, and no other probe; 13 runs the 26 units, 78 runs. | another set | H |
+| M2 | **1 is green**, each job with #46's notices. | a failure, or another notice | M–H: measured here in five configurations; MSVC, macOS and MinGW are not run here. The new test expects `strtod` to leave `errno` alone for "inf", as C99 7.5p3 requires of a function whose use of `errno` is documented; the C libraries of Windows and macOS are not run here. |
+| M3 | **2 is green**, each job with #62's notices; the embedded job's reads "80 headers: 29 compile, 49 refused by Tier 1, 2 other; 0 check(s) failed 6 targets x 3 levels, 136 units each, 0 failed". | a failure, or another notice | H for the newlib Arm targets (measured); M–H elsewhere. |
+| M4 | **3's coverage job**: "MC/DC 2039 / 2206", with #46's eight cover rows. | another count | H: the same commands give #46's count here on the baseline. |
+| M5 | **3's misra job**: "real 57; canary 3; total 60", the findings measured here. | another count, or another finding | H: the same command gives #46's set here on the baseline. |
+| M6 | **3's other jobs are green**: static-analysis on Linux, macOS and Windows, and compcert with #46's notice, "59 / 59 compiled, 59 ran". | a failure, or another notice | M–H: clang-tidy and the Linux cppcheck are measured; macOS and Windows install other versions of cppcheck. |
+| M7 | **Every proof job of 4, 5, 6, 7 and 11 gives its last run's notices** (#46, #46, #46, #27, #11): each at its pin. | another line or name | M–H: in proved code, only `mem_copy`'s parameters and `range_next`'s empty `else` change, and neither makes a goal, if WP reads `restrict` as nothing, as is believed. |
+| M8 | **13 is green**: each of the 26 units, "Against its pins: 0 difference(s)". | a failure, or a difference | M–H, as M7. |
+| M9 | **9 is green**: g4, g13 and the 26 pointer jobs give #15's notices. | a failure, or another notice | M–H, as M7. |
+| M10 | **14 is green**: at each of the ten models, 26 of 26 programs as pinned; the native job is green. | a difference, or a failure | H at x86_64 and `msvc_x86_64` (measured with Frama-C 25, which gives 29's lines there); M–H at the other eight. |
+| M11 | **8 is green.** | a failure | H (run here) |
+
+**What follows.** M1 to M11 scored. Run 2: a script reads the job's report,
+groups the real findings by file and rule, and compares them with a pin
+file whose each line names the record that argues it; report-only. Run 3: a
+difference fails the job. Then a compliance summary in the form of MISRA
+Compliance:2020: each guideline's category and status (compliant, deviated
+with its record, or not checked by cppcheck, which covers part of the
+guidelines and is not a qualified checker).
