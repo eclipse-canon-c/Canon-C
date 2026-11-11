@@ -31858,7 +31858,7 @@ Both predictions match.
 | **ID**         | VERIFY-066 |
 | **Date**       | 2026-11-10 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run. |
-| **Status update** | 2026-11-10 — Run 1 scored: E1, E2, E3, E7, E8 and E9 MATCH; E4, E5 and E6 MISS, because Frama-C 29 stops with an internal error on three programs, `region.c`, `vec.c` and `stringbuf.c`, at every model. F1 is confirmed in CI on the four programs it was predicted to stop that ran. See "Scored: run 1" below. Run 1b (#2): D1 to D4 MATCH; D5 carried to the fix's run. The fix's run (#3, with twelve workflows): F1, F2 and F4 to F9 MATCH, and D5; F3 MISS: `pool_init`'s `ensures` part 4 is no longer proved at the five ILP32 models, as at the others, and its ILP32 pin takes it. The error is raised on entering `arena_alloc`. See "Scored: the fix" below. The ILP32 pin's run: P1 to P3 MATCH. Eva's error probe (#14): R1 to R13 MATCH; the error needs a `\let` bound to an address converted to an integer, and `arena_can_fit` without `\let` avoids it. See "Scored: Eva's error probe" below. The way around it, decided with the author (2026-11-11): VERIFY-067, `arena_can_fit` written without `\let`, closed with L1 to L9 MATCH: every program reaches its end at every model. Run 2 (#5): T1 to T7 MATCH, 260 of 260 as pinned. Run 3, enforced, is pre-registered, U1 to U4. The Status above is the record as committed. |
+| **Status update** | 2026-11-11 — CLOSED: run 3 (#6), U1 to U4 MATCH: every program reaches its end at every model, each result pinned and enforced. See "Scored: run 3" below. 2026-11-10 — Run 1 scored: E1, E2, E3, E7, E8 and E9 MATCH; E4, E5 and E6 MISS, because Frama-C 29 stops with an internal error on three programs, `region.c`, `vec.c` and `stringbuf.c`, at every model. F1 is confirmed in CI on the four programs it was predicted to stop that ran. See "Scored: run 1" below. Run 1b (#2): D1 to D4 MATCH; D5 carried to the fix's run. The fix's run (#3, with twelve workflows): F1, F2 and F4 to F9 MATCH, and D5; F3 MISS: `pool_init`'s `ensures` part 4 is no longer proved at the five ILP32 models, as at the others, and its ILP32 pin takes it. The error is raised on entering `arena_alloc`. See "Scored: the fix" below. The ILP32 pin's run: P1 to P3 MATCH. Eva's error probe (#14): R1 to R13 MATCH; the error needs a `\let` bound to an address converted to an integer, and `arena_can_fit` without `\let` avoids it. See "Scored: Eva's error probe" below. The way around it, decided with the author (2026-11-11): VERIFY-067, `arena_can_fit` written without `\let`, closed with L1 to L9 MATCH: every program reaches its end at every model. Run 2 (#5): T1 to T7 MATCH, 260 of 260 as pinned. Run 3, enforced (#6): U1 to U4 MATCH. The Status above is the record as committed. |
 | **Baseline**   | 8ffe97d (`Prover agreement pins: run 3's nine new slow proofs (VERIFY-065 closing)`) |
 | **Scope**      | A program for each verified unit in `tools/eva/programs/`, compiled and run, and analysed by Eva, by `tools/eva/eva.py` in a new workflow, `14 · Eva: programs that use Canon-C`; `8 · Records` checks the programs against the units; the CI map. No library code, contract, proof job or pin changes. |
 | **Category**   | What the proofs leave to the caller: whether a program meets the contracts, measured by Eva at the proofs' machine models. Item C of the list agreed with the author (2026-11-09; started 2026-11-10). |
@@ -32676,6 +32676,31 @@ only the Eva error probe.
 **What follows.** U1 to U4 scored. Then, with Eva enforced, the README's
 Eva badge, in a group of the tools the project's verification uses, and a
 guide for users, "Using Canon-C with Eva".
+
+### Scored: run 3 (2026-11-11)
+
+The push of 5a41f56 and b0e644d (04:12 UTC) started `2 · Platforms` #62,
+`8 · Records` #69, `9 · Probes` #17 and `14 · Eva` #6, all green.
+
+| # | scored |
+|---|--------|
+| U1 | **MATCH.** 2, 8, 9 and 14 ran, and no other; in 9, only the Eva error probe. |
+| U2 | **MATCH.** 2's 15 jobs gave #61's notices; 8 is green. |
+| U3 | **MATCH.** 14 is green with `ENFORCE` set: at every model, 26 of 26 programs as pinned, 260 in all; the native job, 26 of 26; `eva total`, at each model, 26 programs reaching their end and 26 as pinned. |
+| U4 | **MATCH.** The Eva error probe gave #16's nine outcomes. |
+
+All four match, and VERIFY-066 closes. Eva runs on a program for each unit
+at the ten machine models of the proofs; every program reaches its end,
+none with an invalid call; each result is pinned, and a difference fails
+its model's job; what Eva leaves open is argued in `tools/eva/README.md`,
+"Pins". On the way, the record found and fixed 27 contracts that asked
+`\valid` of a pointer to `const` (F1); found Frama-C 29's error on a
+`\let` bound to an address converted to an integer, reduced it to a
+47-line program for the Frama-C developers, and wrote `arena_can_fit`
+without `\let` (VERIFY-067); and, reading what Eva leaves open, found a test
+that relied on the x86-64 ABI (fixed in run 2), and `diag_push`'s
+contract, which does not keep `diag_render`'s precondition (open, for the
+author).
 
 ## VERIFY-067: Pre-registration — arena_can_fit Without \let: Frama-C 29's Eva Error Avoided, the Contract's Meaning Kept
 
