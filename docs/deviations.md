@@ -31858,7 +31858,7 @@ Both predictions match.
 | **ID**         | VERIFY-066 |
 | **Date**       | 2026-11-10 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run. |
-| **Status update** | 2026-11-10 — Run 1 scored: E1, E2, E3, E7, E8 and E9 MATCH; E4, E5 and E6 MISS, because Frama-C 29 stops with an internal error on three programs, `region.c`, `vec.c` and `stringbuf.c`, at every model. F1 is confirmed in CI on the four programs it was predicted to stop that ran. See "Scored: run 1" below. Run 1b (#2): D1 to D4 MATCH; D5 carried to the fix's run. The fix's run (#3, with twelve workflows): F1, F2 and F4 to F9 MATCH, and D5; F3 MISS: `pool_init`'s `ensures` part 4 is no longer proved at the five ILP32 models, as at the others, and its ILP32 pin takes it. The error is raised on entering `arena_alloc`. See "Scored: the fix" below. The ILP32 pin's run: P1 to P3 MATCH. Eva's error probe (#14): R1 to R13 MATCH; the error needs a `\let` bound to an address converted to an integer, and `arena_can_fit` without `\let` avoids it. See "Scored: Eva's error probe" below. The way around it, decided with the author (2026-11-11): VERIFY-067, `arena_can_fit` written without `\let`, closed with L1 to L9 MATCH: every program reaches its end at every model. Next, run 2: the pins. The Status above is the record as committed. |
+| **Status update** | 2026-11-10 — Run 1 scored: E1, E2, E3, E7, E8 and E9 MATCH; E4, E5 and E6 MISS, because Frama-C 29 stops with an internal error on three programs, `region.c`, `vec.c` and `stringbuf.c`, at every model. F1 is confirmed in CI on the four programs it was predicted to stop that ran. See "Scored: run 1" below. Run 1b (#2): D1 to D4 MATCH; D5 carried to the fix's run. The fix's run (#3, with twelve workflows): F1, F2 and F4 to F9 MATCH, and D5; F3 MISS: `pool_init`'s `ensures` part 4 is no longer proved at the five ILP32 models, as at the others, and its ILP32 pin takes it. The error is raised on entering `arena_alloc`. See "Scored: the fix" below. The ILP32 pin's run: P1 to P3 MATCH. Eva's error probe (#14): R1 to R13 MATCH; the error needs a `\let` bound to an address converted to an integer, and `arena_can_fit` without `\let` avoids it. See "Scored: Eva's error probe" below. The way around it, decided with the author (2026-11-11): VERIFY-067, `arena_can_fit` written without `\let`, closed with L1 to L9 MATCH: every program reaches its end at every model. Run 2, the pins, is pre-registered, T1 to T7, with a change to `arena.c`'s line 50. The Status above is the record as committed. |
 | **Baseline**   | 8ffe97d (`Prover agreement pins: run 3's nine new slow proofs (VERIFY-065 closing)`) |
 | **Scope**      | A program for each verified unit in `tools/eva/programs/`, compiled and run, and analysed by Eva, by `tools/eva/eva.py` in a new workflow, `14 · Eva: programs that use Canon-C`; `8 · Records` checks the programs against the units; the CI map. No library code, contract, proof job or pin changes. |
 | **Category**   | What the proofs leave to the caller: whether a program meets the contracts, measured by Eva at the proofs' machine models. Item C of the list agreed with the author (2026-11-09; started 2026-11-10). |
@@ -32531,6 +32531,100 @@ All thirteen match. What the run shows:
    without `\let` changes `core/arena.h`'s contracts, so it is a record of
    its own: WP must prove them as before, at every model, and Eva's five
    programs should then reach their end.
+
+### Run 2, the pins, pre-registered (2026-11-11)
+
+Since VERIFY-067, every program reaches its end at every model (14 #4). Run 2
+pins what Eva gives, and argues what it leaves open.
+
+**The change.**
+
+- **`tools/eva/pins/MODEL.txt`**, ten files: for each program, its line
+  without the time, then each property Eva leaves open, as `eva.py` prints
+  them. They are 14 #4's (b5042af), but for `arena.c`'s block (below).
+- **`tools/eva/eva.py`**: `run` compares each program with its block and
+  says "as pinned", "not as pinned" (with the difference) or "no pin", in
+  its line and its notice; `report` counts the programs as pinned; `pin DIR
+  [NOTE]` writes the files from a run's summaries; `check` asks for a pin
+  file for every model, with a block for every program and no other.
+  `ENFORCE` stays `False`: run 2 reports a difference, run 3 fails on it.
+- **`tools/eva/README.md`**, "Pins": why each open property holds.
+- **`tools/eva/programs/arena.c`, line 50**: `arena_alloc(&a, 256u)` becomes
+  `arena_alloc_aligned(&a, 256u, 1u)`. The check fills the 256-byte buffer,
+  which fits only if the buffer starts at a multiple of
+  `CANON_DEFAULT_ALIGN` (16): the x86-64 ABI aligns an array of 16 bytes or
+  more so, and the native job runs there, but the C standard does not, for
+  an array of `u64`. Alignment 1 needs no pad, on any platform. Measured
+  here with Frama-C 25, at x86_64, `msvc_x86_64` and `ppc_32`: Eva now
+  confirms the check, so `arena.c`'s line loses line 50 and gains a valid
+  precondition (`fails` from 0 to 8; preconditions 80 / 3 / 0). `_Alignas`
+  was tried first: Frama-C 25 refuses it ("currently unsupported").
+
+**What is open, read.** At x86_64: 3 alarms; 64 calls the programs make and
+13 the library makes, whose precondition Eva does not decide; 40 checks it
+does not confirm (41 before the change to `arena.c`); none invalid. The
+other nine models leave the same open, but for `borrow.c`'s four calls,
+open at x86_64 only, and `ptr.c`'s two preconditions, whose text names the
+model's largest `usize`. Each is argued in `tools/eva/README.md`, "Pins".
+By cause:
+
+- **The 64 calls.** 55 are a container's invariant, or a relation, that
+  the library's postconditions establish, which WP proves, and Eva does not
+  re-establish: `pool.c` 24, `hashmap.c` 16, `stringbuf.c` 11, `vec_fmt.c`
+  3, `arena.c` 1. One postcondition they rest on is a residual WP leaves,
+  argued in VERIFY-010's Category 2a: `pool_init`'s part 4. 3 (`diag.c`)
+  hold by `diag_push`'s body, not by its contract (found, below). 1
+  (`region.c`) is `region_hook_rule`, which has no definition and no tool
+  can decide; the program's hooks keep it. 1 (`ptr.c`) needs an address
+  Eva does not know. 4 (`borrow.c`, at x86_64 only) are an imprecision of
+  Eva at Frama-C's own `x86_64` and `x86_32` models, reproduced here in a
+  15-line program; the other models decide them.
+- **The 13 library calls.** WP proves each when it proves the calling
+  function. One, `diag_render`'s call of `snprintf`, it proves against
+  `diag.h`'s trusted specification (VERIFY-017), whose precondition is one
+  of the two Eva reads from Frama-C's.
+- **The 3 alarms.** An integer converted to a pointer, which C leaves
+  implementation-defined (`ptr.c`, 2); Frama-C's specification of
+  `vsnprintf` (`vec_fmt.c`, 1).
+- **The 40 checks.** Each holds when the program runs. Eva cannot confirm
+  23 that need a C library function's result, which it reads by
+  specification (`memcmp`, `vsnprintf`, `snprintf`); 5 that need an
+  address; 7 that relate an arena's offsets, which are ranges to it; 3 that
+  read zeros written through a pointer whose offset is a range; 2 that read
+  zeros written through `volatile`.
+
+**Found while reading.**
+
+1. **`diag_push`'s contract does not keep `diag_render`'s and
+   `diag_print`'s precondition.** Of the frames before the one it pushes,
+   it states that their `code` is kept, not their strings, so a program
+   proved with WP alone could not call `diag_render` after two pushes. The
+   body keeps the frames whole. A contract that says so is for the author
+   to decide, in a record of its own.
+2. **`arena.c`'s line 50 relied on the x86-64 ABI** for the alignment of an
+   array; changed here.
+3. **At Frama-C's `x86_64` and `x86_32` models, Eva does not decide
+   `\object_pointer` of a pointer read from a structure returned by
+   value**; the other models do. A short report for the Frama-C
+   developers, if the author wants one.
+
+**The workflows.** `tools/which_workflows.py`: 2, 8, 9 and 14 run; 2 runs
+on any push that is not documentation alone. In 9, only the Eva error
+probe runs: it reads `eva.py` and `arena.c`.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| T1 | **2, 8, 9 and 14 run**, and no other; in 9, only the Eva error probe. | another set | H |
+| T2 | **2 is green**, each job with #60's notices; **8 is green**, `eva.py check` finding the ten pin files complete. | a failure, or another notice | H |
+| T3 | **14's native job**: 26 of 26 programs compile and return 0. | a failure | H: run here. |
+| T4 | **The 25 programs other than `arena.c` are as pinned at every model**: their lines and open properties are #4's. | a program not as pinned | H: #3 and #4 gave the 21 programs that finished in both the same lines at every model. |
+| T5 | **`arena.c` is as pinned at every model**: its line and open properties as measured here. | not as pinned | M–H: measured at three models with Frama-C 25, which gave CI's lines at those models for every program; the same at the other seven, as every program's is at #4 but `borrow.c`'s and `ptr.c`'s. |
+| T6 | **`eva total`**: at each model, 26 programs reach their end, and 26 are as pinned. | another count | M–H, as T5. |
+| T7 | **The Eva error probe** is green, with nine notices: the six small programs and `a1_let` as #15; `a0_control` finishes with `arena.c`'s new line; `a2_usespec` finishes, reaching the end of `main` (`fails` from 4 to 11; checks not confirmed at lines 21, 27, 29, 32, 35, 38, 40, 42, 43, 45 and 46; preconditions 75 / 3 / 0; 28 of 125 functions). | another outcome | M–H: measured here; with the old `arena.c`, Frama-C 25 here gave #15's `a0_control` and `a2_usespec` lines exactly. |
+
+**What follows.** T1 to T7 scored. Then run 3: `ENFORCE` set, so that a
+program that does not reach its end, or is not as pinned, fails its run;
+pre-registered with its own predictions.
 
 ## VERIFY-067: Pre-registration — arena_can_fit Without \let: Frama-C 29's Eva Error Avoided, the Contract's Meaning Kept
 
