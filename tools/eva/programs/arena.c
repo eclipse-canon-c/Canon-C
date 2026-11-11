@@ -47,7 +47,7 @@ int main(void)
 
     arena_reset(&a);
     CHECK(arena_is_empty(&a) && arena_used(&a) == 0u);
-    CHECK(arena_alloc(&a, 256u) != NULL && arena_is_full(&a));
+    CHECK(arena_alloc_aligned(&a, 256u, 1u) != NULL && arena_is_full(&a));
     arena_reset_secure(&a);
     CHECK(arena_is_empty(&a));
 

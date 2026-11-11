@@ -1,0 +1,135 @@
+# What 14 · Eva gives at rv64_lp64: for each program, its line without the
+# time, then each property Eva leaves open, as tools/eva/eva.py prints
+# them. eva.py run compares each program with its block (VERIFY-066
+# run 2); tools/eva/README.md, "Pins", says why each open property holds.
+# From 14 · Eva #4, on b5042af. arena.c's block is run 2's prediction for its changed line 50:
+# measured here with Frama-C 25 at x86_64, msvc_x86_64 and ppc_32, and the same at the
+# other seven models (docs/deviations.md, VERIFY-066, run 2).
+
+checked @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 62/0/0; functions 31/31
+
+bits @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 8/0/0; functions 19/19
+
+compare @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 81/0/0; functions 26/26
+
+ptr @ rv64_lp64: end reached, fails {0; 1; 2}; alarms 2; program calls: 0 invalid, 1 unknown; library calls: 0 invalid, 1 unknown; checks not confirmed at lines 38,39; preconditions 67/2/0; functions 22/55
+  alarm: Unknown: tools/eva/programs/ptr.c:38 main: ptr_comparison: \pointer_comparable((void *)up, (void *)0)
+  alarm: Unknown: tools/eva/programs/ptr.c:38 main: ptr_comparison: \pointer_comparable((void *)down, (void *)0)
+  call: Unknown: tools/eva/programs/ptr.c:36 main: precondition of ptr_align_up: fits: p ≡ \null ∨ (usize)((uintptr_t)p) ≤ 18446744073709551615UL - (align - 1)
+  library call: Unknown: core/primitives/ptr.h:495 ptr_align_up: precondition of align_up: n ≤ 18446744073709551615UL - (align - 1)
+
+slice @ rv64_lp64: end reached, fails {0; 1; 2; 3; 4; 5}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; checks not confirmed at lines 22,26,47,48,50; preconditions 82/0/0; functions 23/25
+
+memory @ rv64_lp64: end reached, fails {0; 1; 2; 3; 4; 5; 6; 7}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; checks not confirmed at lines 20,23,26,27,35,41,46; preconditions 134/0/0; functions 37/103
+
+arena @ rv64_lp64: end reached, fails {0; 1; 2; 3; 4; 5; 6; 7; 8}; alarms 0; program calls: 0 invalid, 1 unknown; library calls: 0 invalid, 2 unknown; checks not confirmed at lines 27,29,35,40,42,43,45,46; preconditions 80/3/0; functions 29/125
+  call: Unknown: tools/eva/programs/arena.c:39 main: precondition of arena_reset_to: arena ≢ \null ⇒ mark ≤ arena->offset
+  library call: Unknown: core/arena.h:789 arena_free_bytes: precondition of bytes_from: len > 0 ⇒ \valid((u8 *)ptr + (0 .. len - 1))
+  library call: Unknown: core/arena.h:804 arena_free_cbytes: precondition of cbytes_from: len > 0 ⇒ \valid_read((u8 const *)ptr + (0 .. len - 1))
+
+pool @ rv64_lp64: end reached, fails {0; 1; 2}; alarms 0; program calls: 0 invalid, 24 unknown; library calls: 0 invalid, 4 unknown; checks not confirmed at lines 26,35; preconditions 75/28/0; functions 38/146
+  call: Unknown: tools/eva/programs/pool.c:22 main: precondition of pool_alloc: pool_invariant(pool)
+  call: Unknown: tools/eva/programs/pool.c:25 main: precondition of pool_alloc_zero: pool_invariant(pool)
+  call: Unknown: tools/eva/programs/pool.c:28 main: precondition of pool_try_alloc: pool_invariant(pool)
+  call: Unknown: tools/eva/programs/pool.c:29 main: precondition of pool_try_alloc_zero: pool_invariant(pool)
+  call: Unknown: tools/eva/programs/pool.c:30 main: precondition of pool_remaining: pool ≡ \null ∨ pool_invariant_read(pool)
+  call: Unknown: tools/eva/programs/pool.c:31 main: precondition of pool_alloc: pool_invariant(pool)
+  call: Unknown: tools/eva/programs/pool.c:31 main: precondition of pool_try_alloc: pool_invariant(pool)
+  call: Unknown: tools/eva/programs/pool.c:33 main: precondition of pool_get: pool ≡ \null ∨ pool_invariant(pool)
+  call: Unknown: tools/eva/programs/pool.c:34 main: precondition of pool_get_const: pool ≡ \null ∨ pool_invariant_read(pool)
+  call: Unknown: tools/eva/programs/pool.c:35 main: precondition of pool_get: pool ≡ \null ∨ pool_invariant(pool)
+  call: Unknown: tools/eva/programs/pool.c:36 main: precondition of pool_memory_used: pool ≡ \null ∨ pool_invariant_read(pool)
+  call: Unknown: tools/eva/programs/pool.c:37 main: precondition of pool_memory_reserved: pool ≡ \null ∨ pool_invariant_read(pool)
+  call: Unknown: tools/eva/programs/pool.c:37 main: precondition of pool_memory_used: pool ≡ \null ∨ pool_invariant_read(pool)
+  call: Unknown: tools/eva/programs/pool.c:38 main: precondition of pool_as_bytes: pool ≡ \null ∨ pool_invariant(pool)
+  call: Unknown: tools/eva/programs/pool.c:38 main: precondition of pool_memory_used: pool ≡ \null ∨ pool_invariant_read(pool)
+  call: Unknown: tools/eva/programs/pool.c:39 main: precondition of pool_as_cbytes: pool ≡ \null ∨ pool_invariant_read(pool)
+  call: Unknown: tools/eva/programs/pool.c:39 main: precondition of pool_memory_used: pool ≡ \null ∨ pool_invariant_read(pool)
+  call: Unknown: tools/eva/programs/pool.c:40 main: precondition of pool_reserved_bytes: pool ≡ \null ∨ pool_invariant(pool)
+  call: Unknown: tools/eva/programs/pool.c:40 main: precondition of pool_memory_reserved: pool ≡ \null ∨ pool_invariant_read(pool)
+  call: Unknown: tools/eva/programs/pool.c:41 main: precondition of pool_reserved_cbytes: pool ≡ \null ∨ pool_invariant_read(pool)
+  call: Unknown: tools/eva/programs/pool.c:41 main: precondition of pool_memory_reserved: pool ≡ \null ∨ pool_invariant_read(pool)
+  call: Unknown: tools/eva/programs/pool.c:43 main: precondition of pool_reset: pool ≡ \null ∨ pool_invariant(pool)
+  call: Unknown: tools/eva/programs/pool.c:44 main: precondition of pool_alloc: pool_invariant(pool)
+  call: Unknown: tools/eva/programs/pool.c:45 main: precondition of pool_reset_secure: pool ≡ \null ∨ pool_invariant(pool)
+  library call: Unknown: core/pool.h:452 pool_alloc_zero: precondition of pool_alloc: pool_invariant(pool)
+  library call: Unknown: core/pool.h:488 pool_try_alloc: precondition of pool_alloc: pool_invariant(pool)
+  library call: Unknown: core/pool.h:532 pool_try_alloc_zero: precondition of pool_alloc_zero: pool_invariant(pool)
+  library call: Unknown: core/pool.h:816 pool_reset_secure: precondition of pool_reset: pool ≡ \null ∨ pool_invariant(pool)
+
+region @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 1 unknown; library calls: 0 invalid, 0 unknown; preconditions 57/1/0; functions 20/139
+  call: Unknown: tools/eva/programs/region.c:41 main: precondition of region_end: ∀ ℤ k; 0 ≤ k < r->num_hooks ∧ r->cleanups[k].fn ≢ \null ⇒ region_hook_rule(r, k)
+
+lifetime @ rv64_lp64: end reached, fails {0; 1}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; checks not confirmed at lines 17; functions 2/2
+
+error @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; functions 5/5
+
+option @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 25/0/0; functions 24/26
+
+result @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 23/0/0; functions 24/27
+
+borrow @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 72/0/0; functions 32/79
+
+diag @ rv64_lp64: end reached, fails {0; 1; 2}; alarms 0; program calls: 0 invalid, 3 unknown; library calls: 0 invalid, 1 unknown; checks not confirmed at lines 42,44; preconditions 76/4/0; functions 16/22
+  call: Unknown: tools/eva/programs/diag.c:41 main: precondition of diag_render_frame: rf_strings: f ≡ \null ∨ frame_strings_ok(*f)
+  call: Unknown: tools/eva/programs/diag.c:43 main: precondition of diag_render: r_strings: d ≡ \null ∨ (∀ ℤ j; 0 ≤ j < d->depth ⇒ frame_strings_ok(d->frames[j]))
+  call: Unknown: tools/eva/programs/diag.c:45 main: precondition of diag_print: pr_strings: d ≡ \null ∨ (∀ ℤ j; 0 ≤ j < d->depth ⇒ frame_strings_ok(d->frames[j]))
+  library call: Unknown: semantics/diag.h:998 diag_render: precondition of snprintf_va_2: \valid(buf + (0 .. size - 1)) ∨ \valid(buf + (0 .. format_length(format) - 1))
+
+vec @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 121/0/0; functions 55/199
+
+deque @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 66/0/0; functions 25/64
+
+bitset @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 135/0/0; functions 44/193
+
+priority_queue @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 247/0/0; functions 40/174
+
+range @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 38/0/0; functions 16/64
+
+vec_range @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 15/0/0; functions 15/180
+
+vec_fmt @ rv64_lp64: end reached, fails {0; 1; 2; 3; 4; 5}; alarms 1; program calls: 0 invalid, 3 unknown; library calls: 0 invalid, 3 unknown; checks not confirmed at lines 28,29,31,32,34; preconditions 37/6/0; functions 14/204
+  alarm: Unknown: tools/eva/programs/vec_fmt.c:29 main: dangling_pointer: ¬\dangling(tmp_1 + 0)
+  call: Unknown: tools/eva/programs/vec_fmt.c:14 hex: precondition of stringbuf_append_fmt: sb_ok: sb ≡ \null ∨ stringbuf_ok(sb)
+  call: Unknown: tools/eva/programs/vec_fmt.c:29 main: precondition of stringbuf_str: sb ≡ \null ∨ (\valid_read(sb) ∧ (sb->data ≡ \null ∨ stringbuf_wf((StringBuf *)sb)))
+  call: Unknown: tools/eva/programs/vec_fmt.c:30 main: precondition of stringbuf_clear: sb_ok: sb ≡ \null ∨ stringbuf_ok(sb)
+  library call: Unknown: data/stringbuf.h:850 stringbuf_append_fmt_va: precondition of vsnprintf: valid_buf: \valid(s + (0 .. n - 1))
+  library call: Unknown: data/stringbuf.h:931 stringbuf_append_fmt: precondition of stringbuf_append_fmt_va: sb_ok: sb ≡ \null ∨ stringbuf_ok(sb)
+  library call: Unknown: vmacros/vdrivers/vec_fmt_verify.h:41 vec_int_to_stringbuf: precondition of stringbuf_append_fmt: sb_ok: sb ≡ \null ∨ stringbuf_ok(sb)
+
+stringbuf @ rv64_lp64: end reached, fails {0; 1; 2; 3; 4; 5}; alarms 0; program calls: 0 invalid, 11 unknown; library calls: 0 invalid, 1 unknown; checks not confirmed at lines 26,27,28,29,34; preconditions 105/12/0; functions 43/178
+  call: Unknown: tools/eva/programs/stringbuf.c:27 main: precondition of stringbuf_str: sb ≡ \null ∨ (\valid_read(sb) ∧ (sb->data ≡ \null ∨ stringbuf_wf((StringBuf *)sb)))
+  call: Unknown: tools/eva/programs/stringbuf.c:28 main: precondition of stringbuf_as_str: sb ≡ \null ∨ (\valid_read(sb) ∧ (sb->data ≡ \null ∨ stringbuf_wf((StringBuf *)sb)))
+  call: Unknown: tools/eva/programs/stringbuf.c:28 main: precondition of stringbuf_as_bytes: sb ≡ \null ∨ (\valid_read(sb) ∧ (sb->data ≡ \null ∨ stringbuf_wf((StringBuf *)sb)))
+  call: Unknown: tools/eva/programs/stringbuf.c:29 main: precondition of stringbuf_as_cbytes: sb ≡ \null ∨ (\valid_read(sb) ∧ (sb->data ≡ \null ∨ stringbuf_wf((StringBuf *)sb)))
+  call: Unknown: tools/eva/programs/stringbuf.c:30 main: precondition of stringbuf_buffer_bytes: sb ≡ \null ∨ (\valid_read(sb) ∧ (sb->data ≡ \null ∨ stringbuf_wf((StringBuf *)sb)))
+  call: Unknown: tools/eva/programs/stringbuf.c:30 main: precondition of stringbuf_buffer_cbytes: sb ≡ \null ∨ (\valid_read(sb) ∧ (sb->data ≡ \null ∨ stringbuf_wf((StringBuf *)sb)))
+  call: Unknown: tools/eva/programs/stringbuf.c:31 main: precondition of stringbuf_as_borrowed_str: sb ≡ \null ∨ (\valid_read(sb) ∧ (sb->data ≡ \null ∨ stringbuf_wf((StringBuf *)sb)))
+  call: Unknown: tools/eva/programs/stringbuf.c:32 main: precondition of stringbuf_as_borrowed_bytes: sb ≡ \null ∨ (\valid_read(sb) ∧ (sb->data ≡ \null ∨ stringbuf_wf((StringBuf *)sb)))
+  call: Unknown: tools/eva/programs/stringbuf.c:33 main: precondition of stringbuf_buffer_as_borrowed_bytes: sb ≡ \null ∨ (\valid_read(sb) ∧ (sb->data ≡ \null ∨ stringbuf_wf((StringBuf *)sb)))
+  call: Unknown: tools/eva/programs/stringbuf.c:36 main: precondition of stringbuf_truncate: sb_ok: sb ≡ \null ∨ stringbuf_ok(sb)
+  call: Unknown: tools/eva/programs/stringbuf.c:49 main: precondition of stringbuf_append: sb_ok: sb ≡ \null ∨ stringbuf_ok(sb)
+  library call: Unknown: data/stringbuf.h:672 stringbuf_append: precondition of _stringbuf_append_bytes: wf: stringbuf_wf(sb)
+
+stack @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 60/0/0; functions 37/213
+
+array @ rv64_lp64: end reached, fails {0; 1; 2; 3}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; checks not confirmed at lines 29,31,33; preconditions 88/0/0; functions 42/105
+
+hashmap @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 16 unknown; library calls: 0 invalid, 1 unknown; preconditions 55/17/0; functions 38/148
+  call: Unknown: tools/eva/programs/hashmap.c:26 main: precondition of hashmap_insert: map ≡ \null ∨ hashmap_inv_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:28 main: precondition of hashmap_load_factor: hashmap_inv_read_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:31 main: precondition of hashmap_get: hashmap_inv_read_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:32 main: precondition of hashmap_get: hashmap_inv_read_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:33 main: precondition of hashmap_contains_key: hashmap_inv_read_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:33 main: precondition of hashmap_contains_key: hashmap_inv_read_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:34 main: precondition of hashmap_get_or_null: hashmap_inv_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:35 main: precondition of hashmap_get_or_null: hashmap_inv_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:38 main: precondition of hashmap_insert: map ≡ \null ∨ hashmap_inv_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:45 main: precondition of hashmap_iter_next: hashmap_inv_read_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:48 main: precondition of hashmap_remove: map ≡ \null ∨ hashmap_inv_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:49 main: precondition of hashmap_remove: map ≡ \null ∨ hashmap_inv_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:52 main: precondition of hashmap_insert: map ≡ \null ∨ hashmap_inv_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:59 main: precondition of hashmap_insert: map ≡ \null ∨ hashmap_inv_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:61 main: precondition of hashmap_insert: map ≡ \null ∨ hashmap_inv_(map)
+  call: Unknown: tools/eva/programs/hashmap.c:62 main: precondition of hashmap_clear: hashmap_inv_(map)
+  library call: Unknown: data/hashmap/hashmap_impl.h:692 hashmap_contains_key: precondition of hashmap_get: hashmap_inv_read_(map)

@@ -32,21 +32,34 @@ call returns (CHECK) and marks its end (END, eva_program.h).
         machine-model proofs use), into eva_out/MODEL/: Eva's output (.log),
         the property statuses (.csv, Frama-C's Report plugin) and a summary
         (.json). EVA_SECONDS limits each run (default 1200). EVA_FRAMAC_ARGS
-        adds options (Frama-C 25 needs -c11, which 29 does not).
+        adds options (Frama-C 25 needs -c11, which 29 does not). Each
+        program's result is compared with its pin, its block in
+        tools/eva/pins/MODEL.txt: its line without the time, then each
+        property Eva leaves open (VERIFY-066 run 2). The line says "as
+        pinned", "not as pinned" (with the difference) or "no pin".
 
     eva.py report [DIR]
         Reads the summaries under DIR (default eva_out) and writes the
-        notices: one line per program and model, and the totals.
+        notices: one line per program and model, and the totals, with how
+        many programs are as pinned.
+
+    eva.py pin DIR [NOTE]
+        Writes tools/eva/pins/MODEL.txt for each model whose summaries are
+        under DIR, every program's block as this run gives it; NOTE goes into
+        each file's header. A pin changes only with a record that says why.
 
     eva.py check
         For 8 · Records: every unit of agreement.py has a program here and
         every program a unit; each program includes its unit's file; the
         models are proofs-machdeps.yml's and x86_64, and eva.yml's matrix
-        lists them.
+        lists them; each model has a pin file, with a block for every
+        program and no other.
 
-Report-only until ENFORCE is set (VERIFY-066, run 3).
+Report-only until ENFORCE is set (VERIFY-066, run 3): then a program that
+does not reach its end, or is not as pinned, makes its run fail.
 """
 import csv
+import difflib
 import glob
 import json
 import os
@@ -60,6 +73,7 @@ ENFORCE = False   # VERIFY-066: report-only until its third run
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
+PINS_DIR = os.path.join(HERE, 'pins')
 PROGRAMS_DIR = os.path.join(HERE, 'programs')
 sys.path.insert(0, os.path.join(ROOT, 'tools', 'agreement'))
 sys.dont_write_bytecode = True
@@ -297,6 +311,69 @@ def details(s):
     return out
 
 
+def untimed(text):
+    """A program's line without its time, as its pin keeps it."""
+    text = re.sub(r'; [\d.]+ s$', '', text)
+    return re.sub(r', [\d.]+ s\)$', ')', text)
+
+
+def pin_block(s):
+    """A program's result at a model as its pin keeps it: its line, without
+    the time, then each property Eva leaves open (VERIFY-066 run 2)."""
+    return [untimed(line(s))] + details(s)
+
+
+def pin_path(model):
+    return os.path.join(PINS_DIR, model + '.txt')
+
+
+def read_pins(model):
+    """The pinned blocks at MODEL, by program; None without a pin file."""
+    path = pin_path(model)
+    if not os.path.exists(path):
+        return None
+    pins, cur = {}, None
+    with open(path) as f:
+        for raw in f:
+            text = raw.rstrip('\n')
+            if not text or text.startswith('#'):
+                continue
+            m = re.match(r'^(\w+) @ \w+: ', text)
+            if m:
+                cur = m.group(1)
+                pins[cur] = [text]
+            elif cur is not None and text.startswith('  '):
+                pins[cur].append(text)
+            else:
+                raise SystemExit(f'{os.path.relpath(path, ROOT)}: cannot read: {text}')
+    return pins
+
+
+def compare_pin(s, pins):
+    """'as pinned', 'not as pinned' or 'no pin', and the difference."""
+    if pins is None or s['program'] not in pins:
+        return 'no pin', []
+    want, got = pins[s['program']], pin_block(s)
+    if want == got:
+        return 'as pinned', []
+    return 'not as pinned', list(difflib.unified_diff(want, got, 'pinned', 'this run',
+                                                       lineterm='', n=0))
+
+
+def write_pin(model, blocks, note):
+    """tools/eva/pins/MODEL.txt, from each program's block."""
+    os.makedirs(PINS_DIR, exist_ok=True)
+    with open(pin_path(model), 'w') as f:
+        f.write(f'# What 14 · Eva gives at {model}: for each program, its line without the\n'
+                '# time, then each property Eva leaves open, as tools/eva/eva.py prints\n'
+                '# them. eva.py run compares each program with its block (VERIFY-066\n'
+                '# run 2); tools/eva/README.md, "Pins", says why each open property holds.\n')
+        for n in note.split('\n') if note else []:
+            f.write(f'# {n}\n')
+        for block in blocks:
+            f.write('\n' + '\n'.join(block) + '\n')
+
+
 def last_call(cmd, limit):
     """The last call Eva entered, from a run with -eva-show-progress."""
     i = cmd.index('-then') if '-then' in cmd else len(cmd)
@@ -318,6 +395,7 @@ def run(model, programs):
     out_dir = os.path.join('eva_out', model)
     os.makedirs(out_dir, exist_ok=True)
     limit = float(os.environ.get('EVA_SECONDS') or 1200)
+    pins = read_pins(model)
     results = []
     for program in programs:
         stem = os.path.join(out_dir, program)
@@ -342,9 +420,10 @@ def run(model, programs):
         with open(stem + '.log', 'w') as f:
             f.write(text)
         s = summarize(program, model, text, parse_csv(csv_path), seconds, code)
+        s['pin'], difference = compare_pin(s, pins)
         with open(stem + '.json', 'w') as f:
             json.dump(s, f, indent=1)
-        print(line(s), flush=True)
+        print(f"{line(s)}; {s['pin']}", flush=True)
         if s.get('aborted') or s.get('functions') is None:
             # A run that did not finish: the end of Frama-C's own output,
             # which says why (VERIFY-066 run 1: exit 125 on three programs).
@@ -358,11 +437,16 @@ def run(model, programs):
             print('  -- the call Eva was analysing when it stopped: ' + (where or 'not found'))
         for d in details(s):
             print(d)
+        for d in difference:
+            print('  pin | ' + d)
         results.append(s)
-    write_notices([line(s) for s in results], f'eva {model}')
+    write_notices([f"{line(s)}; {s['pin']}" for s in results], f'eva {model}')
     bad = [s for s in results if s.get('aborted') or s.get('functions') is None
            or not s['reached_end'] or s['exit'] != 0]
-    return 1 if (ENFORCE and bad) else 0
+    off = [s['program'] for s in results if s['pin'] != 'as pinned']
+    print(f'pins: {len(results) - len(off)} of {len(results)} programs as pinned at {model}'
+          + (f'; not: {", ".join(off)}' if off else ''))
+    return 1 if (ENFORCE and (bad or off)) else 0
 
 
 def write_notices(lines, title):
@@ -430,9 +514,10 @@ def report(where):
         linv = sum(1 for s in ss for r in s.get('library_calls', []) if r['status'].startswith('Invalid'))
         lunk = sum(1 for s in ss for r in s.get('library_calls', []) if r['status'].startswith('Unknown'))
         unfinished = [s['program'] for s in ss if s.get('aborted') or s.get('functions') is None]
+        pinned = sum(1 for s in ss if s.get('pin') == 'as pinned')
         lines.append(f'{model}: {len(ss)} programs; {reached} reach their end, {zero} with every '
                      f'check confirmed; alarms {alarms}; program calls {inv} invalid, {unk} unknown; '
-                     f'library calls {linv} invalid, {lunk} unknown'
+                     f'library calls {linv} invalid, {lunk} unknown; {pinned} as pinned'
                      + (f'; Eva did not finish: {", ".join(unfinished)}' if unfinished else ''))
     # The functions the programs reach, over every model: Eva's own count.
     print('\n'.join(lines))
@@ -489,10 +574,49 @@ def check():
     listed = [x.strip() for x in m.group(1).split(',')] if m else []
     if listed != list(MODELS):
         problems.append(f'eva.yml\'s matrix is not MODELS: {listed} / {list(MODELS)}')
+    for model in MODELS:
+        pins = read_pins(model)
+        where = os.path.relpath(pin_path(model), ROOT)
+        if pins is None:
+            problems.append(f'{where} is missing')
+            continue
+        for p in sorted(set(PROGRAMS) - set(pins)):
+            problems.append(f'{where} has no block for {p}')
+        for p in sorted(set(pins) - set(PROGRAMS)):
+            problems.append(f'{where} has a block for {p}, which is not a program')
+        for p, block in sorted(pins.items()):
+            if not block[0].startswith(f'{p} @ {model}: '):
+                problems.append(f'{where}: the block of {p} is not for {model}')
+    for path in sorted(glob.glob(os.path.join(PINS_DIR, '*'))):
+        if os.path.splitext(os.path.basename(path))[0] not in MODELS:
+            problems.append(f'{os.path.relpath(path, ROOT)} is not a model\'s pin file')
     for p in problems:
         print('::error title=eva check::' + p)
     print(f'eva check: {len(PROGRAMS)} programs, {len(MODELS)} models, {len(problems)} problem(s)')
     return 1 if problems else 0
+
+
+def pin(where, note):
+    """Writes each model's pin file from the summaries under WHERE."""
+    by_model = {}
+    for path in sorted(glob.glob(os.path.join(where, '**', '*.json'), recursive=True)):
+        with open(path) as f:
+            s = json.load(f)
+        if isinstance(s, dict) and 'program' in s:
+            by_model.setdefault(s['model'], {})[s['program']] = s
+    if not by_model:
+        print(f'eva.py pin: no summaries under {where}')
+        return 1
+    for model, ss in sorted(by_model.items()):
+        missing = [p for p in PROGRAMS if p not in ss]
+        if model not in MODELS or missing:
+            print(f'eva.py pin: {model}: ' + (f'no summary for {", ".join(missing)}'
+                                               if missing else 'not a model'))
+            return 1
+    for model, ss in sorted(by_model.items()):
+        write_pin(model, [pin_block(ss[p]) for p in PROGRAMS], note)
+        print(f'eva.py pin: wrote {os.path.relpath(pin_path(model), ROOT)}')
+    return 0
 
 
 def main(argv):
@@ -512,6 +636,8 @@ def main(argv):
         return run(args[0], args[1:] or list(PROGRAMS))
     if cmd == 'report':
         return report(args[0] if args else 'eva_out')
+    if cmd == 'pin' and len(args) in (1, 2):
+        return pin(args[0], args[1] if len(args) == 2 else '')
     if cmd == 'check':
         return check()
     print(__doc__)
