@@ -5,8 +5,9 @@ This document exists because the per-record files (`deviations.md`,
 X?"* but not *"what happened here, and what is it worth?"* Sixteen commits
 moved the advisory count from 1672 to 53, and a reader arriving cold cannot
 reconstruct from the records alone what that number means. (The count is
-**66** today: 54 from VERIFY-031, 55 from VERIFY-044, 60 and 66 from
-VERIFY-054, and unmoved by VERIFY-055; see "Current count" below and the
+**57** today: 54 from VERIFY-031, 55 from VERIFY-044, 60 and 66 from
+VERIFY-054, unmoved by VERIFY-055, and 57 from VERIFY-068, which fixed ten
+and classified every other finding; see "Current count" below and the
 dated notes at the end. Every "53" below describes the campaign's close.)
 
 It is written to be read by someone deciding whether to trust this work.
@@ -46,7 +47,7 @@ kept in two segments for that reason:
 
 ```
 pre-2026-07-25 surface (114 headers):  1672 → 108
-corrected surface       (86 headers):    98 →  53 → 54 → 55 → 60 → 66
+corrected surface       (86 headers):    98 →  53 → 54 → 55 → 60 → 66 → 57
 ```
 
 The steps after 53 are not part of the campaign. The first is VERIFY-031's
@@ -215,22 +216,22 @@ now excluded from the coverage *run*, and untouched files stop moving.
   the rules and is not a qualified checker. For certification, a qualified
   tool (Polyspace, LDRA, PC-lint, Parasoft) is required. The workflow says
   this at the job that produces the number.
-- **Not a defect-free library.** It claims that 66 findings remain (53 at
+- **Not a defect-free library.** It claims that 57 findings remain (53 at
   the campaign's close; 54 with VERIFY-031's axiom declaration; 55 since
-  VERIFY-044; 66 since VERIFY-054, see the note under the next heading),
-  each one
+  VERIFY-044; 66 since VERIFY-054; 57 since VERIFY-068, see the note under
+  the next heading), each one
   classified, and that the instrument producing that number is itself tested
   — the `canary/misra_canary.h` carries three intentional violations and the
   job fails if they are not detected, because a silently-broken addon
   otherwise reports a fake-green zero.
-- **Not that the remaining 66 are a backlog.** See below.
+- **Not that the remaining 57 are a backlog.** See below.
 
 ---
 
 ## The remaining 53, and why they are not a to-do list
 
-**Current count: 66** (2026-11-02; the `misra` job's annotation reads
-`real 66`). Four steps from the 53 described here:
+**Current count: 57** (2026-11-11; the `misra` job's annotation reads
+`real 57`). Five steps from the 53 described here:
 - 54 (2026-10-02, VERIFY-031): one more 21.2, so the `21.2 x2` block below
   is `x3`.
 - 55 (2026-10-29, VERIFY-044): `CANON_RESULT(_Bool, Error)` replaced
@@ -255,8 +256,15 @@ now excluded from the coverage *run*, and untouched files stop moving.
   added no finding. Predicted (Q7), measured locally with the job's command
   (the same composition), and read from the job's annotation at 173b7a2,
   978e4de and f855a66: `real 66; canary 3; total 69`.
+- 57 (2026-11-11, VERIFY-068 run 1): each of the 66 read at its site. Ten
+  fixed (8.4, 20.9 ×2, 15.7 ×2, 20.1, 22.8, 17.2 ×2, 8.14), and one 22.9
+  surfaced where `parse_f64` now resets `errno`. The 57 are 19 deviations
+  (MISRA-DEV-019 to 027) and 38 findings that are not violations
+  (MISRA-TOOL-001 to 007). Predicted from a local scan, and CI's set at
+  7ecd37c is the same 57, rule, file and line.
 
-Nothing else in this section changes.
+The blocks below, and the rest of this section, describe the 53 at the
+campaign's close; VERIFY-068's table gives each of the 57.
 
 The largest blocks, from the CI #1202 report:
 
@@ -386,3 +394,14 @@ hashmap's alignment test and shared tag names) and 60 → 66 (VERIFY-054 run
 2, `hashmap_range.h` read for the first time). Each is described under
 "Current count" above, and in the job's log. VERIFY-055 moved nothing: 66
 at f855a66.
+
+## 2026-11-11 — 66 → 57 (VERIFY-068), every finding classified
+
+The first part of the project's item 2 (AUTOSAR Classic). Every one of
+the 66 was read at its site: ten fixed, two of them by the author's
+decision (merge sort without recursion; `mem_copy` without `restrict`), 19
+deviated with a record each, 38 shown not to be violations, from cppcheck's
+dump or its addon's source. Run 1 matched all eleven predictions
+(`real 57; canary 3; total 60` at 7ecd37c). Runs 2 and 3 pin the 57 by
+file and rule and make a difference fail the job: the count stops being
+read by hand.

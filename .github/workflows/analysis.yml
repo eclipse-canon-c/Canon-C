@@ -259,7 +259,8 @@ jobs:
   #    classifies every finding the job reports: each is a deviation
   #    (MISRA-DEV-019..027) or a finding of cppcheck's that is not a
   #    violation (MISRA-TOOL-001..007), or it was fixed. Its run 2 pins
-  #    them by file and rule; its run 3 makes a difference fail the job.
+  #    them by file and rule (tools/misra/pins.txt, compared by the last
+  #    step, report-only); its run 3 makes a difference fail the job.
   #
   #    The INSTRUMENT, however, is enforced: canary/misra_canary.h
   #    contains intentional violations, and the job FAILS if they are
@@ -509,6 +510,12 @@ jobs:
             misra_toolchain.txt
           
           retention-days: 90
+      - name: "The real findings against their pins (VERIFY-068)"
+        # Each real finding is fixed or argued in docs/deviations.md, and
+        # tools/misra/pins.txt holds them by file and rule, each with its
+        # record. Report-only in VERIFY-068's run 2; its run 3 makes a
+        # difference fail the job.
+        run: python3 tools/misra/misra.py report misra_report.txt
 
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)

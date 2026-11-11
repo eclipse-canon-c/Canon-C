@@ -3,8 +3,8 @@ name: "8 · Records"
 # docs/deviations.md joined to the roll-calls that pin its goals), the
 # machine models' pins checked against x86_64's (VERIFY-060), the prover
 # agreement's units checked against the proof jobs (VERIFY-065), Eva's
-# programs checked against the units (VERIFY-066) and the workflow-size
-# guard. Map: .github/workflows/README.md.
+# programs checked against the units (VERIFY-066), the misra job's pins
+# checked against their records (VERIFY-068) and the workflow-size guard. Map: .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -17,6 +17,7 @@ on:
       - 'tools/machdeps/check_pins.py'
       - 'tools/agreement/**'
       - 'tools/eva/**'
+      - 'tools/misra/**'
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
@@ -67,6 +68,11 @@ jobs:
         # which includes the unit's file, and Eva's machine models are the
         # proofs' and eva.yml's matrix.
         run: python3 tools/eva/eva.py check
+      - name: "The misra job's pins name their records (VERIFY-068)"
+        # Each line of tools/misra/pins.txt pins the real findings of one
+        # file and rule, and names the record in docs/deviations.md that
+        # argues them; the record must exist.
+        run: python3 tools/misra/misra.py check
 
   # -------------------------------------------------------------------------
   # Workflow size guard (VERIFY-047). GitHub runs no workflow file of 500 KB

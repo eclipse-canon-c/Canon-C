@@ -11,12 +11,12 @@ cite.
 |---|------|--------------|-------|-----------------|
 | 1 | `ci.yml` | 1 · Build & test | Build and test matrix (Linux, Windows MSVC and MinGW, macOS; Release, and Debug with sanitizers), i386, Valgrind, libFuzzer, the lifetime token under concurrency, lifetime-debug | yes |
 | 2 | `platforms.yml` | 2 · Platforms | musl, Linux AArch64, C11 to C23, big-endian s390x (qemu), embedded compile checks (Cortex-M, RISC-V, AVR tiers) | yes |
-| 3 | `analysis.yml` | 3 · Static analysis & coverage | clang-tidy and Cppcheck, MISRA C:2012, MC/DC and branch coverage, CompCert | static-analysis and coverage's threshold: yes. MISRA: advisory. CompCert: informational |
+| 3 | `analysis.yml` | 3 · Static analysis & coverage | clang-tidy and Cppcheck, MISRA C:2012, MC/DC and branch coverage, CompCert | static-analysis and coverage's threshold: yes. MISRA: advisory; each real finding pinned by file and rule with its record (`tools/misra/pins.txt`, VERIFY-068), compared report-only until its third run. CompCert: informational |
 | 4 | `proofs-core.yml` | 4 · Proofs: core/ | Frama-C WP, one job per unit of core/ and core/primitives/, plus arena at 32-bit and memory/bits at LLP64 | yes, each job on its pins |
 | 5 | `proofs-semantics.yml` | 5 · Proofs: semantics/ | WP for error, option, result, borrow, diag | yes |
 | 6 | `proofs-data.yml` | 6 · Proofs: data/ | WP for vec, deque, bitset, priority_queue, range, vec_range, vec_fmt, stringbuf, stack, array, hashmap | yes |
 | 7 | `proofs-cc.yml` | 7 · Proofs: -CC | The macro-body contracts proved under `-CC` (VERIFY-025), per family, for the six families whose driver jobs above run under `-C` (slice, option, result, borrow, vec, deque). The units written since (vec_range, vec_fmt, stack, array, hashmap) are preprocessed with `-CC` in their own jobs in `proofs-data.yml`, so their macro-body contracts are proved there and they have no job here | per family's gates |
-| 8 | `records.yml` | 8 · Records | Record coverage (argument blocks against roll-calls), the machine models' pins checked against x86_64's (VERIFY-060, `tools/machdeps/check_pins.py`), the prover agreement's units checked against the proof jobs (VERIFY-065, `tools/agreement/agreement.py check`), Eva's programs checked against the units and the models (VERIFY-066, `tools/eva/eva.py check`), and the workflow-size guard | yes |
+| 8 | `records.yml` | 8 · Records | Record coverage (argument blocks against roll-calls), the machine models' pins checked against x86_64's (VERIFY-060, `tools/machdeps/check_pins.py`), the prover agreement's units checked against the proof jobs (VERIFY-065, `tools/agreement/agreement.py check`), Eva's programs checked against the units and the models (VERIFY-066, `tools/eva/eva.py check`), the misra job's pins checked against their records (VERIFY-068, `tools/misra/misra.py check`), and the workflow-size guard | yes |
 | 9 | `probes.yml` | 9 · Probes | The closed experiments of VERIFY-039/040 (G4, G11, G13, G19, Count, Round 3), VERIFY-057's pointer probe (every unit with `-warn-invalid-pointer`, report-only), VERIFY-060's char probe (arena with `char`'s signedness flipped at x86_64 and AArch64), and VERIFY-066's Eva error probe (Frama-C 29's error on entering `arena_alloc`: small programs that reproduce it, and `arena.c` three ways, report-only). Each runs only when its own paths change | a probe's MISS fails it; the pointer probe fails only without a summary, the Eva error probe only if it cannot set up a variant |
 | 9 | `f4-control.yml`, `vc-identity.yml` | 9 · Probes (manual): … | Two experiments run only by hand | n/a |
 | 10 | `machdeps.yml` | 10 · Machine models | VERIFY-060's machine models for Arm, RISC-V and big-endian PowerPC: generated with Frama-C's make-machdep from the cross-compilers, compared with the committed copies in `tools/machdeps/`; what Frama-C sees at each, whether the core/ units parse, and whether GCC mode changes their code. Runs when its own paths change | the drift check: yes (since phase C). The reads: no |
@@ -32,7 +32,7 @@ summary as an annotation, for example:
 
     frama-c-stack: proved 5714 / 5783 (pin 5714 / 5783); unproved 69: inherited 69, own 0; 0 difference(s)
 
-`misra`, `coverage` (the MC/DC total and each cover file's row), `compcert`,
+`misra` (its count, and since VERIFY-068 the count against its pins), `coverage` (the MC/DC total and each cover file's row), `compcert`,
 `embedded` and the AVR check do the same. Annotations are on the run's
 summary page and readable through the GitHub API, so a run can be scored
 without opening logs. The full log and the uploaded `wp-*` artifacts are
