@@ -223,6 +223,11 @@ For current numbers, see:
 - **`docs/code-size.md`** — what each header costs in flash on Cortex-M0+,
   Cortex-M4 and RISC-V RV32, with the run-time checks on and off, and in
   the work it gives the compiler, measured in CI (VERIFY-070).
+- **`docs/implementation-defined.md`** — what Canon-C needs of the C
+  implementation beyond what C guarantees: how pointers convert to
+  integers, how `#include "..."` searches, IEEE 754 floating point, and the
+  rest of C99's list, each relied on, not relied on, or passed on to the
+  program, with what checks it (MISRA C:2012 Directive 1.1, VERIFY-071).
 
 All currently unproved goals resist Alt-Ergo, Z3 and CVC5 at a 120-second
 timeout and are pinned in their CI jobs, and each is listed in

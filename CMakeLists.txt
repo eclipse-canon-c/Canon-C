@@ -438,6 +438,14 @@ canon_c_test(
     INCLUDES core/primitives core semantics data test/integration .
 )
 
+# VERIFY-071: what Canon-C needs of the C implementation beyond what C
+# guarantees (docs/implementation-defined.md), checked where the tests run.
+canon_c_test(
+    NAME     impl_defined_test
+    SRC      test/integration/impl_defined_test.c
+    INCLUDES core/primitives core semantics data algo util .
+)
+
 canon_c_test(
     NAME     priority_queue_test
     SRC      test/data/priority_queue_test.c

@@ -94,7 +94,10 @@ code complies with it, deviates from it with a record, or does not use
 what it governs. Canon-C's MISRA evidence today is the `misra` job's:
 Cppcheck's addon, which covers part of the guidelines and is not a
 qualified checker. Every finding it reports is fixed or argued, and pinned
-by file and rule; the job is enforced (VERIFY-068).
+by file and rule; the job is enforced (VERIFY-068). Some guidelines need a
+document rather than a checker: Directive 1.1's, the implementation-defined
+behaviours Canon-C relies on, is `docs/implementation-defined.md`
+(VERIFY-071).
 
 Why it waits: from Cppcheck alone, the summary would mark a large share of
 the guidelines as not checked, and could not show compliance with the ones

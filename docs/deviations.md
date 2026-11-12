@@ -26402,7 +26402,7 @@ completes VERIFY-045 E2: **MATCH**.
 | **ID**         | VERIFY-046 |
 | **Date**       | 2026-10-29 |
 | **Status**     | PREDICTED — this record is committed before the fix commit, which is pushed with it; both before any CI run of either |
-| **Status update** | 2026-11-03 — closed 2026-10-30, in "Scored (2026-10-30)" below. The Status above is the record as committed. |
+| **Status update** | 2026-11-03 — closed 2026-10-30, in "Scored (2026-10-30)" below. 2026-11-12 — Corrected by VERIFY-071: A1 below says that with `-fshort-enums` `Error` is `unsigned char`. It is `unsigned short`, 2 bytes, as its values reach 402 (arm-none-eabi-gcc 13.2.1). A1's finding stands as measured: the type is unsigned either way. The Status above is the record as committed. |
 | **Baseline**   | 459c6e6 |
 | **Scope**      | `semantics/error.h` (`error_in_range`'s body; the contract unchanged), `test/data/priority_queue_test.c`, `README.md` (the bare-metal section), a script `tools/embedded_compile_check.sh`, and a CI job `embedded` |
 | **Category**   | Portability defect in a shipped header, found by a compile check; one test defect it had masked; a documentation gap |
