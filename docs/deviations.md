@@ -33543,7 +33543,7 @@ picolibc and RISC-V toolchains installed here since, the script gives
 | **ID**         | VERIFY-070 |
 | **Date**       | 2026-11-12 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-12 — Run 1 scored: the push of 56d83d2 and 701eb5c matched S1 to S7; CI's table of sizes is the one measured here, figure for figure. Run 2 scored: the push of 080bbc3 and d1759dd matched P1 to P6; the job reads its 798 figures as pinned. Run 3, enforced, is pre-registered below ("Run 3, enforced, pre-registered"). The Status above is the record as committed. |
+| **Status update** | 2026-11-12 — Run 1 scored: the push of 56d83d2 and 701eb5c matched S1 to S7; CI's table of sizes is the one measured here, figure for figure. Run 2 scored: the push of 080bbc3 and d1759dd matched P1 to P6; the job reads its 798 figures as pinned. CLOSED: run 3, the push of d82aeff and b6c6fc1, matched Q1 to Q5; a figure not as pinned fails the embedded job. Run 2's scoring put #68's time down to a slow runner; #67's was the fast one ("Scored: run 3", below). The Status above is the record as committed. |
 | **Baseline**   | 075f45f (VERIFY-069); `2 · Platforms` #66 on it, its embedded job 4 min 30 s; `1`, `3`, `4`, `5` and `6` last ran at #49, on 79ab1ca. |
 | **Scope**      | `tools/size/size.py`, new; a step and an artifact in `platforms.yml`'s embedded job; `docs/code-size.md`, new; the README's list of documents; the workflow map. No library code changes. |
 | **Category**   | The project's item 6: code size and build time. Run 1 of 3: pinned and enforced from run 3, decided with the author (2026-11-12). |
@@ -33773,3 +33773,31 @@ changed, a header added and one removed names the three and exits 1.
 **What follows.** Q1 to Q5 scored, and the record closed. Then the project's
 item 2's part c: the implementation-defined behaviours Canon-C relies on
 (MISRA Directive 1.1).
+
+### Scored: run 3 (2026-11-12)
+
+The push of d82aeff and b6c6fc1 started `2 · Platforms` #69 and
+`8 · Records` #77. Every job is green: 15 in 2, and 2 in 8.
+
+| # | scored |
+|---|--------|
+| Q1 | **MATCH.** 2 and 8 ran; the others did not. |
+| Q2 | **MATCH.** 2 is green, its embedded job enforced: that job's size notices are #68's, and its pins notice reads "as pinned: 57 rows, 798 figures". |
+| Q3 | **MATCH.** 2's other notices are #68's; the build cost's differs only in its time, 1.1 s in all against 1.2 s. |
+| Q4 | **MATCH.** The embedded job took 7 min 6 s. |
+| Q5 | **MATCH.** 8 is green; its size pins line reads "size pins: 57 rows; 0 problem(s)", as #76's. |
+
+All five match, and VERIFY-070 closes. Across its three runs, 18 of 18
+predictions matched. Each header's code size, on three targets at two
+levels and two contract settings, and its build cost in tokens, are
+measured on every change that can move them, and a figure not as pinned
+fails the embedded job. The figures are in `docs/code-size.md`.
+
+**Run 2's scoring, corrected.** It said #68's runner was slower. The
+compile check has done the same work since VERIFY-069, on the same runner
+image (20261028.624) and the same compiler packages, and it took 220 s at
+#66, 166 s at #67, 241 s at #68 and 236 s at #69. #67's runner was the
+fast one, not #68's the slow one, and Q4's "on a slow runner" was wrong
+too: with the size step, about 7 minutes is the job's usual time. What
+run 2's scoring measured here stands: run 1's `size.py` and run 2's take
+the same time.

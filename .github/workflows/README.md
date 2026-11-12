@@ -33,7 +33,7 @@ summary as an annotation, for example:
     frama-c-stack: proved 5714 / 5783 (pin 5714 / 5783); unproved 69: inherited 69, own 0; 0 difference(s)
 
 `misra` (its count, and since VERIFY-068 the count against its pins), `coverage` (the MC/DC total and each cover file's row), `compcert`,
-`embedded`, the AVR check and, since VERIFY-070, the code size and build cost (one notice per target, one for the build) do the same. Annotations are on the run's
+`embedded`, the AVR check and, since VERIFY-070, the code size and build cost (one notice per target, one for the build, and since its run 2 one for the pins) do the same. Annotations are on the run's
 summary page and readable through the GitHub API, so a run can be scored
 without opening logs. The full log and the uploaded `wp-*` artifacts are
 still there for detail.
