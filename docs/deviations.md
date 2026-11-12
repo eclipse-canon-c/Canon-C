@@ -33801,3 +33801,99 @@ fast one, not #68's the slow one, and Q4's "on a slow runner" was wrong
 too: with the size step, about 7 minutes is the job's usual time. What
 run 2's scoring measured here stands: run 1's `size.py` and run 2's take
 the same time.
+
+---
+
+## VERIFY-071: Pre-registration — The Implementation-Defined Behaviours Canon-C Relies On (MISRA C:2012 Directive 1.1)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-071 |
+| **Date**       | 2026-11-12 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | b6c6fc1 (VERIFY-070's run 3); `2 · Platforms` #69 and `8 · Records` #77 on it; `1`, `3`, `4`, `5` and `6` last ran at #51, on d1759dd. |
+| **Scope**      | `docs/implementation-defined.md`, new; `test/integration/impl_defined_test.c`, new, registered in `CMakeLists.txt`; the README's list of documents; `docs/for-future.md`'s note on a compliance summary; a correction in VERIFY-046's record. No library code changes. |
+| **Category**   | The project's item 2, part c: MISRA C:2012 Directive 1.1. One run. |
+
+### What is decided
+
+Item 2's part c, in the order agreed with the author (2026-11-11): the
+implementation-defined behaviours Canon-C relies on, documented, as MISRA
+C:2012's Directive 1.1 asks. `docs/implementation-defined.md` reads C99's
+Annex J.3 against the library's headers and sorts each behaviour into
+relied on, not relied on, or passed on to the program, with the evidence.
+
+The test is this record's addition to the item:
+`test/integration/impl_defined_test.c` checks, at run time, each of the
+page's assumptions that a running program can check, wherever CI runs the
+tests. A failure there would mean a platform does not do what Canon-C
+needs.
+
+The survey found three defects and two misstatements, listed in the
+page's "Found by the survey". This record fixes none of them, since it
+changes no library code. `random.h`'s two, its `i32` range above 2^31 and
+its float ranges that can return `max`, take a record of their own;
+`file_write_all_atomic`, which cannot replace a file on Windows, waits for
+the author's decision; and the two comments in `semantics/` go with the
+next change there, the planned `diag_push` fix. VERIFY-046's record takes
+its correction now.
+
+### Measured here
+
+With gcc 13.3.0, gcc 14, clang 18.1.3, and VERIFY-070's bare-metal
+toolchains.
+
+- **The survey's evidence.** `Error` is 4 bytes, compatible with `unsigned
+  int`, with gcc on x86-64 and with riscv64-unknown-elf-gcc; 2 bytes,
+  compatible with `unsigned short`, with arm-none-eabi-gcc, whose ABI makes
+  enumerations short. Plain `char` is signed on x86-64, unsigned on Arm and
+  RISC-V. `uintptr_t` and `size_t` are 8 and 8 bytes on x86-64 and RV64,
+  4 and 4 on Cortex-M and RV32. gcc's UBSan reports a signed overflow at
+  `util/random.h:232` for `random_i32_range(r, INT32_MIN + 1, INT32_MAX)`,
+  and 1000 draws over the full `i32` range all return `INT32_MIN`. 128
+  values of `random_u32` make `random_f32_range(r, 0.0f, 1.0f)` return
+  1.0f, and 2^60 + (1 − 2^−32) × 1024 rounds to 2^60 + 1024. The tests'
+  objects hold 2766 function names, none longer than 54 characters; the
+  separate-compilation objects, 170 external names, none sharing its first
+  31 characters with another.
+- **The test**: 191 checks, all passing, with gcc and clang at `-O0` and
+  `-O2`; in C11, C17 and C2x; with `NDEBUG`, `CANON_NO_REQUIRE`,
+  `CANON_STRICT` or `CANON_NO_GNU_EXTENSIONS`; with `CANON_LIFETIME_DEBUG`
+  under ASan and UBSan; with gcc 14; and under Valgrind. It compiles for the
+  six bare-metal targets at `-O0`, `-Os` and `-O2`.
+- **The suite**, built with sanitizers: ctest passes 59 of 59, 58 before.
+- **The static-analysis job's steps**: clang-tidy over the 62 test files,
+  0 errors; Cppcheck 2.13.0, the Ubuntu job's, finds nothing in the new
+  test, and nor does 2.19.0, the macOS and Windows jobs', built here from
+  its pinned commit (9730a44).
+- **The coverage job's steps**, with gcc 14: MC/DC 2039 / 2206, with #51's
+  eight rows. The test reaches no condition the other tests do not.
+- **The records checks** pass.
+
+Not run here: Windows (MSVC, clang, MinGW), macOS, i386, AArch64, s390x,
+musl and CompCert. On Windows the test expects `rename` onto an existing
+file to fail, from Microsoft's documentation of `rename`; the rest of its
+checks rest there on MSVC's documented conversions, and on what the other
+tests already exercise.
+
+### The workflows
+
+`tools/which_workflows.py`: 1, 2, 3, 4, 5, 6 and 8 run; 7, 9, 10, 11, 12,
+13 and 14 do not. A new test and `CMakeLists.txt` change, which 1 to 6 do
+not ignore.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| T1 | **1, 2, 3, 4, 5, 6 and 8 run**; the others do not. | another set | H |
+| T2 | **1 is green**: `impl_defined_test` passes in every job that runs ctest: Linux, macOS and Windows with MSVC and clang, i386, MinGW, Valgrind, the lifetime instrument and the fuzzing build. 1's notices are #51's, GitHub's own on the macOS runners' capacity aside. | a failure, or another notice | M–H: Windows and macOS are not run here, and the Windows branch rests on Microsoft's documentation of `rename`. |
+| T3 | **2 is green**: the test passes on musl, AArch64, C11 to C23 and big-endian s390x. The embedded check's notice reads "6 targets x 3 levels, 226 units each (84 headers, with and without CANON_NO_GNU_EXTENSIONS, and 58 tests), 0 failed"; 2's other notices are #69's, the build cost's up to its time. | a failure, or another notice | H for the embedded check, compiled here; M–H for the platforms. |
+| T4 | **3 is green**: CompCert's notice reads "60 / 60 compiled, 60 ran"; coverage's is #51's, "MC/DC 2039 / 2206" with its eight rows; misra's are #51's; the three static-analysis jobs pass. | a failure, or another notice | M for CompCert, not run here; H for the rest. |
+| T5 | **4, 5 and 6 give #51's notices**, every job green. | a failure, or another notice | H: no library code changes. |
+| T6 | **8 is green.** | a failure | H (run here) |
+
+**What follows.** T1 to T6 scored, and the record closed. Then the
+`diag_push` contract fix, as planned, with the two comments in
+`semantics/`; `random.h`'s fixes, in a record of their own; and
+`file_write_all_atomic` on Windows, once the author has decided.
