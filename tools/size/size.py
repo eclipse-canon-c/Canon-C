@@ -49,11 +49,11 @@ not pinned).
 tools/size/pins.txt holds, for each header, its functions at the first
 setting (Cortex-M0+, -Os, as shipped), its bytes at each of the twelve
 settings, and its tokens after preprocessing. run compares what it
-measures with them, figure by figure: report-only in VERIFY-070's run 2
-(ENFORCE); its run 3 makes a difference fail the job. A figure changes
-only with the change that moves it, pinned again with `pin` from that
-change's run. A target whose compiler is not installed is skipped, and
-said so; its figures are then not compared.
+measures with them, figure by figure, and a difference fails the job
+(ENFORCE, set by VERIFY-070's run 3; its run 2 only reported). A figure
+changes only with the change that moves it, pinned again with `pin` from
+that change's run. A target whose compiler is not installed is skipped,
+and said so; its figures are then not compared.
 """
 import collections
 import concurrent.futures
@@ -157,7 +157,7 @@ GENERIC['algo/map/map.h'] = (SLICE_U32 + '#include "algo/map/map.h"\n',
 SHARED = 'result__Bool_Error'      # its functions' prefix: a row of its own
 SHARED_ROW = 'shared:' + SHARED
 PINS = os.path.join(HERE, 'pins.txt')
-ENFORCE = False   # VERIFY-070 run 2: report-only; run 3 sets it
+ENFORCE = True    # VERIFY-070 run 3: report-only before it
 FRAGMENTS = ('_impl', '_mangle', '_decl', '_defn')
 TAIL = 'typedef int canon_tu_not_empty_;\n'
 

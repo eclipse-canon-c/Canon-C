@@ -165,6 +165,6 @@ function's size as an artifact, `code-size`: `size_functions.csv`,
 
 Every figure is pinned (VERIFY-070's run 2): a change that moves one is
 seen, and is pinned again with the change, from that change's run
-(`size.py pin`), with its reason in the commit. From VERIFY-070's run 3, a
-figure not as pinned fails the job. `size.py table` prints this page's
+(`size.py pin`), with its reason in the commit. Since VERIFY-070's run 3,
+a figure not as pinned fails the job. `size.py table` prints this page's
 tables from the pins.

@@ -10,7 +10,7 @@ cite.
 | # | file | sidebar name | holds | fails the push? |
 |---|------|--------------|-------|-----------------|
 | 1 | `ci.yml` | 1 · Build & test | Build and test matrix (Linux, Windows MSVC and MinGW, macOS; Release, and Debug with sanitizers), i386, Valgrind, libFuzzer, the lifetime token under concurrency, lifetime-debug | yes |
-| 2 | `platforms.yml` | 2 · Platforms | musl, Linux AArch64, C11 to C23, big-endian s390x (qemu), embedded compile checks (Cortex-M, RISC-V, AVR tiers), code size and build cost by header (VERIFY-070) | yes; each header's sizes and tokens pinned (`tools/size/pins.txt`), compared report-only until VERIFY-070's third run |
+| 2 | `platforms.yml` | 2 · Platforms | musl, Linux AArch64, C11 to C23, big-endian s390x (qemu), embedded compile checks (Cortex-M, RISC-V, AVR tiers), code size and build cost by header (VERIFY-070) | yes; since VERIFY-070's third run, a header's size or tokens not as pinned (`tools/size/pins.txt`) fails the embedded job |
 | 3 | `analysis.yml` | 3 · Static analysis & coverage | clang-tidy and Cppcheck, MISRA C:2012, MC/DC and branch coverage, CompCert | static-analysis and coverage's threshold: yes. MISRA: yes, since VERIFY-068's third run: a real finding not as pinned by file and rule (`tools/misra/pins.txt`, each line naming its record) fails the job, as does a canary not seen. CompCert: informational |
 | 4 | `proofs-core.yml` | 4 · Proofs: core/ | Frama-C WP, one job per unit of core/ and core/primitives/, plus arena at 32-bit and memory/bits at LLP64 | yes, each job on its pins |
 | 5 | `proofs-semantics.yml` | 5 · Proofs: semantics/ | WP for error, option, result, borrow, diag | yes |
