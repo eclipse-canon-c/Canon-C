@@ -33811,6 +33811,7 @@ the same time.
 | **ID**         | VERIFY-071 |
 | **Date**       | 2026-11-12 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-12 — CLOSED: the push of 8cd918e, cc47308 and 34ccb74 matched T1 to T6 ("Scored", below). The Status above is the record as committed. |
 | **Baseline**   | b6c6fc1 (VERIFY-070's run 3); `2 · Platforms` #69 and `8 · Records` #77 on it; `1`, `3`, `4`, `5` and `6` last ran at #51, on d1759dd. |
 | **Scope**      | `docs/implementation-defined.md`, new; `test/integration/impl_defined_test.c`, new, registered in `CMakeLists.txt`; the README's list of documents; `docs/for-future.md`'s note on a compliance summary; a correction in VERIFY-046's record. No library code changes. |
 | **Category**   | The project's item 2, part c: MISRA C:2012 Directive 1.1. One run. |
@@ -33897,3 +33898,29 @@ not ignore.
 `diag_push` contract fix, as planned, with the two comments in
 `semantics/`; `random.h`'s fixes, in a record of their own; and
 `file_write_all_atomic` on Windows, once the author has decided.
+
+### Scored (2026-11-12)
+
+The push of 8cd918e, cc47308 and 34ccb74 started `1 · Build & test` #52,
+`2 · Platforms` #70, `3 · Static analysis & coverage` #52, `4`, `5` and
+`6` #52, and `8 · Records` #78: 79 jobs, every one green.
+
+| # | scored |
+|---|--------|
+| T1 | **MATCH.** 1, 2, 3, 4, 5, 6 and 8 ran; the others did not. |
+| T2 | **MATCH.** 1 is green. `impl_defined_test` passed in each of its 26 jobs that run ctest: Linux, macOS and Windows with MSVC and clang, i386, MinGW, Valgrind, the lifetime instrument's ten and the fuzzing build. 1's notices are #51's. |
+| T3 | **MATCH.** 2 is green. The test passed in its 14 jobs that run ctest: AArch64 (4), C11 to C23 (6), musl (2) and big-endian s390x (2). The embedded check's notice reads "6 targets x 3 levels, 226 units each (84 headers, with and without CANON_NO_GNU_EXTENSIONS, and 58 tests), 0 failed"; 2's other notices are #69's, the build cost's but for its time, 1.4 s in all against 1.1 s. |
+| T4 | **MATCH.** 3 is green. CompCert's notice reads "60 / 60 compiled, 60 ran"; coverage's is #51's, "MC/DC 2039 / 2206" with its eight rows, its ctest passing the test with the other 54; misra's are #51's; the three static-analysis jobs pass, Cppcheck 2.19.0 having checked the new file on macOS and Windows. |
+| T5 | **MATCH.** 4, 5 and 6 gave #51's notices, their 29 jobs green. |
+| T6 | **MATCH.** 8 is green. |
+
+All six match, and VERIFY-071 closes. `docs/implementation-defined.md`
+says what Canon-C needs of the C implementation, and the test checks it
+in 41 jobs and in CompCert's on every push that runs them: Linux on
+x86-64, AArch64, i386 and s390x, with glibc and musl; macOS; and Windows
+with MSVC, clang and MinGW. On Windows it confirms what Microsoft
+documents: `file_write_all_atomic` cannot replace a file there.
+
+**What follows.** The `diag_push` contract fix, with the two comments in
+`semantics/`; `random.h`'s fixes; and `file_write_all_atomic` on Windows,
+once the author has decided.
