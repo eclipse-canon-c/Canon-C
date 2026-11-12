@@ -34072,6 +34072,7 @@ input, and give the old value for every draw the old code got right.
 | **ID**         | VERIFY-073 |
 | **Date**       | 2026-11-12 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-12 — Run 1 scored: D1 to D7 and D9 to D11 MATCH, D8 MISS ("Run 1 scored", below). `push_frame_strings` is proved in 7 of its 13 parts. Open: the author's decision on the other 6, then run 2. The Status above is the record as committed. |
 | **Baseline**   | 9610ceb (VERIFY-072); `1`, `3`, `4`, `5` and `6` #53, `2 · Platforms` #71 and `8 · Records` #79 on it; `9 · Probes` #15 (b5042af), #17 (b0e644d) and #18 (7ecd37c), each probe's last run. |
 | **Scope**      | Run 1: `tools/probes/verify-073/` (`diag_push.patch`, `diagpush_probe.py`, `README.md`); `.github/workflows/probes.yml`, the job `diagpush-probe`; the workflow map's row 9. Run 2: `semantics/diag.h`'s `diag_push`, its contract and its shift, with the pins and documents that read it; `test/semantics/diag_test.c`; two comments in `semantics/`. |
 | **Category**   | VERIFY-066's run 2, "Found while reading", 1: fixed. Run 1 measures the change in CI before it lands (report-only); run 2 makes it, pinned from run 1. |
@@ -34239,3 +34240,62 @@ probe's results:
   ACSL lemma that keeps `strlen` across a write separated from the string,
   say, or the invariants stated field by field), which the probe measures
   again before run 2.
+
+### Run 1 scored (2026-11-12)
+
+The push of d1fe76a, 5fe50f0 and 9fe4b9b started `1 · Build & test` #54,
+`2 · Platforms` #72, `3 · Static analysis & coverage` #54, `4`, `5` and
+`6` #54, `8 · Records` #80 and `9 · Probes` #19: 123 jobs, every one
+green. The diag_push probe took 58 minutes: 15 for WP, 42 for the provers
+alone (Alt-Ergo 9, Z3 26, CVC5 7), 7 seconds for Eva.
+
+| # | scored |
+|---|--------|
+| D1 | **MATCH.** 1 to 6, 8 and 9 ran; the others did not. |
+| D2 | **MATCH.** 1 to 6 and 8 are green, each job with the notices of its last run, times aside. |
+| D3 | **MATCH.** The nine older probes are green, each with the notices of its last run (#15, #17, #18), times aside. |
+| D4 | **MATCH.** The probe's job is green, and each step posted its notices: the WP step 3, the agreement step 13, of which GitHub kept ten, the Eva step 2. But see "Found while scoring", 1. |
+| D5 | **MATCH.** "Proved goals: 3080 / 3087"; the 7 not proved are Timeout, none Invalid; no goal of `memmove` is among `diag_push`'s 530; `memset`'s goal is one of the 7. |
+| D6 | **MATCH.** Every goal of the loop is proved: its three invariants established, and `shift_bounds` preserved, by WP itself; `shift_done` and `shift_rest` preserved by Alt-Ergo alone (7.0 and 2.3 s); its assigns by WP itself; its variant by WP itself and by all three provers; and every access of `diag_push`, the loop's among them. |
+| D7 | **MATCH.** `push_shift_semantics` is proved in its 13 parts: part 5 by Alt-Ergo and CVC5 (54 and 5 s), part 6 by Alt-Ergo alone (67 s), part 7 by all three (Z3 in 50 s), the others by WP itself. `push_frames_preserved` in its 13: parts 11 to 13 by Alt-Ergo and CVC5 (up to 35 s), the others by WP itself. Every assigns goal of `diag_push`, 242 with the loops', by WP itself or by all three provers. |
+| D8 | **MISS.** `push_frame_strings` is proved in 7 of its 13 parts, by WP itself; parts 5 to 7 and 11 to 13 are proved by no prover, alone or together (Timeout at 120 s). |
+| D9 | **MATCH.** The three runs reported: Alt-Ergo 3075 / 3087, Z3 3041 / 3087, CVC5 3077 / 3087. `diag_render`'s sixteen lines are as pinned. `diag_push`'s are not, ten differences from the pins: its accesses are numbered anew (`mem_access_13` is `_15`), four parts moved class, and four goals are new to the file, `push_frames_preserved`' parts 11 and 13 and the loop's `shift_done` and `shift_rest`, the last two proved by Alt-Ergo alone. |
+| D10 | **MATCH.** No prover alone proves the same 7 goals the combined run leaves: `memset`'s, and `push_frame_strings`' parts 5 to 7 and 11 to 13. |
+| D11 | **MATCH.** At each of the ten models, `diag.c` reaches its end and its block differs from its pin in the two lines measured here. The notice reads "not as pinned, 2 line(s) of the pin out and 2 in, preconditions 82/4/0" for each. |
+
+Ten of the eleven match; D8 misses.
+
+**What the provers left.** `frame_strings_ok` asks three things of the
+new frame: `file` and `func` NULL or strings, and its message terminated.
+The message is `push_msg_terminated`'s, whose parts 11 to 13 CVC5 proves
+in under a second, and whose parts 5 to 7 WP proves itself. What no
+prover shows, then, is that `file` and `func` are still strings after the
+push: that `strlen` keeps its value across the push's writes, which the
+requires put outside the strings. The six parts are those in which
+`push_shift_semantics` (5 to 7) and `push_frames_preserved` (11 to 13)
+also need a prover, which by their place are the paths through `memcpy`;
+WP's output does not name the paths, so that is read, not measured. Each
+of the six carries WP's "(Stronger, 3 warnings)": the three casts `(char
+*)d` of `push_no_alias`, `push_file_read` and `push_func_read`, of which it
+warns "Cast with incompatible pointers types". The parts of the shift
+proved in this run carry the same three, so the tag alone does not stop a
+proof.
+
+**Found while scoring.**
+
+1. **The probe does not keep the tools' workflow commands as text.** It
+   prints a line of `agreement.py` or `eva.py` that starts with `::`
+   behind two spaces, and GitHub's runner reads a command behind spaces
+   too. So each prover's notice is in the job twice, under the probe's
+   title and under `agreement.py`'s, and `agreement.py`'s error, "the
+   unproved goals are not the pinned names; 10 difference(s) from the
+   pins", is a failure annotation on the green job. And since GitHub keeps
+   ten notices of a step, `agreement.py`'s three took the room of three of
+   the probe's own: the agreement step's last three notices of names are
+   in the log only. The probe's README and `probes.yml` say the opposite.
+   The probe's next change marks such lines with a character that is not
+   a space.
+
+**What follows.** The author decides on `push_frame_strings`' six parts,
+as "What follows" above foresaw: argued residuals, as VERIFY-017's are, or
+a form the provers prove, measured by the probe before run 2.
