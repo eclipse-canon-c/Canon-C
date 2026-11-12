@@ -33459,6 +33459,7 @@ checker.
 | **ID**         | VERIFY-069 |
 | **Date**       | 2026-11-12 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-12 — CLOSED: the push of 04b294f and 075f45f matched B1 to B5 ("Scored", below). The Status above is the record as committed. |
 | **Baseline**   | 79ab1ca (VERIFY-068's run 3); `2 · Platforms` #65 on it, whose `embedded` job reads "6 targets x 3 levels, 136 units each, 0 failed". |
 | **Scope**      | `tools/embedded_compile_check.sh`; `docs/architectures.md`'s table. No library code changes. |
 | **Category**   | The project's item 2 (AUTOSAR Classic), part b: the C99 compile check. |
@@ -33515,3 +33516,118 @@ The tests are compiled once, as before: 2 × 84 header units and 57 tests,
 | B3 | **The embedded job takes less than ten minutes** (#65's: 3 min 42 s). | ten minutes or more | M: about 70% more compiles; here, the two newlib targets took 1 min 39 s. |
 | B4 | **2's other jobs give #65's notices.** | a failure, or another notice | H |
 | B5 | **8 is green.** | a failure | H (run here) |
+
+### Scored (2026-11-12)
+
+The push of 04b294f and 075f45f (2026-11-12) started `2 · Platforms` #66
+and `8 · Records` #74. Every job is green.
+
+| # | scored |
+|---|--------|
+| B1 | **MATCH.** 2 and 8 ran; the others did not. |
+| B2 | **MATCH.** The embedded job is green, and its notice reads "6 targets x 3 levels, 225 units each (84 headers, with and without CANON_NO_GNU_EXTENSIONS, and 57 tests), 0 failed"; the AVR notice reads as #65's. |
+| B3 | **MATCH.** The embedded job took 4 min 30 s. |
+| B4 | **MATCH.** 2's other jobs gave #65's notices. |
+| B5 | **MATCH.** 8 is green. |
+
+All five match, and VERIFY-069 closes: item 2's part b is done. With the
+picolibc and RISC-V toolchains installed here since, the script gives
+225 of 225 at all 18 targets and levels here too.
+
+---
+
+## VERIFY-070: Pre-registration — Code Size and Build Cost, Header by Header, Run 1: Measured, Report-Only
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-070 |
+| **Date**       | 2026-11-12 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 075f45f (VERIFY-069); `2 · Platforms` #66 on it, its embedded job 4 min 30 s; `1`, `3`, `4`, `5` and `6` last ran at #49, on 79ab1ca. |
+| **Scope**      | `tools/size/size.py`, new; a step and an artifact in `platforms.yml`'s embedded job; `docs/code-size.md`, new; the README's list of documents; the workflow map. No library code changes. |
+| **Category**   | The project's item 6: code size and build time. Run 1 of 3: pinned and enforced from run 3, decided with the author (2026-11-12). |
+
+### What is decided
+
+Item 6 measures what each header costs: in flash, on bare-metal targets,
+and in work for the compiler. `docs/code-size.md` gives the method. Each
+header is compiled alone with `-fkeep-inline-functions`, so that every
+function keeps a body, and each function counts for the header that
+defines it, read from the debug information. A generic module counts what
+its instantiation for `u32` adds. Cortex-M0+ and Cortex-M4 with newlib,
+RISC-V RV32IMAC with picolibc; `-Os` and `-O2`; as shipped for release
+(`NDEBUG`) and with the run-time checks off (`CANON_NO_REQUIRE` with
+`NDEBUG`). For build cost, with the host's gcc: the lines of Canon-C each
+header brings after preprocessing, which are exact, and the time to compile
+it at `-O2`, reported only.
+
+The author decided (2026-11-12) that code size is a gate: a change in a
+header's size fails CI until it is pinned again, with a reason, so that
+growth is never silent. Three runs: this one measures and reports; run 2
+pins each header's size at each target, level and setting, and the
+preprocessed lines, and compares, report-only; run 3 fails the job on a
+difference.
+
+### Measured here
+
+The toolchains here are the packages the runner installs: arm-none-eabi-gcc
+13.2.1 (`15:13.2.rel1-2`) with newlib 4.4.0.20231231 and picolibc 1.8.6;
+riscv64-unknown-elf-gcc 13.2.0 (`13.2.0-11ubuntu1+12`) with picolibc
+1.8.6; gcc 13.3.0. With them, the embedded check gives #66's 225 of 225 at
+all 18 targets and levels.
+
+`size.py run`: 209 s here on two processors, and a second run gives the
+same files, byte for byte. Its notices:
+
+- cortex-m0plus: 51 headers with code, 855 functions at `-Os` as shipped;
+  `-Os` 44260 bytes as shipped, 28364 with checks off; `-O2` 74788 bytes as
+  shipped, 41496 with checks off;
+- cortex-m4: 51 headers with code, 855 functions at `-Os` as shipped; `-Os`
+  44176 bytes as shipped, 28744 with checks off; `-O2` 70668 bytes as
+  shipped, 40050 with checks off;
+- rv32imac: 51 headers with code, 855 functions at `-Os` as shipped; `-Os`
+  54080 bytes as shipped, 32616 with checks off; `-O2` 89088 bytes as
+  shipped, 47268 with checks off;
+- build cost: 56 headers alone, 45915 lines of Canon-C after preprocessing,
+  the most 2334 (`data/hashmap/hashmap_fmt.h`, with the hashmap and the
+  string builder it needs); each compiles at `-O2` in a few hundredths of
+  a second.
+
+What they show, as first readings:
+
+- **The run-time checks are about a third of the code** when every function
+  is kept: at `-Os` on Cortex-M4, 15432 of 44176 bytes. `require()` stays
+  on in release builds by design (`core/primitives/contract.h`); a program
+  whose contracts are proved can turn it off.
+- **At `-Os`, the largest figure is the hashmap's instantiation**: 52
+  functions, 3.3 to 3.6 KB as shipped. At `-O2`, the algorithms and the
+  priority queue grow most: `algo/sort/sort.h` from 1.2 KB to 4.9 KB on
+  Cortex-M4.
+- **Build cost is small**: no header alone, with what it needs, brings more
+  than 2334 lines of Canon-C, and none takes a tenth of a second to
+  compile here.
+
+The first readings are the tables' to confirm, in run 2, from CI's
+figures.
+
+### The workflows
+
+`tools/which_workflows.py`: 1, 2, 3, 4, 5, 6 and 8 run; 7, 9, 10, 11, 12,
+13 and 14 do not. `platforms.yml` changes, which 1 to 6 do not ignore.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| S1 | **1, 2, 3, 4, 5, 6 and 8 run**; the others do not. | another set | H |
+| S2 | **2's embedded job is green**, and its three size notices read as measured here, figure for figure. | a failure, or another figure | H: the same packages, and a second run here gives the same figures. |
+| S3 | **The build cost notice begins** "56 headers alone: 45915 lines of Canon-C after preprocessing, the most 2334 (data/hashmap/hashmap_fmt.h)"; its times are not predicted. | other lines | M–H: the host's gcc, with the runner's system headers. |
+| S4 | **2's other notices are #66's**: the embedded check's and the AVR check's. | another notice | H |
+| S5 | **The embedded job takes less than 12 minutes.** | 12 minutes or more | M: #66 took 4 min 30 s; the size step took 209 s here, on two processors; the runner has four. |
+| S6 | **1, 3, 4, 5 and 6 give #49's notices**, every job green. | a failure, or another notice | H: no code changes. |
+| S7 | **8 is green.** | a failure | H (run here) |
+
+**What follows.** S1 to S7 scored. Run 2: the pins (each header's size
+and functions at each target, level and setting, and its preprocessed
+lines), compared report-only, and `docs/code-size.md`'s tables from CI's
+figures. Run 3: a difference fails the job.
