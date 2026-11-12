@@ -5,6 +5,7 @@
 # From 14 · Eva #4, on b5042af. arena.c's block is run 2's prediction for its changed line 50:
 # measured here with Frama-C 25 at x86_64, msvc_x86_64 and ppc_32, and the same at the
 # other seven models (docs/deviations.md, VERIFY-066, run 2).
+# diag.c's block is VERIFY-073's, as its probe measured it at the ten models (9 · Probes #21, run 1c), with semantics/diag.h as VERIFY-073 made it.
 
 checked @ rv64_linux_gnu: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 62/0/0; functions 31/31
 
@@ -70,11 +71,11 @@ result @ rv64_linux_gnu: end reached, fails {0}; alarms 0; program calls: 0 inva
 
 borrow @ rv64_linux_gnu: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 72/0/0; functions 32/79
 
-diag @ rv64_linux_gnu: end reached, fails {0; 1; 2}; alarms 0; program calls: 0 invalid, 3 unknown; library calls: 0 invalid, 1 unknown; checks not confirmed at lines 42,44; preconditions 76/4/0; functions 16/22
+diag @ rv64_linux_gnu: end reached, fails {0; 1; 2}; alarms 0; program calls: 0 invalid, 3 unknown; library calls: 0 invalid, 1 unknown; checks not confirmed at lines 42,44; preconditions 74/4/0; functions 16/22
   call: Unknown: tools/eva/programs/diag.c:41 main: precondition of diag_render_frame: rf_strings: f ≡ \null ∨ frame_strings_ok(*f)
   call: Unknown: tools/eva/programs/diag.c:43 main: precondition of diag_render: r_strings: d ≡ \null ∨ (∀ ℤ j; 0 ≤ j < d->depth ⇒ frame_strings_ok(d->frames[j]))
   call: Unknown: tools/eva/programs/diag.c:45 main: precondition of diag_print: pr_strings: d ≡ \null ∨ (∀ ℤ j; 0 ≤ j < d->depth ⇒ frame_strings_ok(d->frames[j]))
-  library call: Unknown: semantics/diag.h:998 diag_render: precondition of snprintf_va_2: \valid(buf + (0 .. size - 1)) ∨ \valid(buf + (0 .. format_length(format) - 1))
+  library call: Unknown: semantics/diag.h:1019 diag_render: precondition of snprintf_va_2: \valid(buf + (0 .. size - 1)) ∨ \valid(buf + (0 .. format_length(format) - 1))
 
 vec @ rv64_linux_gnu: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 121/0/0; functions 55/199
 

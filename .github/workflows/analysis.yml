@@ -1385,7 +1385,8 @@ jobs:
         #         }
         #
         #       The true side is unreachable on every correct execution:
-        #       the memmove branch immediately above already holds depth at
+        #       the shift branch immediately above (a memmove until
+        #       VERIFY-073) already holds depth at
         #       DIAG_MAX_FRAMES - 1, so depth >= DIAG_MAX_FRAMES is false by
         #       construction here. This is invariant-dead defensive code —
         #       the slice.h MCDC-002 / borrow.h MCDC-008 shape. The header
@@ -1421,7 +1422,8 @@ jobs:
         # not a records entry.
         #
         # NOTE on scope: diag.h is a Shape-A header. The 86-outcome
-        # denominator covers the 13 `static inline` functions. The four
+        # denominator (88 since VERIFY-073's shift loop, whose condition
+        # is covered both ways) covers the 13 `static inline` functions. The four
         # DIAG_PUSH / DIAG_PUSH_FMT / DIAG_RETURN_IF / DIAG_PROPAGATE
         # macros are call-site expansion wrappers: their conditions are
         # stamped to diag_test.c (a /test/ path) and removed by the

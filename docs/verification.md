@@ -12,9 +12,16 @@ Combined verification status across all annotated headers:
 |----------------------|--------------------------------------------------------------------------------|
 | **Headers verified** | 25 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h, stack.h, array.h, hashmap) — lifetime.h is a 25th unit of narrower scope, see VERIFY-021 |
 | **Functions**        | 512 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29 + vec_range.h's 1 + vec_fmt.h's 2 + stack.h's 14 + array.h's 20 + hashmap's 19; lifetime.h's 1 counted separately) |
-| **Total obligations**| 73970 (summed over the 25 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
-| **Proved automatic** | 73278 (99.06%)                                                                 |
-| **Unproved**         | 692 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+| **Total obligations**| 73986 (summed over the 25 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
+| **Proved automatic** | 73301 (99.07%)                                                                 |
+| **Unproved**         | 685 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+
+*Recomputed 2026-11-13 (VERIFY-073 run 2).* One unit moves, diag.h, from
+3050 / 3058 to 3073 / 3074: diag_push's shift of a full chain is a loop of
+frame copies, not a memmove, and its contract states the earlier frames
+kept whole. +16 obligations, +23 proved, 7 unproved fewer: the memmove's,
+gone or proved, as VERIFY-073's probe measured (run 1c). The card
+previously read 25 / 512 / 73970 / 73278 / 692.
 
 *Recomputed 2026-11-08 (VERIFY-062 phase A, enforced from its run 4).*
 vec's and deque's contracts now say that a container's pointer is NULL
@@ -3898,6 +3905,22 @@ unproved goals, the pin since VERIFY-039 G14 and G17 (`2439 / 2458` with
 > goals are gone and the termination is proved. diag.h inherits no residual
 > now; its eight are VERIFY-017's block, unchanged.
 
+> **Note (2026-11-13, VERIFY-073).** Since VERIFY-073's run 2 the job pins
+> 3073 / 3074 with 1 unproved, diag_init's memset goal. diag_push's shift of
+> a full chain was the memmove this section describes; it is now a loop that
+> copies one frame at a time, with invariants WP proves, and
+> `push_frames_preserved` and `push_shift_semantics` state the earlier
+> frames kept whole, not only their `.code`. The seven goals the memmove
+> left, its validity pair, the shift's three parts and the assigns pair, are
+> gone or proved, and diag_test.c checks the whole frames at run time. What
+> the contract does not state is that a frame's `file` and `func` are still
+> strings after a push: WP proved it in none of four forms, nor a program
+> that pushes twice and renders (VERIFY-073, runs 1 and 1b). gcov counts
+> 86/88 condition outcomes now: the loop's condition, covered both ways,
+> and MCDC-009's two open ones. Where this section speaks of the memmove,
+> the `.code`-only shift, eight own residuals and 84/86, it describes the
+> header before VERIFY-073.
+
 diag.h is the fifth semantics/ module verified and the third verified
 **in place** (after error.h and borrow.h) — completing the semantics/
 layer. Its 13 `static inline` functions are annotated in place; the
@@ -4062,9 +4085,9 @@ frama-c \
   semantics/diag.h
 ```
 
-Expected output: `Proved goals: 3050 / 3058` with the 8 documented
-unproved goals, the pin since VERIFY-039 G14 (`3050 / 3060` with 10 when
-enforced, VERIFY-017).
+Expected output: `Proved goals: 3073 / 3074` with the 1 documented
+unproved goal, the pin since VERIFY-073 (`3050 / 3058` with 8 from
+VERIFY-039 G14; `3050 / 3060` with 10 when enforced, VERIFY-017).
 
 
 ---
@@ -5328,7 +5351,7 @@ VERIFY-050 the pins are in `proofs-core.yml`, `proofs-semantics.yml` and
 | option (driver)  | ✅ Verified  | 222/228 | First driver-verified Shape-B module (VERIFY-014); 6 residuals at CI #1373, the run-time checks that a callback is a valid function, unproved because WP 29 does not implement `\valid_function`; 189/223 with 34 when enforced (2 inherited + 32 own), of which VERIFY-039 G11 and G14 closed 28 that did not hold for every admitted callback or were false as written; default Typed model; MCDC-006; cover TU `option_cover.c` |
 | result (driver)  | ✅ Verified  | 207/213 | Second driver-verified Shape-B module and first union-typed module (VERIFY-015); 6 residuals at CI #1373, the run-time checks that a callback is a valid function; 185/215 with 30 when enforced (2 inherited + 28 own), of which VERIFY-039 G11 and G14 closed 24 that did not hold for every admitted callback or were false as written; union-model standing hypothesis (all union goals proved); default Typed model; MCDC-007 (clean 28/28); cover TU `result_cover.c` |
 | borrow.h         | ✅ Verified  | 2451/2465 | Fourth semantics/ module, second verified in place (VERIFY-016): 24 non-macro functions annotated in place, `DEFINE_BORROWED_SLICE` parked per `docs/vmacros.md` (the slice.h/DEFINE_SLICE structure, first in semantics/); 14 residuals at CI #1373: 10 inherited (slice.h's 8 memcmp-danglingness goals and checked.h's 2) + 4 own (memcmp danglingness at `borrowed_bytes_eq` and at `borrowed_str_eq`'s call to `str_equal`); the 12 danglingness goals true since VERIFY-039 G13's repair and filed under VERIFY-008 Category 3, checked.h's 2 under VERIFY-039's block on fixed-width arithmetic; 19 when enforced (17 inherited + 2 own memcmp-danglingness residuals) — no new residual class; Typed+Cast; verified config `CANON_LIFETIME` off (OWN-001 §7); MCDC-008 (36/38 ceiling post-Commit-9 surface, first named-assert closure) |
-| diag.h           | ✅ Verified  | 3050/3058 | Fifth semantics/ module, third verified in place — layer complete (VERIFY-017): 13 functions annotated in place, the four `DIAG_*` call-site macros parked per `docs/vmacros.md`; 8 own libc byte-view residuals at CI #1373 and none inherited, the contract.h handler pair, false as written, having closed at VERIFY-039 G14; 10 when enforced (2 inherited, the handler pair — smallest inherited surface of any residual-carrying header — + 8 own) — no new residual class; Typed+Cast originated by diag.h's own casts; two documented trusted stdio axioms (`-variadic-no-translation`); MCDC-009 (84/86 ceiling, second named-assert closure + first libc-environmental permanent outcome) |
+| diag.h           | ✅ Verified  | 3073/3074 | Fifth semantics/ module, third verified in place — layer complete (VERIFY-017): 13 functions annotated in place, the four `DIAG_*` call-site macros parked per `docs/vmacros.md`; 1 own libc byte-view residual since VERIFY-073, which made the overflow shift a loop of frame copies and the earlier frames' postconditions whole (8 at CI #1373, the memmove's 7 among them) and none inherited, the contract.h handler pair, false as written, having closed at VERIFY-039 G14; 10 when enforced (2 inherited, the handler pair — smallest inherited surface of any residual-carrying header — + 8 own) — no new residual class; Typed+Cast originated by diag.h's own casts; two documented trusted stdio axioms (`-variadic-no-translation`); MCDC-009 (84/86 ceiling, second named-assert closure + first libc-environmental permanent outcome) |
 
 **The semantics/ layer is complete.** diag.h shipped as the fifth and
 final semantics/ module (see its section above, VERIFY-017): 13

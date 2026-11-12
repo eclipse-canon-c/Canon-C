@@ -872,17 +872,20 @@ jobs:
   # semantics/diag.h — ENFORCED. Fifth verified semantics/ module, third
   # verified in place (after error.h and borrow.h).
   #
-  # PINNED baseline: 3050 / 3058 proved, exactly 8 unproved (VERIFY-017,
-  # VERIFY-039 G14), all diag-own; 3050 / 3060 and 10 until G14, with
-  # 2 inherited (contract.h handler pair — definition-presence only under
+  # PINNED baseline: 3073 / 3074 proved, exactly 1 unproved (VERIFY-073):
+  # diag_init's memset goal, libc byte-view through Typed+Cast. Before:
+  # 3050 / 3058 and 8 (VERIFY-017, VERIFY-039 G14), the other 7 at
+  # diag_push's memmove (valid_dest/src 2, push_shift_semantics
+  # .code-equality parts 3, push assigns framing 2); VERIFY-073 made the
+  # shift a loop of frame copies and the contract keep the earlier frames
+  # whole, all proved. 3050 / 3060 and 10 until G14, with 2 inherited
+  # (contract.h handler pair — definition-presence only under
   # CANON_NO_REQUIRE; typed_cast_ prefix per this TU's model, the
-  # VERIFY-016 prefix-flip precedent) + 8 diag-own (libc byte-view through
-  # Typed+Cast: diag_init memset 1, diag_push memmove valid_dest/src 2,
-  # push_shift_semantics .code-equality parts 3, push assigns framing 2).
-  # All Timeout-class at pinning; the diag_init memset goal has also been
-  # observed as Unknown (#1132) — the wrapper counts the classes together,
-  # so the oscillation is pin-safe. Smallest inherited surface of any
-  # residual-carrying header; composability confirmation #7.
+  # VERIFY-016 prefix-flip precedent). The memset goal is Timeout-class,
+  # and has also been observed as Unknown (#1132) — the wrapper counts
+  # the classes together, so the oscillation is pin-safe. Smallest
+  # inherited surface of any residual-carrying header; composability
+  # confirmation #7.
   #
   # Chronology: report-only first at d8566d5 (CI #1132, 300s, 59 unproved);
   # re-measured name-stable at 1597a51 (CI #1133, 120s, 59 — same goal set
@@ -899,9 +902,9 @@ jobs:
   # judgment calls in the __FRAMAC__ block.
   #
   # MODEL: Typed+Cast, forced by diag.h's OWN byte-view casts (the
-  # (char *) views of Diag/DiagFrame at the memset/memmove sites and in
-  # push_no_alias) — first semantics/ header to originate the requirement
-  # rather than inherit it.
+  # (char *) views of Diag at the memset site and in push_no_alias; and of
+  # DiagFrame at the memmove until VERIFY-073) — first semantics/ header to
+  # originate the requirement rather than inherit it.
   #
   # MCDC-009 cross-stream: the named assert dead_by_invariant_clamp at the
   # diag_push overflow clamp PROVED (#1132, re-confirmed every run since).
@@ -910,7 +913,8 @@ jobs:
   # borrow.h inverted form and is the proof-stream regression detector;
   # the coverage job's per-line diag.h debug step is the measurement-
   # stream one. gcov holds the matching outcome open at 84/86 (97.67%,
-  # ceiling since CI #1120). diag_render's n<0 encoding-error skip is the
+  # ceiling since CI #1120; 86/88 since VERIFY-073's shift loop, whose
+  # condition is covered both ways). diag_render's n<0 encoding-error skip is the
   # libc-environmental permanent residual (MCDC-009 outcome 2) — NOT
   # WP-closable, deliberately no check here; its assumption is the same
   # one the snprintf axiom's `term` ensures rests on.
@@ -927,8 +931,9 @@ jobs:
       - uses: ./.github/actions/framac-setup
       - name: "WP: semantics/diag.h"
         # diag.h — Typed+Cast, 120s / -wp-split, -variadic-no-translation.
-        # Expected: 3050 / 3058 proved, exactly 8 unproved (VERIFY-017,
-        # VERIFY-039 G14): 8 own; the 2 inherited closed at G14. Also
+        # Expected: 3073 / 3074 proved, exactly 1 unproved (VERIFY-073):
+        # 1 own; the 2 inherited closed at G14 (VERIFY-039), the 7 at the
+        # memmove at VERIFY-073. Also
         # enforces the MCDC-009 closure:
         # dead_by_invariant_clamp must remain in the proved set. Any
         # deviation is a regression and fails the job.
@@ -939,8 +944,8 @@ jobs:
           eval $(opam env --switch=frama-c)
           # ---- ENFORCEMENT VALUES: pinned at 1965b23 (2026-07-08) ----
           ENFORCE=1
-          EXPECTED_UNPROVED=8   # VERIFY-039 G14 predicted: 10 -> 8
-          EXPECTED_PROVED="3050 / 3058"   # VERIFY-039 G14 predicted: the handler's invariant goals removed, its termination proved (3050 / 3060 before)
+          EXPECTED_UNPROVED=1   # VERIFY-073 run 1c measured: 8 -> 1 (VERIFY-039 G14: 10 -> 8)
+          EXPECTED_PROVED="3073 / 3074"   # VERIFY-073 run 1c measured: the shift a loop, the frames kept whole (3050 / 3058 before)
           WP_MODEL="Typed+Cast"         # diag.h's own casts force it
           # ------------------------------------------------------------------
           FAILURES=0
@@ -1062,26 +1067,17 @@ jobs:
               note_fail "FAIL: inherited set differs from the composability record."
             fi
             echo ""
-            echo "  --- Own-residual roll-call: 8 expected (VERIFY-017 cat 1) ---"
-            # libc byte-view through Typed+Cast — memset/memmove byte specs
-            # vs typed struct locations (VERIFY-007/-008 class, two new
-            # sites). The depth-tracking goals through the same memmove all
-            # PROVE (incl. dead_by_invariant_clamp below); only frame-content
-            # and byte-range-validity goals resist.
+            echo "  --- Own-residual roll-call: 1 expected (VERIFY-017 cat 1) ---"
+            # libc byte-view through Typed+Cast — the memset byte spec vs
+            # the typed Diag location (VERIFY-007/-008 class). Until
+            # VERIFY-073, diag_push's shift was a memmove and left 7 more
+            # (its valid_dest/src, push_shift_semantics parts 05-07, the
+            # assigns' exit part02 and normal part03); the shift is now a
+            # loop of frame copies, and they are gone or proved.
             OWN_CHECKS=(
               # diag_init — byte view of a local Diag at the memset
               # (oscillates Timeout/Unknown across runs)
               "typed_cast_diag_init_call_memset_requires_valid_s"
-              # diag_push — overflow-shift memmove call site
-              "typed_cast_diag_push_call_memmove_requires_valid_dest"
-              "typed_cast_diag_push_call_memmove_requires_valid_src"
-              # diag_push — .code equality across the byte-level shift
-              "typed_cast_diag_push_valid_diag_ensures_push_shift_semantics_part05"
-              "typed_cast_diag_push_valid_diag_ensures_push_shift_semantics_part06"
-              "typed_cast_diag_push_valid_diag_ensures_push_shift_semantics_part07"
-              # diag_push — assigns framing vs the byte-level write
-              "typed_cast_diag_push_valid_diag_assigns_exit_part02"
-              "typed_cast_diag_push_valid_diag_assigns_normal_part03"
             )
             OWN_SEEN=0
             for goal in "${OWN_CHECKS[@]}"; do
@@ -1091,7 +1087,7 @@ jobs:
                 note_fail "FAIL: expected unproved goal ${goal} not observed."
               fi
             done
-            echo "  Own residuals observed: ${OWN_SEEN}/8 (expected 8)"
+            echo "  Own residuals observed: ${OWN_SEEN}/1 (expected 1)"
             OTHER_UNPROVED=$((UNPROVED_COUNT - INHERITED_SEEN - OWN_SEEN))
             echo "  Unproved outside the documented set: ${OTHER_UNPROVED} (expected 0)"
             if [ "${OTHER_UNPROVED}" -ne 0 ]; then
@@ -1135,11 +1131,11 @@ jobs:
               echo "  (re)enabling enforcement."
             fi
           elif [ "${FAILURES}" -eq 0 ]; then
-            echo "PASS: diag.h verified — 3050/3058 proved, 8 documented"
-            echo "      residuals all observed (VERIFY-017): 0 inherited"
+            echo "PASS: diag.h verified — 3073/3074 proved, 1 documented"
+            echo "      residual observed (VERIFY-017, VERIFY-073): 0 inherited"
             echo "      (the contract.h handler pair until VERIFY-039 G14)"
-            echo "      + 8 own (libc byte-view"
-            echo "      through Typed+Cast at the memset/memmove sites);"
+            echo "      + 1 own (libc byte-view"
+            echo "      through Typed+Cast at the memset site);"
             echo "      dead_by_invariant_clamp proved (MCDC-009 closure"
             echo "      intact). Zero stdio residuals under the documented"
             echo "      trusted axioms. Composability confirmation #7 —"

@@ -21,7 +21,7 @@
 #include "semantics/error.h"          /* Error, ERR_OK */
 
 /* Standard library headers required by this file */
-#include <string.h>  /* memmove, memcpy */
+#include <string.h>  /* memcpy */
 /* cppcheck-suppress misra-c2012-21.6 ; MISRA-DEV-016 */
 #include <stdio.h>   /* FILE, fprintf, snprintf */
 
@@ -127,7 +127,7 @@ extern int fprintf(FILE *stream, const char *format, ...);
  *   diag_init             | O(N × M)      | O(1)  (returns by value)
  *   diag_clear            | O(1)          | O(1)
  *   diag_push             | O(M) normal   | O(1)
- *                         | O(N × M) overflow (memmove shift)
+ *                         | O(N × M) overflow (frame-by-frame shift)
  *   diag_depth            | O(1)          | O(1)
  *   diag_has_error        | O(1)          | O(1)
  *   diag_frame_at         | O(1)          | O(1)
@@ -250,9 +250,10 @@ typedef struct {
 
    Verification notes (VERIFY-017):
    - Own residuals are a single class: libc byte-view through Typed+Cast
-     (the memset/memmove byte specs vs. typed Diag/DiagFrame locations,
-     VERIFY-007/-008 pattern at two new sites) — 8 goals in
-     diag_init/diag_push. Round-1's predicted class (b), stdio-intrinsic
+     (the memset byte spec vs. the typed Diag location, VERIFY-007/-008
+     pattern) — 1 goal, in diag_init. diag_push's shift was a memmove,
+     whose byte spec left 7 more until VERIFY-073 made it a loop of frame
+     copies, proved. Round-1's predicted class (b), stdio-intrinsic
      residuals, did NOT materialize: with sound trusted axioms (see the
      __FRAMAC__ block at the top of this header) the stdio surface
      contributes zero residuals, so diag.h adds no new residual class to
@@ -360,8 +361,13 @@ static inline void diag_clear(Diag *d)
  * __FILE__, __LINE__, and __func__ are captured automatically.
  *
  * Time:  O(M) normal (message copy).
- *        O(N × M) on overflow (memmove shifts N-1 frames, each ~M bytes).
+ *        O(N × M) on overflow (shifts N-1 frames, each ~M bytes, one by one).
  * Space: O(1).
+ *
+ * The frames before the new one are kept whole, each as it was or, when
+ * the chain was full, as the next one was (VERIFY-073). That file and
+ * func are still strings after the push is not stated: WP did not prove
+ * it of the frame as a whole (VERIFY-073, runs 1 and 1b).
  *
  * @param d     Diag chain. NULL-safe: no-op, returns false.
  * @param file  Source file name (string literal).
@@ -402,14 +408,15 @@ static inline void diag_clear(Diag *d)
       \exists integer k;
         0 <= k < DIAG_MAX_MSG_LEN
         && d->frames[d->depth - 1].message[k] == '\0';
+    // VERIFY-073: the earlier frames are kept whole, not only their code.
     ensures push_shift_semantics:
       \old(d->depth) == DIAG_MAX_FRAMES ==>
         (\forall integer j; 0 <= j < DIAG_MAX_FRAMES - 1 ==>
-           d->frames[j].code == \old(d->frames[j + 1].code));
+           d->frames[j] == \old(d->frames[j + 1]));
     ensures push_frames_preserved:
       \old(d->depth) < DIAG_MAX_FRAMES ==>
         (\forall integer j; 0 <= j < \old(d->depth) ==>
-           d->frames[j].code == \old(d->frames[j].code));
+           d->frames[j] == \old(d->frames[j]));
 
   complete behaviors;
   disjoint behaviors;
@@ -424,6 +431,7 @@ static inline bool diag_push(Diag       *d,
     bool       dropped;
     DiagFrame *f;
     usize      len;
+    usize      i;
 
     if (d == NULL) {
         return false;
@@ -436,10 +444,23 @@ static inline bool diag_push(Diag       *d,
     dropped = false;
 
     if (d->depth == DIAG_MAX_FRAMES) {
-        /* Chain full: discard oldest frame, shift remaining frames down. */
-        (void)memmove(&d->frames[0],
-                &d->frames[1],
-                (DIAG_MAX_FRAMES - 1u) * sizeof(DiagFrame));
+        /* Chain full: discard the oldest frame and shift the rest down one
+         * frame at a time, a copy WP follows; a memmove of their bytes it
+         * could not (VERIFY-073). */
+        /*@
+          loop invariant shift_bounds: 0 <= i <= DIAG_MAX_FRAMES - 1;
+          loop invariant shift_done:
+            \forall integer j; 0 <= j < i ==>
+              d->frames[j] == \at(d->frames[j + 1], LoopEntry);
+          loop invariant shift_rest:
+            \forall integer j; i <= j < DIAG_MAX_FRAMES ==>
+              d->frames[j] == \at(d->frames[j], LoopEntry);
+          loop assigns i, d->frames[0 .. DIAG_MAX_FRAMES - 2];
+          loop variant DIAG_MAX_FRAMES - 1 - i;
+        */
+        for (i = 0u; i < (DIAG_MAX_FRAMES - 1u); i++) {
+            d->frames[i] = d->frames[i + 1u];
+        }
         d->depth--;
         dropped = true;
     }

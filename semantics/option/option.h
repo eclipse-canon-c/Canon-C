@@ -434,6 +434,9 @@
         if (end == str || *end != '\0') {
             return option_int_none(); // invalid format
         }
+        if (val < INT_MIN || val > INT_MAX) {
+            return option_int_none(); // out of int's range
+        }
 
         return option_int_some((int)val);
     }

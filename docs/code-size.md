@@ -69,16 +69,18 @@ the measure: two of `core/memory.h`'s figures, whose function the first
 run had counted for no header, and the tokens, which it counted as lines.
 `util/random.h`'s row is VERIFY-072's, whose fixes gave its range
 functions the full `i32` range, spans that overflow, infinite bounds, and a
-draw again where rounding reached `max`.
+draw again where rounding reached `max`. `semantics/diag.h`'s is
+VERIFY-073's, whose shift of a full chain, a loop of frame copies where it
+was a `memmove`, costs nothing at `-Os` and 2 to 12 bytes at `-O2`.
 In bytes, at `-Os` as shipped unless the column says otherwise.
 
 **All headers together**, every function kept:
 
 | target | -Os, as shipped | -Os, checks off | -O2, as shipped | -O2, checks off |
 |--------|----------------:|----------------:|----------------:|----------------:|
-| cortex-m0plus | 44,696 | 28,706 | 75,320 | 41,984 |
-| cortex-m4 | 44,588 | 29,080 | 71,208 | 40,544 |
-| rv32imac | 54,684 | 33,126 | 90,032 | 48,070 |
+| cortex-m0plus | 44,696 | 28,706 | 75,320 | 41,986 |
+| cortex-m4 | 44,588 | 29,080 | 71,208 | 40,556 |
+| rv32imac | 54,684 | 33,126 | 90,034 | 48,076 |
 
 The run-time checks are about a third of the code at `-Os`: on Cortex-M4,
 15,508 of 44,588 bytes. `require()` stays on in release builds by design
@@ -131,7 +133,7 @@ turn it off with `CANON_NO_REQUIRE`.
 | `data/vec/vec_fmt.h` | 2 | 122 | 108 | 184 | 108 | 136 | 16,898 |
 | `data/vec/vec_range.h` | 1 | 156 | 162 | 166 | 166 | 396 | 15,496 |
 | `semantics/borrow.h` | 24 | 564 | 620 | 672 | 462 | 896 | 5,090 |
-| `semantics/diag.h` | 13 | 790 | 758 | 936 | 708 | 832 | 2,015 |
+| `semantics/diag.h` | 13 | 790 | 758 | 936 | 708 | 832 | 2,020 |
 | `semantics/error.h` | 4 | 286 | 306 | 376 | 306 | 302 | 365 |
 | `semantics/option/option.h` | 16 | 574 | 640 | 638 | 446 | 682 | 1,099 |
 | `semantics/result/result.h` | 17 | 738 | 788 | 608 | 566 | 832 | 1,466 |

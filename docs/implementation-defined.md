@@ -279,12 +279,13 @@ them as they are.
    record, say that with `-fshort-enums` `Error` is `unsigned char`. Its
    values reach 402, so it is `unsigned short`, 2 bytes (measured with
    arm-none-eabi-gcc 13.2.1). VERIFY-046's record now carries the
-   correction; the comment is corrected with the next change to
-   `semantics/`.
+   correction. **Corrected** in the comment by VERIFY-073, the next change
+   to `semantics/`.
 5. **`semantics/option/option.h`'s `parse_int` example** converts
    `strtol`'s `long` to `int` without checking its range, the conversion of
-   section 5; `result.h`'s version of the example checks it. Corrected
-   with the next change to `semantics/`.
+   section 5; `result.h`'s version of the example checks it.
+   **Corrected** by VERIFY-073, the next change to `semantics/`: the
+   example returns none for a value outside `int`'s range.
 
 ## Keeping it current
 

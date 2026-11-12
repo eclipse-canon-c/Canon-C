@@ -22,7 +22,8 @@
  *   - diag_clear: resets depth to 0, NULL-safe
  *   - diag_push: single frame, field storage, return value (no overflow),
  *                NULL msg, long msg truncation, NULL diag (no-op)
- *   - Overflow behaviour: oldest frame discarded, chain shifted, depth clamped
+ *   - Overflow behaviour: oldest frame discarded, chain shifted, depth clamped,
+ *     each kept frame moved whole, a render after it (VERIFY-073)
  *   - DIAG_PUSH: macro captures __FILE__ / __LINE__ / __func__ correctly
  *   - DIAG_PUSH_FMT: formatted message stored correctly (GNU extension path,
  *                     guarded by #ifndef CANON_NO_GNU_EXTENSIONS)
@@ -355,6 +356,76 @@ static void test_overflow_chain_shift_preserves_order(void)
     for (i = 0; i < DIAG_MAX_FRAMES; i++) {
         usize src = (n - DIAG_MAX_FRAMES) + i;
         EXPECT(d.frames[i].code == codes[src]);
+    }
+}
+
+static void test_overflow_shift_keeps_frames_whole(void)
+{
+    /* VERIFY-073: a push to a full chain moves each kept frame whole --
+     * file, function, line, code and message -- as diag_push's contract
+     * states, and the new frame is the last push's. */
+    static const char *const files[] = { "fa.c", "fb.c", "fc.c" };
+    static const char *const funcs[] = { "ga", "gb", "gc", "gd", "ge" };
+    static const Error codes[] = {
+        ERR_INVALID_ARG, ERR_OUT_OF_RANGE, ERR_PARSE_FAILED,
+        ERR_INVALID_FORMAT, ERR_INVALID_STATE
+    };
+    Diag  d = diag_init();
+    char  msg[32];
+    usize n = (usize)DIAG_MAX_FRAMES + 3u;   /* fill, then overflow by three */
+    usize k;
+
+    for (k = 0u; k < n; k++) {
+        (void)snprintf(msg, sizeof(msg), "message %u", (unsigned)k);
+        (void)diag_push(&d, files[k % 3u], (usize)100u + k, funcs[k % 5u],
+                        codes[k % 5u], msg);
+    }
+
+    EXPECT(d.depth == DIAG_MAX_FRAMES);
+    for (k = 0u; k < DIAG_MAX_FRAMES; k++) {
+        usize src = (n - DIAG_MAX_FRAMES) + k;   /* the push frame k is */
+        (void)snprintf(msg, sizeof(msg), "message %u", (unsigned)src);
+        EXPECT(d.frames[k].file == files[src % 3u]);
+        EXPECT(d.frames[k].func == funcs[src % 5u]);
+        EXPECT(d.frames[k].line == (usize)100u + src);
+        EXPECT(d.frames[k].code == codes[src % 5u]);
+        EXPECT(strcmp(d.frames[k].message, msg) == 0);
+    }
+}
+
+static void test_overflow_then_render(void)
+{
+    /* VERIFY-073: after pushes that overflow the chain, diag_render writes
+     * every kept frame, in order, and none of the dropped ones. */
+    Diag        d = diag_init();
+    char        buf[((usize)DIAG_MAX_FRAMES * ((usize)DIAG_MAX_MSG_LEN + 96u)) + 1u];
+    char        want[64];
+    usize       n = (usize)DIAG_MAX_FRAMES + 2u;
+    usize       k;
+    usize       total;
+    const char *prev = buf;
+    const char *at;
+
+    for (k = 0u; k < n; k++) {
+        (void)snprintf(want, sizeof(want), "frame %u", (unsigned)k);
+        (void)diag_push(&d, "render.c", (usize)200u + k, "render_fn",
+                        ERR_IO_FAILED, want);
+    }
+
+    total = diag_render(&d, buf, sizeof(buf));
+    EXPECT(total > 0u);
+    EXPECT(total == strlen(buf));            /* nothing truncated */
+
+    for (k = 0u; k < n; k++) {
+        (void)snprintf(want, sizeof(want), "render.c:%u in render_fn()",
+                       (unsigned)(200u + k));
+        at = strstr(buf, want);
+        if (k < (n - DIAG_MAX_FRAMES)) {
+            EXPECT(at == NULL);              /* dropped */
+        } else {
+            EXPECT(at != NULL && at >= prev);  /* kept, in order */
+            if (at != NULL) { prev = at; }
+        }
     }
 }
 
@@ -1123,6 +1194,8 @@ int main(void)
     test_overflow_depth_stays_at_max();
     test_overflow_oldest_frame_discarded();
     test_overflow_chain_shift_preserves_order();
+    test_overflow_shift_keeps_frames_whole();
+    test_overflow_then_render();
 
     /* DIAG_PUSH macro */
     test_diag_push_macro_captures_location();
@@ -1223,7 +1296,7 @@ int main(void)
 /* ── Fuzz entry point ─────────────────────────────────────────────────────
  *
  * Targets the two non-trivial paths in diag_push:
- *   1. Overflow/shift: depth == DIAG_MAX_FRAMES → memmove + reuse
+ *   1. Overflow/shift: depth == DIAG_MAX_FRAMES → frame-by-frame shift + reuse
  *   2. Message copy length clamp: manual memcpy loop with bounded len
  *
  * Input layout (variable length, up to 256 bytes):

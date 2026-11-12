@@ -719,7 +719,8 @@ by methodology):
   coverage build (the inverse disposition — a test closure, not a
   deviation; see MCDC-008's description).
 
-- **diag.h: 97.7% (84/86)** — the ceiling under MCDC-009, and the
+- **diag.h: 97.7% (86/88; 84/86 before VERIFY-073, whose shift loop's
+  condition is covered both ways)** — the ceiling under MCDC-009, and the
   first ceiling entry whose two outcomes carry **different
   dispositions**. The clamp outcome (diag_push's
   `d->depth >= DIAG_MAX_FRAMES` true side) is the familiar
@@ -736,7 +737,7 @@ by methodology):
   is a permanent documented residual rather than a deviation that
   later closes. It is the measurement-stream citation of the same
   hosted-libc assumption VERIFY-017's trusted snprintf axiom makes in
-  the proof stream. gcov measures 84/86 because it instruments the
+  the proof stream. gcov counts both as missed because it instruments the
   source rather than the proof or the platform — the
   complementary-evidence pattern, now spanning three kinds of
   unreachability argument.
@@ -1043,7 +1044,7 @@ and after the paragraphs below say where a reading here no longer holds.
 | option     | 16        |               228 | 222 (97.37%) | 6        | VERIFY-014   |
 | result     | 17        |               213 | 207 (97.18%) | 6        | VERIFY-015   |
 | borrow.h   | 24        |              2465 | 2451 (99.43%) | 14       | VERIFY-016   |
-| diag.h     | 13        |              3058 | 3050 (99.74%) | 8        | VERIFY-017   |
+| diag.h     | 13        |              3074 | 3073 (99.97%) | 1        | VERIFY-017/73 |
 | vec        | 37        |              5596 | 5503 (98.34%) | 93       | VERIFY-018/23/33/40/58/59/62 |
 | deque      | 24        |              1665 | 1653 (99.28%) | 12       | VERIFY-019/40/62 |
 | bitset     | 32        |              5060 | 4986 (98.54%) | 74       | VERIFY-020/23/40/58/59 |
@@ -1056,7 +1057,15 @@ and after the paragraphs below say where a reading here no longer holds.
 | stack.h    | 14        |              5811 | 5742 (98.81%) | 69       | VERIFY-049/58/59/62 |
 | array.h    | 20        |              2887 | 2863 (99.17%) | 24       | VERIFY-052   |
 | hashmap    | 19        |              4784 | 4738 (99.04%) | 46       | VERIFY-054/55/56 |
-| **Total**  | **513**   | **73974**         | **73282 (99.06%)**| **692**  |              |
+| **Total**  | **513**   | **73990**         | **73305 (99.07%)**| **685**  |              |
+
+*Brought to the pins again 2026-11-13 (VERIFY-073, run 2).* One row
+moves: diag.h, 3058 obligations to 3074, 3050 proved to 3073, 8 unproved to
+1. diag_push's shift of a full chain is a loop of frame copies, not a
+memmove, and its contract states the earlier frames kept whole; the
+memmove's seven goals are gone or proved, as the change's probe measured
+(VERIFY-073 run 1c). The total is 73990 obligations, 73305 proved and 685
+unproved, from 73974, 73282 and 692.
 
 *Brought to the pins again 2026-11-08 (VERIFY-062, phase A).* Two rows
 move, +8 each. vec's and deque's contracts say that a container's pointer is
