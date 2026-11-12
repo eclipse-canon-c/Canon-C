@@ -33934,6 +33934,7 @@ once the author has decided.
 | **ID**         | VERIFY-072 |
 | **Date**       | 2026-11-12 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-12 — CLOSED: the push of 808be14, 470467d and 9610ceb matched U1 to U6 ("Scored", below). The Status above is the record as committed. |
 | **Baseline**   | 34ccb74 (VERIFY-071); `1`, `3`, `4`, `5` and `6` #52, `2 · Platforms` #70 and `8 · Records` #78 on it. |
 | **Scope**      | `util/random.h`: `random_i32_range`, `random_f32_range`, `random_f64_range` and their documentation; `test/util/random_test.c`, three tests; `tools/size/pins.txt`, `util/random.h`'s row; `docs/code-size.md`'s tables; `docs/implementation-defined.md`'s findings 1 to 3. |
 | **Category**   | VERIFY-071's findings 1 and 2, fixed. One run. |
@@ -34042,3 +34043,22 @@ and the size pins, which 2 and 8 read.
 **What follows.** U1 to U6 scored, and the record closed. Then the
 `diag_push` contract fix, with the two comments in `semantics/`; and
 `file_write_all_atomic`'s replacement on Windows.
+
+### Scored (2026-11-12)
+
+The push of 808be14, 470467d and 9610ceb started `1 · Build & test` #53,
+`2 · Platforms` #71, `3 · Static analysis & coverage` #53, `4`, `5` and
+`6` #53, and `8 · Records` #79: 79 jobs, every one green.
+
+| # | scored |
+|---|--------|
+| U1 | **MATCH.** 1, 2, 3, 4, 5, 6 and 8 ran; the others did not. |
+| U2 | **MATCH.** 1 is green, `random_test` passing in each job that runs ctest; its notices are #52's. |
+| U3 | **MATCH.** 2 is green. The size notices are the ones measured here: cortex-m0plus "-Os 44696 bytes as shipped, 28706 with checks off; -O2 75320 bytes as shipped, 41984 with checks off", cortex-m4 44588, 29080, 71208 and 40544, rv32imac 54684, 33126, 90032 and 48070. The pins notice reads "as pinned: 57 rows, 798 figures", the build cost's "56 headers alone: 418565 tokens of Canon-C after preprocessing, the most 25271 (data/hashmap/hashmap_range.h)", and the embedded check's and the AVR check's are #70's. |
+| U4 | **MATCH.** 3 is green. CompCert's notice reads "60 / 60 compiled, 60 ran"; coverage's "MC/DC 2062 / 2228", with #52's eight rows; misra's are #52's. |
+| U5 | **MATCH.** 4, 5 and 6 gave #52's notices, every job green. |
+| U6 | **MATCH.** 8 is green; its size pins line reads "size pins: 57 rows; 0 problem(s)". |
+
+All six match, and VERIFY-072 closes: `random_i32_range` covers every
+`i32` range, and the float ranges never return `max`, end for every
+input, and give the old value for every draw the old code got right.
