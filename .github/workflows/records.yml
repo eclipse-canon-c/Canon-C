@@ -4,7 +4,8 @@ name: "8 · Records"
 # machine models' pins checked against x86_64's (VERIFY-060), the prover
 # agreement's units checked against the proof jobs (VERIFY-065), Eva's
 # programs checked against the units (VERIFY-066), the misra job's pins
-# checked against their records (VERIFY-068) and the workflow-size guard. Map: .github/workflows/README.md.
+# checked against their records (VERIFY-068), the size pins checked
+# (VERIFY-070) and the workflow-size guard. Map: .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -18,6 +19,7 @@ on:
       - 'tools/agreement/**'
       - 'tools/eva/**'
       - 'tools/misra/**'
+      - 'tools/size/**'
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
@@ -73,6 +75,10 @@ jobs:
         # file and rule, and names the record in docs/deviations.md that
         # argues them; the record must exist.
         run: python3 tools/misra/misra.py check
+      - name: "The size pins are well formed (VERIFY-070)"
+        # tools/size/pins.txt holds each header's code size and build
+        # cost; its rows must be size.py's columns, and its headers exist.
+        run: python3 tools/size/size.py check
 
   # -------------------------------------------------------------------------
   # Workflow size guard (VERIFY-047). GitHub runs no workflow file of 500 KB

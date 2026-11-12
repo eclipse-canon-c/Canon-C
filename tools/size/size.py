@@ -9,8 +9,9 @@ bound that is stable and comparable:
 
 - each header is compiled alone, for a bare-metal target, with
   -fkeep-inline-functions (GCC keeps a body of every inline function, even
-  one it inlines everywhere) and -ffunction-sections, and its symbols are
-  read with nm -S -l;
+  one it inlines everywhere) and -ffunction-sections; each function's size
+  is read from the symbol table (nm -S), and the file that defines it from
+  the debug information (readelf: DW_AT_decl_file);
 - a function counts for the header that defines it: the header itself, or
   its module's fragments (_impl.h, _mangle.h, _decl.h, _defn.h), read from
   the debug information. One type is shared: Result<_Bool, Error>, which
@@ -33,16 +34,26 @@ release (NDEBUG: require() on, ensure() off) and checks off
 contracts are proved). The difference between the two is what the
 run-time checks cost.
 
-Build cost, with the host's gcc: the lines of Canon-C code the compiler
-reads for each header alone, after preprocessing (exact), and the time to
-compile it at -O2 (measured, so it varies from run to run: reported, not
-pinned).
+Build cost, with the host's gcc: the tokens of Canon-C code the compiler
+reads for each header alone, after preprocessing (exact; tokens, not
+lines, since a macro's expansion is one line however long), and the time
+to compile it at -O2 (measured, so it varies from run to run: reported,
+not pinned).
 
-    python3 tools/size/size.py run [OUT]   measure; tables to stdout, CSV files to OUT
-                                           (default size_out), one notice per target
+    python3 tools/size/size.py run [OUT]   measure, and compare with the pins; tables
+                                           to stdout, CSV files to OUT (default size_out)
+    python3 tools/size/size.py pin DIR     write pins.txt from a run's CSV files in DIR
+    python3 tools/size/size.py check       pins.txt is well formed, its headers exist
+    python3 tools/size/size.py table       docs/code-size.md's tables, from the pins
 
-Report-only (VERIFY-070's run 1). A target whose compiler is not installed
-is skipped, and said so.
+tools/size/pins.txt holds, for each header, its functions at the first
+setting (Cortex-M0+, -Os, as shipped), its bytes at each of the twelve
+settings, and its tokens after preprocessing. run compares what it
+measures with them, figure by figure: report-only in VERIFY-070's run 2
+(ENFORCE); its run 3 makes a difference fail the job. A figure changes
+only with the change that moves it, pinned again with `pin` from that
+change's run. A target whose compiler is not installed is skipped, and
+said so; its figures are then not compared.
 """
 import collections
 import concurrent.futures
@@ -144,6 +155,9 @@ for _m in ('any_all', 'filter', 'find', 'fold', 'reverse', 'search', 'sort', 'un
 GENERIC['algo/map/map.h'] = (SLICE_U32 + '#include "algo/map/map.h"\n',
                              'DEFINE_ALGO_MAP(u32, u32)\n')
 SHARED = 'result__Bool_Error'      # its functions' prefix: a row of its own
+SHARED_ROW = 'shared:' + SHARED
+PINS = os.path.join(HERE, 'pins.txt')
+ENFORCE = False   # VERIFY-070 run 2: report-only; run 3 sets it
 FRAGMENTS = ('_impl', '_mangle', '_decl', '_defn')
 TAIL = 'typedef int canon_tu_not_empty_;\n'
 
@@ -192,22 +206,89 @@ def compile_unit(cc, flags, text, tmp, name):
     return (obj if p.returncode == 0 else None), p.stderr, src
 
 
-def functions(nm, obj, src):
-    """{name: (bytes, file)} for the function symbols of obj."""
-    out = subprocess.run([nm, '-S', '-l', '--defined-only', obj],
+def decl_paths(readelf, obj):
+    """{function: path} from the debug information: each function's
+    DW_AT_decl_file, the file its definition is written in (for a function
+    out of line, through DW_AT_abstract_origin), read with readelf. A
+    function's first instruction may come from another header's inlined
+    code, so the line table, which nm -l reads, can name the wrong file
+    (VERIFY-070 run 2)."""
+    out = subprocess.run([readelf, '--debug-dump=info,line', obj],
                          capture_output=True, text=True).stdout
+    dirs, files, mode = {0: ROOT}, {}, None
+    dies, cur = {}, None
+    for line in out.split('\n'):
+        s = line.strip()
+        if s.startswith('The Directory Table'):
+            mode = 'dir'
+            continue
+        if s.startswith('The File Name Table'):
+            mode = 'file'
+            continue
+        if mode and (not s or s.startswith('Line Number Statements')):
+            if not s and mode == 'file' and files:
+                mode = None
+            elif s.startswith('Line Number Statements'):
+                mode = None
+            continue
+        if mode in ('dir', 'file'):
+            cells = s.split('\t')
+            if not cells[0].isdigit():
+                continue
+            value = cells[-1].split('): ', 1)[-1] if '): ' in cells[-1] else cells[-1]
+            if mode == 'dir':
+                dirs[int(cells[0])] = value
+            elif len(cells) >= 3 and cells[1].isdigit():
+                files[int(cells[0])] = (int(cells[1]), value)
+            continue
+        m = re.match(r'<(\d+)><([0-9a-f]+)>: Abbrev Number: \d+ \((DW_TAG_\w+)\)', s)
+        if m:
+            cur = {'tag': m.group(3)}
+            dies[int(m.group(2), 16)] = cur
+            continue
+        m = re.match(r'<[0-9a-f]+>\s+(DW_AT_\w+)\s*: (.*)$', s)
+        if m and cur is not None:
+            cur[m.group(1)] = m.group(2)
+    paths = {}
+    for die in dies.values():
+        # A function's name and file are on its entry, or, for a body out of
+        # line, on the entry its DW_AT_abstract_origin names; a static
+        # function's name is one in a translation unit.
+        if die['tag'] != 'DW_TAG_subprogram':
+            continue
+        src = die
+        if 'DW_AT_abstract_origin' in die:
+            o = re.search(r'<0x([0-9a-f]+)>', die['DW_AT_abstract_origin'])
+            src = dies.get(int(o.group(1), 16), {}) if o else {}
+        name = src.get('DW_AT_name', '').split('): ')[-1].strip()
+        fno = src.get('DW_AT_decl_file', '').split()[0] if src.get('DW_AT_decl_file') else ''
+        if not name or not fno.isdigit() or int(fno) not in files:
+            continue
+        d, f = files[int(fno)]
+        base = dirs.get(d, ROOT)
+        path = f if os.path.isabs(f) else os.path.join(base if os.path.isabs(base)
+                                                      else os.path.join(ROOT, base), f)
+        paths[name] = os.path.normpath(path)
+    return paths
+
+
+def functions(nm, obj, src):
+    """{name: (bytes, file)} for the function symbols of obj: the size from
+    the symbol table, the file from the debug information."""
+    out = subprocess.run([nm, '-S', '--defined-only', obj],
+                         capture_output=True, text=True).stdout
+    decl = decl_paths(nm[:-2] + 'readelf', obj)
     fns = {}
     for line in out.splitlines():
-        head, _, where = line.partition('\t')
-        parts = head.split()
+        parts = line.split()
         if len(parts) != 4 or parts[2] not in ('t', 'T'):
             continue
-        path = where.rsplit(':', 1)[0] if where else ''
-        if path == src:
+        # A clone GCC makes (name.part.0, name.isra.0, ...) is its function's.
+        path = decl.get(parts[3]) or decl.get(parts[3].split('.')[0], '')
+        if path == os.path.normpath(src):
             path = '<unit>'
         elif path:
-            path = os.path.relpath(os.path.normpath(os.path.join(ROOT, path)), ROOT)
-            path = path.replace(os.sep, '/')
+            path = os.path.relpath(path, ROOT).replace(os.sep, '/')
         fns[parts[3]] = (int(parts[1], 16), path)
     return fns
 
@@ -272,7 +353,7 @@ def measure_size(out_dir, tmp):
                         rows.append((tname, level, cname, h, name, b))
                     if first:
                         fn_per_header[h] = len(own)
-                row = '(shared) ' + SHARED
+                row = SHARED_ROW
                 shared_row = shared_row or {}
                 total += sum(shared_row.values())
                 summary.append((tname, level, cname, row, len(shared_row), sum(shared_row.values())))
@@ -298,8 +379,16 @@ def measure_size(out_dir, tmp):
     return summary, notes, skipped
 
 
-def preprocessed_lines(text, tmp):
-    """Lines of Canon-C code in the unit after preprocessing, with the host's gcc."""
+# C99's tokens (6.4): identifiers and keywords, numbers, character and
+# string literals, and punctuators, the longest first.
+TOKEN = re.compile(r'[A-Za-z_]\w*|\.?\d(?:[eEpP][+-]|[\w.])*|"(?:\\.|[^"\\])*"'
+                   r"|'(?:\\.|[^'\\])*'"
+                   r'|\.\.\.|<<=|>>=|->|\+\+|--|<<|>>|<=|>=|==|!=|&&|\|\||##'
+                   r'|[-+*/%&|^]=|\S')
+
+
+def preprocessed_tokens(text, tmp):
+    """Tokens of Canon-C code in the unit after preprocessing, with the host's gcc."""
     src = os.path.join(tmp, 'pp.c')
     with open(src, 'w') as f:
         f.write(text)
@@ -316,11 +405,11 @@ def preprocessed_lines(text, tmp):
         if not line.strip():
             continue
         if current == src:
-            n += 1
+            n += len(TOKEN.findall(line))
             continue
         path = os.path.normpath(os.path.join(ROOT, current))
         if path.startswith(ROOT + os.sep):
-            n += 1
+            n += len(TOKEN.findall(line))
     return n
 
 
@@ -328,7 +417,7 @@ def measure_build(out_dir, tmp):
     rows = []
     for h in headers():
         unit, _ = units(h)
-        lines = preprocessed_lines(unit, tmp)
+        lines = preprocessed_tokens(unit, tmp)
         src = os.path.join(tmp, 'bt.c')
         with open(src, 'w') as f:
             f.write(unit)
@@ -342,7 +431,7 @@ def measure_build(out_dir, tmp):
         rows.append((h, lines, secs))
     with open(os.path.join(out_dir, 'build_headers.csv'), 'w', newline='') as f:
         w = csv.writer(f)
-        w.writerow(['header', 'canon_c_lines_after_preprocessing', 'seconds_at_O2'])
+        w.writerow(['header', 'canon_c_tokens_after_preprocessing', 'seconds_at_O2'])
         w.writerows((h, n, f'{s:.3f}') for h, n, s in rows)
     return rows
 
@@ -360,7 +449,8 @@ def run(out_dir):
     nfun = {}
     for t, lv, cn, h, n, s in summary:
         table[h][(t, lv, cn)] = s
-        nfun[h] = n
+        if (t, lv, cn) == cols[0]:
+            nfun[h] = n
     print('Code size: each header\'s own functions, bytes (functions at the first column\'s setting)')
     print('header'.ljust(36) + ' fns ' + ' '.join(f'{t[:6]}{lv}{"r" if cn == "release" else "x"}'.rjust(11)
                                                  for t, lv, cn in cols))
@@ -370,7 +460,7 @@ def run(out_dir):
     print()
     print('Build cost: each header alone, with the host gcc')
     for h, n, s in build:
-        print(f'{h.ljust(36)} {n:7d} lines  {s:6.2f} s')
+        print(f'{h.ljust(36)} {n:7d} tokens  {s:6.2f} s')
     total_lines = sum(n for _, n, _ in build)
     total_secs = sum(s for _, _, s in build)
     biggest = max(build, key=lambda r: r[1])
@@ -379,15 +469,187 @@ def run(out_dir):
         print(f'::notice title=size::{note}')
     if skipped:
         print(f'::notice title=size::not measured, compiler not installed: {", ".join(skipped)}')
-    print(f'::notice title=build cost::{len(build)} headers alone: {total_lines} lines of '
+    print(f'::notice title=build cost::{len(build)} headers alone: {total_lines} tokens of '
           f'Canon-C after preprocessing, the most {biggest[1]} ({biggest[0]}); compiled at -O2 in '
           f'{total_secs:.1f} s in all, the slowest {slowest[2]:.2f} s ({slowest[0]}), times reported only')
+    cur = figures([(t, lv, cn, h, n, s) for t, lv, cn, h, n, s in summary],
+                  {h: n for h, n, _ in build})
+    return compare(cur, skipped)
+
+
+# ---- the pins --------------------------------------------------------------
+
+def columns():
+    return [f'{t}/{lv}/{cn}' for t, _, _ in TARGETS for lv in LEVELS for cn, _ in CHECKS]
+
+
+def figures(summary, lines):
+    """{header: {column: value}}: functions at the first setting, bytes at
+    each setting, tokens after preprocessing ('-' for the shared row)."""
+    first = columns()[0]
+    cur = collections.defaultdict(dict)
+    for t, lv, cn, h, n, s in summary:
+        col = f'{t}/{lv}/{cn}'
+        cur[h][col] = int(s)
+        if col == first:
+            cur[h]['functions'] = int(n)
+    for h in cur:
+        cur[h]['tokens'] = lines.get(h, '-')
+    return cur
+
+
+def read_pins():
+    """({header: {column: value}}, problems)."""
+    pins, problems, cols = {}, [], None
+    if not os.path.exists(PINS):
+        return pins, ['tools/size/pins.txt: missing']
+    with open(PINS) as f:
+        for n, line in enumerate(f, 1):
+            text = line.split('#', 1)[0].strip()
+            if not text:
+                continue
+            cells = text.split()
+            if cells[0] == 'header':
+                cols = cells[1:]
+                if cols != ['functions'] + columns() + ['tokens']:
+                    problems.append(f'pins.txt:{n}: the columns are not size.py\'s')
+                continue
+            if cols is None or len(cells) != len(cols) + 1:
+                problems.append(f'pins.txt:{n}: not a row of the columns: {line.strip()}')
+                continue
+            row = {}
+            for c, v in zip(cols, cells[1:]):
+                if v.isdigit():
+                    row[c] = int(v)
+                elif v == '-' and c == 'tokens':
+                    row[c] = '-'
+                else:
+                    problems.append(f'pins.txt:{n}: {c} is not a number: {v}')
+            if cells[0] in pins:
+                problems.append(f'pins.txt:{n}: {cells[0]} pinned twice')
+            pins[cells[0]] = row
+    return pins, problems
+
+
+def write_pins(cur):
+    cols = ['functions'] + columns() + ['tokens']
+    width = max(len(h) for h in cur)
+    with open(PINS, 'w') as out:
+        out.write('# Canon-C\'s code size and build cost, header by header (VERIFY-070):\n'
+                  '# each header\'s own functions at the first setting, its bytes at each\n'
+                  '# target/level/setting (release: NDEBUG, as shipped; checks-off:\n'
+                  '# CANON_NO_REQUIRE and NDEBUG), and the tokens of Canon-C it brings after\n'
+                  '# preprocessing. Written by `size.py pin` from a run\'s CSV files; compared\n'
+                  '# by `size.py run` in the embedded job. Toolchains: the ubuntu-24.04\n'
+                  '# runner\'s packages (docs/code-size.md).\n')
+        out.write(' '.join(['header'.ljust(width)] + cols) + '\n')
+        for h in sorted(cur):
+            out.write(' '.join([h.ljust(width)] + [str(cur[h].get(c, '-')).rjust(len(c)) for c in cols])
+                      + '\n')
+
+
+def compare(cur, skipped):
+    pins, problems = read_pins()
+    measured = [c for c in columns() if c.split('/')[0] not in skipped]
+    diffs = []
+    for h in sorted(set(cur) | set(pins)):
+        if h not in pins:
+            diffs.append(f'{h}: measured, no pin')
+            continue
+        if h not in cur:
+            diffs.append(f'{h}: pinned, not measured')
+            continue
+        for c in ['functions'] + measured + ['tokens']:
+            if c == 'functions' and columns()[0] not in measured:
+                continue
+            if cur[h].get(c) != pins[h].get(c):
+                diffs.append(f'{h} {c}: {cur[h].get(c)}, pinned {pins[h].get(c)}')
+    for p in problems:
+        print(p)
+    n = len(cur) * (len(measured) + 2)
+    if diffs or problems:
+        print(f'Not as pinned: {len(diffs)} difference(s)')
+        for d in diffs:
+            print('  ' + d)
+        head = (f'not as pinned: {len(diffs)} difference(s)'
+                + (f', {len(problems)} problem(s) in pins.txt' if problems else '')
+                + ': ' + '; '.join(diffs[:12]) + (' …' if len(diffs) > 12 else ''))
+    else:
+        head = (f'as pinned: {len(cur)} rows, {n} figures'
+                + (f' ({", ".join(skipped)} not measured)' if skipped else ''))
+    print(f'::notice title=size pins::{head}')
+    return 1 if (ENFORCE and (diffs or problems)) else 0
+
+
+def pin(src):
+    summary = []
+    with open(os.path.join(src, 'size_headers.csv')) as f:
+        for r in csv.DictReader(f):
+            summary.append((r['target'], r['level'], r['checks'], r['header'],
+                            r['functions'], r['bytes']))
+    with open(os.path.join(src, 'build_headers.csv')) as f:
+        lines = {r['header']: int(r['canon_c_tokens_after_preprocessing']) for r in csv.DictReader(f)}
+    cur = figures(summary, lines)
+    missing = [c for c in columns() if not any(c in row for row in cur.values())]
+    if missing:
+        print(f'size.py pin: no figures for {", ".join(missing)}; pin from a run that measures them')
+        return 1
+    write_pins(cur)
+    print(f'wrote tools/size/pins.txt: {len(cur)} rows')
+    return 0
+
+
+def check():
+    pins, problems = read_pins()
+    for h in pins:
+        if h != SHARED_ROW and not os.path.exists(os.path.join(ROOT, h)):
+            problems.append(f'{h}: no such header')
+    for p in problems:
+        print(p)
+    print(f'size pins: {len(pins)} rows; {len(problems)} problem(s)')
+    return 1 if problems else 0
+
+
+def table():
+    """docs/code-size.md's tables, as Markdown, from the pins."""
+    pins, problems = read_pins()
+    if problems:
+        for p in problems:
+            print(p)
+        return 1
+    tot = collections.Counter()
+    for row in pins.values():
+        for c in columns():
+            tot[c] += row[c]
+    print('| target | -Os, as shipped | -Os, checks off | -O2, as shipped | -O2, checks off |')
+    print('|--------|----------------:|----------------:|----------------:|----------------:|')
+    for t, _, _ in TARGETS:
+        print(f'| {t} | ' + ' | '.join(f'{tot[f"{t}/{lv}/{cn}"]:,}' for lv in LEVELS
+                                        for cn, _ in CHECKS) + ' |')
+    print()
+    print('| header | functions | Cortex-M0+ | Cortex-M4 | RV32 | Cortex-M4, checks off '
+          '| Cortex-M4, -O2 | tokens |')
+    print('|--------|----------:|-----------:|----------:|-----:|---------------------:'
+          '|---------------:|------:|')
+    for h in sorted(pins, key=lambda k: (k == SHARED_ROW, k)):
+        r = pins[h]
+        name = 'Result<_Bool, Error>, shared' if h == SHARED_ROW else f'`{h}`'
+        print(f'| {name} | {r["functions"]} | {r["cortex-m0plus/-Os/release"]:,} | '
+              f'{r["cortex-m4/-Os/release"]:,} | {r["rv32imac/-Os/release"]:,} | '
+              f'{r["cortex-m4/-Os/checks-off"]:,} | {r["cortex-m4/-O2/release"]:,} | '
+              + (f'{r["tokens"]:,}' if r['tokens'] != '-' else '–') + ' |')
     return 0
 
 
 def main(argv):
     if len(argv) in (2, 3) and argv[1] == 'run':
         return run(argv[2] if len(argv) == 3 else 'size_out')
+    if len(argv) == 3 and argv[1] == 'pin':
+        return pin(argv[2])
+    if len(argv) == 2 and argv[1] == 'check':
+        return check()
+    if len(argv) == 2 and argv[1] == 'table':
+        return table()
     print(__doc__)
     return 2
 

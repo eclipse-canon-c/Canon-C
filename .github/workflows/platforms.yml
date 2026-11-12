@@ -187,8 +187,10 @@ jobs:
   #    VERIFY-070 adds code size and build cost, header by header
   #    (tools/size/size.py): each header's own functions, all of them kept,
   #    for Cortex-M0+, Cortex-M4 and RV32 at -Os and -O2, as shipped and with
-  #    the run-time checks off; and the lines of Canon-C each header brings
-  #    after preprocessing. Report-only in its run 1.
+  #    the run-time checks off; and the Canon-C each header brings
+  #    after preprocessing, as tokens since its run 2. Every figure is
+  #    pinned (tools/size/pins.txt) and compared: report-only in its run 2,
+  #    a difference fails the job from its run 3.
   # -------------------------------------------------------------------------
   embedded:
     runs-on: ubuntu-24.04
