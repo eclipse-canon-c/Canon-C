@@ -34072,7 +34072,7 @@ input, and give the old value for every draw the old code got right.
 | **ID**         | VERIFY-073 |
 | **Date**       | 2026-11-12 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-12 — Run 1 scored: D1 to D7 and D9 to D11 MATCH, D8 MISS. Run 1b scored: E1 to E6, E8 and E11 MATCH, E7, E9, E10 and E12 to E14 MISS: no variant proves `push_frame_strings`, and no variant lets a program proved with WP alone push twice and render ("Run 1b scored", below). The author chose to land the proved core; run 1c measures it, pre-registered below. The Status above is the record as committed. |
+| **Status update** | 2026-11-12 — Run 1 scored: D1 to D7 and D9 to D11 MATCH, D8 MISS. Run 1b scored: E1 to E6, E8 and E11 MATCH, E7, E9, E10 and E12 to E14 MISS: no variant proves `push_frame_strings`, and no variant lets a program proved with WP alone push twice and render. The author chose to land the proved core. Run 1c scored: F1 to F5 and F7 MATCH, F6 MISS ("Run 1c scored", below). Open: run 2. The Status above is the record as committed. |
 | **Baseline**   | 9610ceb (VERIFY-072); `1`, `3`, `4`, `5` and `6` #53, `2 · Platforms` #71 and `8 · Records` #79 on it; `9 · Probes` #15 (b5042af), #17 (b0e644d) and #18 (7ecd37c), each probe's last run. |
 | **Scope**      | Run 1: `tools/probes/verify-073/` (`diag_push.patch`, `diagpush_probe.py`, `README.md`); `.github/workflows/probes.yml`, the job `diagpush-probe`; the workflow map's row 9. Run 2: `semantics/diag.h`'s `diag_push`, its contract and its shift, with the pins and documents that read it; `test/semantics/diag_test.c`; two comments in `semantics/`. |
 | **Category**   | VERIFY-066's run 2, "Found while reading", 1: fixed. Run 1 measures the change in CI before it lands (report-only); run 2 makes it, pinned from run 1. |
@@ -34520,3 +34520,28 @@ lines of runs 1 and 1c), Eva's `diag.c` blocks at the ten models,
 `diag.h` section, a test in `diag_test.c` that a push to a full chain
 keeps every other frame whole and renders after it, and VERIFY-071's
 findings 4 and 5, the comments in `semantics/error.h` and `option.h`.
+
+### Run 1c scored (2026-11-12)
+
+The push of 0e28a01, 277233d and a11ae90 started `2 · Platforms` #74,
+`8 · Records` #82 and `9 · Probes` #21: 28 jobs, 19 green and 9 skipped,
+the older probes. The diag_push probe took 35 minutes: 6 for WP, 29 for
+the provers alone, 7 seconds for Eva.
+
+| # | scored |
+|---|--------|
+| F1 | **MATCH.** 2, 8 and 9 ran; the others did not. |
+| F2 | **MATCH.** 2 and 8 are green, each job with the notices of its last run, times aside: the embedded job's line of times names another header as the slowest. |
+| F3 | **MATCH.** In 9, `changes` and `diagpush-probe` ran; the nine older probes were skipped. |
+| F4 | **MATCH.** The probe's job is green: `variants` and `caller` posted that they did not run, `wp` its 3 notices, `agree` its 10, `eva` its 2. Its only annotations are notices: `agreement.py`'s error, "the unproved goals are not the pinned names; 9 difference(s) from the pins", is in the log behind "| ". |
+| F5 | **MATCH.** "Proved goals: 3073 / 3074"; the one not proved is `memset`'s `requires_valid_s`, Timeout. |
+| F6 | **MISS.** The three runs reported (Alt-Ergo 3069 / 3074, Z3 3038 / 3074, CVC5 3070 / 3074), and the goal no prover proves alone is `memset`'s alone; but the would-be pin file has 36 class lines, not run 1's 39. Six of run 1's are gone: four goals Z3 now proves too (`push_frame_code` part 12, `push_frame_file` part 11, `push_frame_line` part 12, `push_frames_preserved` part 13), `push_msg_terminated` part 13, which Alt-Ergo now proves with CVC5, and `push_shift_semantics` part 6, which Alt-Ergo proves now with Z3, not alone (35 and 46 s). Three are new: those two, and `push_msg_terminated` part 5, which Z3 no longer proves. |
+| F7 | **MATCH.** At each of the ten models, `diag.c`'s block differs from its pin in the two lines measured here, preconditions 74/4/0 and `snprintf`'s call at line 1019. |
+
+Six of the seven match; F6 misses.
+
+**Why F6 missed.** The patch's goals are run 1's, less
+`push_frame_strings`' 13, but each of `diag_push`'s goals has two
+hypotheses fewer, `push_file_read` and `push_func_read`, and seven of them
+moved class. F6 counted the goals the same and the provers' results with
+them. Run 2 pins run 1c's classes, measured on the patch it makes.
