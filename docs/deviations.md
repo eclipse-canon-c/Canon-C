@@ -33543,6 +33543,7 @@ picolibc and RISC-V toolchains installed here since, the script gives
 | **ID**         | VERIFY-070 |
 | **Date**       | 2026-11-12 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-12 — Run 1 scored: the push of 56d83d2 and 701eb5c matched S1 to S7; CI's table of sizes is the one measured here, figure for figure. Run 2, the pins, is pre-registered below ("Run 2, the pins, pre-registered"). The Status above is the record as committed. |
 | **Baseline**   | 075f45f (VERIFY-069); `2 · Platforms` #66 on it, its embedded job 4 min 30 s; `1`, `3`, `4`, `5` and `6` last ran at #49, on 79ab1ca. |
 | **Scope**      | `tools/size/size.py`, new; a step and an artifact in `platforms.yml`'s embedded job; `docs/code-size.md`, new; the README's list of documents; the workflow map. No library code changes. |
 | **Category**   | The project's item 6: code size and build time. Run 1 of 3: pinned and enforced from run 3, decided with the author (2026-11-12). |
@@ -33631,3 +33632,91 @@ figures.
 and functions at each target, level and setting, and its preprocessed
 lines), compared report-only, and `docs/code-size.md`'s tables from CI's
 figures. Run 3: a difference fails the job.
+
+### Scored: run 1 (2026-11-12)
+
+The push of 56d83d2 and 701eb5c started `1 · Build & test` #50,
+`2 · Platforms` #67, `3 · Static analysis & coverage` #50, `4`, `5` and `6`
+#50, and `8 · Records` #75. Every job is green.
+
+| # | scored |
+|---|--------|
+| S1 | **MATCH.** 1, 2, 3, 4, 5, 6 and 8 ran; the others did not. |
+| S2 | **MATCH.** The embedded job is green, and its three size notices read as measured here, figure for figure. Its log's table is the one here, every figure of every header at the twelve settings. |
+| S3 | **MATCH.** The build cost notice begins "56 headers alone: 45915 lines of Canon-C after preprocessing, the most 2334 (data/hashmap/hashmap_fmt.h)"; its times read 0.7 s in all, the slowest 0.03 s. Every header's line count in the log is the one here. |
+| S4 | **MATCH.** The embedded check's and the AVR check's notices are #66's. |
+| S5 | **MATCH.** The embedded job took 4 min 58 s. |
+| S6 | **MATCH.** 1, 3, 4, 5 and 6 gave #49's notices. |
+| S7 | **MATCH.** 8 is green. |
+
+All seven match. Reading the figures for the pins found three faults of
+the measure, all fixed in run 2. Two are outside the predicted figures; the
+third moves two of them:
+
+- **The table's function column** gave each header's count at the last of
+  the twelve settings, though its heading says the first: `core/memory.h`
+  has 27 functions at Cortex-M0+, `-Os`, as shipped, and 26 at the last
+  setting, where the compiler merges two identical ones. Run 2 takes the
+  first setting's.
+- **Lines undercount the generic modules**: a macro's expansion is one line
+  after preprocessing, however long, so `data/vec/vec.h`'s unit counted its
+  `DEFINE_VEC` as one line among 1,275. Run 2 counts C99's tokens instead:
+  13,476 for the same unit.
+- **`nm -l` can name the wrong file.** It takes a function's file from the
+  line of its first instruction, and a function whose body is all inlined
+  from another header has that header's line. `mem_is_power_of_two`, one
+  line that calls `ptr.h`'s `is_power_of_two`, was taken for `ptr.h` at
+  Cortex-M4 and RV32, `-O2`, checks off, and so counted for no header:
+  `core/memory.h` had 26 functions there, 27 elsewhere. Run 2 takes each
+  function's file from its entry in the debug information
+  (`DW_AT_decl_file`, through `DW_AT_abstract_origin` for a body out of
+  line), read with `readelf`: `core/memory.h` then has 27 functions at every
+  setting, 792 bytes rather than 778 at Cortex-M4 and 912 rather than 894
+  at RV32, and so the totals at `-O2` with checks off, 40064 and 47286
+  bytes rather than 40050 and 47268. No other figure moves.
+
+### Run 2, the pins, pre-registered
+
+**The change.**
+
+- **`tools/size/pins.txt`**: for each of the 57 rows (56 headers, and the
+  shared Result<_Bool, Error>), its functions at the first setting, its
+  bytes at each of the twelve settings, and its tokens after
+  preprocessing: 798 figures, measured here. The bytes and functions are
+  #67's but for `core/memory.h`'s two above; the tokens are new.
+- **`tools/size/size.py`**: `run` compares what it measures with the pins,
+  figure by figure, and posts a notice; report-only (`ENFORCE = False`).
+  `pin` writes the pins from a run's CSV files; `check` verifies their
+  form; `table` prints `docs/code-size.md`'s tables. The function count is
+  the first setting's; each function's file is read from the debug
+  information; build cost counts tokens; the shared row is named
+  `shared:result__Bool_Error`.
+- **`8 · Records`** runs `size.py check`, and runs on a change under
+  `tools/size/`.
+- **`docs/code-size.md`** gains its tables, from the pins; the workflow map
+  and the embedded job's comments say what is pinned.
+
+**Measured here.** `size.py run`: the three size notices are run 1's but
+for the two totals above; "56 headers alone: 418237 tokens of Canon-C after
+preprocessing, the most 25271 (data/hashmap/hashmap_range.h)"; "as pinned:
+57 rows, 798 figures". Run against pins written from run 1's measure, it
+finds `core/memory.h`'s two figures, and only them.
+With a figure changed, a header added and one removed, it lists the three,
+and exits 0, or 1 with `ENFORCE` set; with RV32's compiler missing, it
+compares the other 570 figures. `size.py check`: 57 rows, 0 problems.
+`8 · Records`' other checks pass.
+
+**The workflows.** `tools/which_workflows.py`: 1, 2, 3, 4, 5, 6 and 8 run;
+the others do not.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| P1 | **1, 2, 3, 4, 5, 6 and 8 run**; the others do not. | another set | H |
+| P2 | **2's embedded job is green**: its three size notices are #67's but for two totals, cortex-m4's `-O2` with checks off, 40064 bytes, and rv32imac's, 47286; and its pins notice reads "as pinned: 57 rows, 798 figures". | a failure, or another notice | H: #67 measured the same figures as here. |
+| P3 | **The build cost notice begins** "56 headers alone: 418237 tokens of Canon-C after preprocessing, the most 25271 (data/hashmap/hashmap_range.h)". | another count | H: run 1's line counts matched, from the same preprocessing. |
+| P4 | **2's other notices are #67's**: the embedded check's and the AVR check's. | another notice | H |
+| P5 | **1, 3, 4, 5 and 6 give #50's notices**, every job green. | a failure, or another notice | H: no code changes. |
+| P6 | **8 is green**; its new step reads "size pins: 57 rows; 0 problem(s)". | a failure, or another line | H (run here) |
+
+**What follows.** P1 to P6 scored. Run 3: `ENFORCE = True`, so that a figure
+not as pinned fails the embedded job.
