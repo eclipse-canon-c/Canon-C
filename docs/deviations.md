@@ -34072,7 +34072,7 @@ input, and give the old value for every draw the old code got right.
 | **ID**         | VERIFY-073 |
 | **Date**       | 2026-11-12 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-12 — Run 1 scored: D1 to D7 and D9 to D11 MATCH, D8 MISS ("Run 1 scored", below). `push_frame_strings` is proved in 7 of its 13 parts. The author chose to measure four variants first: run 1b, pre-registered below. The Status above is the record as committed. |
+| **Status update** | 2026-11-12 — Run 1 scored: D1 to D7 and D9 to D11 MATCH, D8 MISS. Run 1b scored: E1 to E6, E8 and E11 MATCH, E7, E9, E10 and E12 to E14 MISS: no variant proves `push_frame_strings`, and no variant lets a program proved with WP alone push twice and render ("Run 1b scored", below). Open: the author's decision, then run 2. The Status above is the record as committed. |
 | **Baseline**   | 9610ceb (VERIFY-072); `1`, `3`, `4`, `5` and `6` #53, `2 · Platforms` #71 and `8 · Records` #79 on it; `9 · Probes` #15 (b5042af), #17 (b0e644d) and #18 (7ecd37c), each probe's last run. |
 | **Scope**      | Run 1: `tools/probes/verify-073/` (`diag_push.patch`, `diagpush_probe.py`, `README.md`); `.github/workflows/probes.yml`, the job `diagpush-probe`; the workflow map's row 9. Run 2: `semantics/diag.h`'s `diag_push`, its contract and its shift, with the pins and documents that read it; `test/semantics/diag_test.c`; two comments in `semantics/`. |
 | **Category**   | VERIFY-066's run 2, "Found while reading", 1: fixed. Run 1 measures the change in CI before it lands (report-only); run 2 makes it, pinned from run 1. |
@@ -34245,8 +34245,8 @@ probe's results:
 
 The push of d1fe76a, 5fe50f0 and 9fe4b9b started `1 · Build & test` #54,
 `2 · Platforms` #72, `3 · Static analysis & coverage` #54, `4`, `5` and
-`6` #54, `8 · Records` #80 and `9 · Probes` #19: 123 jobs, every one
-green. The diag_push probe took 58 minutes: 15 for WP, 42 for the provers
+`6` #54, `8 · Records` #80 and `9 · Probes` #19: 116 jobs, every one
+green (123 as first written; corrected in run 1b's scoring). The diag_push probe took 58 minutes: 15 for WP, 42 for the provers
 alone (Alt-Ergo 9, Z3 26, CVC5 7), 7 seconds for Eva.
 
 | # | scored |
@@ -34394,3 +34394,62 @@ none. With one picked, run 1c: `diag_push.patch` becomes it and `steps`
 names `wp`, `agree` and `eva`, which measure it as they measured P0 in run
 1; only 8 and 9 run, since it changes nothing outside `tools/` and `docs/`.
 Then run 2 makes the change, pinned from run 1c.
+
+### Run 1b scored (2026-11-12)
+
+The push of 471d5d8, 131fe8d and 453cbcf started `1 · Build & test` #55,
+`2 · Platforms` #73, `3 · Static analysis & coverage` #55, `4`, `5` and
+`6` #55, `8 · Records` #81 and `9 · Probes` #20: 116 jobs, every one
+green. The diag_push probe took 1 hour 56 minutes: 63 for the variants,
+53 for the caller.
+
+| # | scored |
+|---|--------|
+| E1 | **MATCH.** 1 to 6, 8 and 9 ran; the others did not. |
+| E2 | **MATCH.** 1 to 6 and 8 are green, each job with the notices of its last run, times aside. |
+| E3 | **MATCH.** The nine older probes are green, each with #19's notices, times aside. |
+| E4 | **MATCH.** The probe's job is green: `variants` posted its five notices and five of names, `caller` its six and four of names, and `wp`, `agree` and `eva` that they did not run. No error annotation. |
+| E5 | **MATCH.** P0: `diag_push` 524 / 530, the six unproved `push_frame_strings`' parts 5 to 7 and 11 to 13; the log has WP's text of its 13 goals. |
+| E6 | **MATCH.** `strlen_kept` is proved, by CVC5 in under a second, with A, C and D. |
+| E7 | **MISS.** A: `diag_push` 524 / 530, the same six parts unproved. |
+| E8 | **MATCH.** B: the same six parts unproved. |
+| E9 | **MISS.** C: `diag_push` 548 / 554. The 24 goals the assertions add are proved, every part of `push_file_kept` and `push_func_kept`, and so is the lemma; the same six parts of `push_frame_strings` are not. |
+| E10 | **MISS.** D: as C, 548 / 554, the same six unproved. |
+| E11 | **MATCH.** The caller without `-wp-literals` (P0): 24 / 31; each push's `push_msg_read`, `push_file_read` and `push_func_read` unproved, and `diag_render`'s `r_strings`. |
+| E12 | **MISS.** With `-wp-literals`, the second push's `push_msg_read`, `push_file_read` and `push_func_read` are unproved with every variant; the first push's `push_msg_read`, of `"first"`, with P0 and B. The first push's `"a.c"` and `"fa"` are proved with every variant. |
+| E13 | **MISS.** `r_strings` is unproved with every variant. |
+| E14 | **MISS.** Besides `r_strings`, E12's goals are unproved: 27 / 31 with A, C and D, 26 / 31 with P0 and B. |
+
+Eight of the fourteen match; E7, E9, E10 and E12 to E14 miss.
+
+**What run 1b shows.**
+
+1. **No variant proves `push_frame_strings`.** WP's text of its 13 goals
+   (P0) shows 7 of them as "Prove: true", paths the conditions rule out,
+   and the six left as every path the push can take: with a full chain or
+   not, with `msg` NULL or not. Part 13 is the path with neither: one
+   store, `message[0]`, between the call and the end.
+2. **The strings' bytes are not what stops it.** With C and D, each byte
+   of `file` and `func` is proved kept, on every path, and the lemma that
+   makes their `strlen` the same is proved; with both as premises,
+   `push_frame_strings` is still not. What the six goals ask, in WP's
+   text, is `P_frame_strings_ok` of the frame loaded whole as a value
+   (`Load_S8`), its message an array value; `push_frame_file` and
+   `push_msg_terminated`, which ask the same of the frame's fields read
+   one by one, are proved. That the whole-frame value is what the provers
+   fail on is read from the goals, not measured.
+3. **A program proved with WP alone does not get there either.** With
+   `-wp-literals`, WP proves the first push's `"a.c"` and `"fa"` strings;
+   `"first"` only with the lemma; none of the second push's, read after
+   the first push's writes to `d`, another object; and `r_strings` with no
+   variant. The goal VERIFY-066 set, a WP-only program that pushes twice
+   and renders, is not reached by any of the four.
+
+**Corrections to run 1's scoring.** "What the provers left" read the six
+parts as "the paths through `memcpy`". WP's text shows they are every
+path that is not ruled out, part 13 among them, which has no `memcpy`.
+And its push started 116 jobs, as GitHub counts them, not 123: that
+number counted the rows of the notice files the scoring reads, which
+have one row more for each workflow.
+
+**What follows.** The author decides what run 2 makes of it.
