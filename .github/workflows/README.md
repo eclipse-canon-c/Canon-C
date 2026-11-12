@@ -10,7 +10,7 @@ cite.
 | # | file | sidebar name | holds | fails the push? |
 |---|------|--------------|-------|-----------------|
 | 1 | `ci.yml` | 1 · Build & test | Build and test matrix (Linux, Windows MSVC and MinGW, macOS; Release, and Debug with sanitizers), i386, Valgrind, libFuzzer, the lifetime token under concurrency, lifetime-debug | yes |
-| 2 | `platforms.yml` | 2 · Platforms | musl, Linux AArch64, C11 to C23, big-endian s390x (qemu), embedded compile checks (Cortex-M, RISC-V, AVR tiers) | yes |
+| 2 | `platforms.yml` | 2 · Platforms | musl, Linux AArch64, C11 to C23, big-endian s390x (qemu), embedded compile checks (Cortex-M, RISC-V, AVR tiers), code size and build cost by header (VERIFY-070) | yes; the sizes are report-only in VERIFY-070's first run |
 | 3 | `analysis.yml` | 3 · Static analysis & coverage | clang-tidy and Cppcheck, MISRA C:2012, MC/DC and branch coverage, CompCert | static-analysis and coverage's threshold: yes. MISRA: yes, since VERIFY-068's third run: a real finding not as pinned by file and rule (`tools/misra/pins.txt`, each line naming its record) fails the job, as does a canary not seen. CompCert: informational |
 | 4 | `proofs-core.yml` | 4 · Proofs: core/ | Frama-C WP, one job per unit of core/ and core/primitives/, plus arena at 32-bit and memory/bits at LLP64 | yes, each job on its pins |
 | 5 | `proofs-semantics.yml` | 5 · Proofs: semantics/ | WP for error, option, result, borrow, diag | yes |
@@ -33,7 +33,7 @@ summary as an annotation, for example:
     frama-c-stack: proved 5714 / 5783 (pin 5714 / 5783); unproved 69: inherited 69, own 0; 0 difference(s)
 
 `misra` (its count, and since VERIFY-068 the count against its pins), `coverage` (the MC/DC total and each cover file's row), `compcert`,
-`embedded` and the AVR check do the same. Annotations are on the run's
+`embedded`, the AVR check and, since VERIFY-070, the code size and build cost (one notice per target, one for the build) do the same. Annotations are on the run's
 summary page and readable through the GitHub API, so a run can be scored
 without opening logs. The full log and the uploaded `wp-*` artifacts are
 still there for detail.

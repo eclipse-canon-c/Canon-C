@@ -214,12 +214,15 @@ For current numbers, see:
   that none of it is machine-checked — WP has no concurrency model, so no
   gate in CI verifies any claim in it.
 - **`docs/misra-campaign.md`** — what the MISRA C:2012 findings mean
-  and what it does not. Read this one first if you are evaluating the
+  and what they do not. Read this one first if you are evaluating the
   evidence rather than looking up a specific finding: it explains why the
   headline reduction cannot be read as a defect count, separates the two
   real defects the campaign found from the classification work that made up
   most of the number, and states which of the remaining findings are worth
   acting on and which are not.
+- **`docs/code-size.md`** — what each header costs in flash on Cortex-M0+,
+  Cortex-M4 and RISC-V RV32, with the run-time checks on and off, and in
+  the work it gives the compiler, measured in CI (VERIFY-070).
 
 All currently unproved goals resist Alt-Ergo, Z3 and CVC5 at a 120-second
 timeout and are pinned in their CI jobs, and each is listed in

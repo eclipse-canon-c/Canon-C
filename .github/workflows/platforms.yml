@@ -183,6 +183,12 @@ jobs:
   #    VERIFY-048 adds picolibc on the same two cores, RISC-V RV32 (rv32imac,
   #    ilp32) and RV64 (rv64imac, lp64) with picolibc, and an AVR step: the
   #    README's platform tiers at a 16-bit size_t (tools/avr_tier_check.sh).
+  #
+  #    VERIFY-070 adds code size and build cost, header by header
+  #    (tools/size/size.py): each header's own functions, all of them kept,
+  #    for Cortex-M0+, Cortex-M4 and RV32 at -Os and -O2, as shipped and with
+  #    the run-time checks off; and the lines of Canon-C each header brings
+  #    after preprocessing. Report-only in its run 1.
   # -------------------------------------------------------------------------
   embedded:
     runs-on: ubuntu-24.04
@@ -207,3 +213,11 @@ jobs:
         run: tools/embedded_compile_check.sh
       - name: AVR — the platform tiers at a 16-bit size_t (VERIFY-048)
         run: tools/avr_tier_check.sh
+      - name: Code size and build cost, header by header (VERIFY-070)
+        run: python3 tools/size/size.py run size_out
+      - name: Upload the sizes
+        uses: actions/upload-artifact@v6
+        with:
+          name: code-size
+          path: size_out/
+          retention-days: 90
