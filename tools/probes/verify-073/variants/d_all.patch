@@ -1,0 +1,146 @@
+diff --git a/semantics/diag.h b/semantics/diag.h
+--- a/semantics/diag.h
++++ b/semantics/diag.h
+@@ -21,7 +21,7 @@
+ #include "semantics/error.h"          /* Error, ERR_OK */
+
+ /* Standard library headers required by this file */
+-#include <string.h>  /* memmove, memcpy */
++#include <string.h>  /* memcpy */
+ /* cppcheck-suppress misra-c2012-21.6 ; MISRA-DEV-016 */
+ #include <stdio.h>   /* FILE, fprintf, snprintf */
+
+@@ -127,7 +127,7 @@
+  *   diag_init             | O(N × M)      | O(1)  (returns by value)
+  *   diag_clear            | O(1)          | O(1)
+  *   diag_push             | O(M) normal   | O(1)
+- *                         | O(N × M) overflow (memmove shift)
++ *                         | O(N × M) overflow (frame-by-frame shift)
+  *   diag_depth            | O(1)          | O(1)
+  *   diag_has_error        | O(1)          | O(1)
+  *   diag_frame_at         | O(1)          | O(1)
+@@ -276,6 +276,16 @@
+     (f.func == \null || valid_read_string(f.func)) &&
+     (\exists integer k;
+        0 <= k < DIAG_MAX_MSG_LEN && f.message[k] == '\0');
++
++  // VERIFY-073: a string keeps its length where its bytes are kept, from
++  // the libc's strlen axioms. diag_push's push_frame_strings needs it for
++  // file and func, across writes its requires put outside them.
++  lemma strlen_kept{L1, L2}:
++    \forall char *s;
++      0 <= strlen{L1}(s) ==>
++      (\forall integer i; 0 <= i <= strlen{L1}(s) ==>
++         \at(s[i], L1) == \at(s[i], L2)) ==>
++      strlen{L2}(s) == strlen{L1}(s);
+ */
+
+ /* ════════════════════════════════════════════════════════════════════════════
+@@ -360,13 +370,18 @@
+  * __FILE__, __LINE__, and __func__ are captured automatically.
+  *
+  * Time:  O(M) normal (message copy).
+- *        O(N × M) on overflow (memmove shifts N-1 frames, each ~M bytes).
++ *        O(N × M) on overflow (shifts N-1 frames, each ~M bytes, one by one).
++ *
++ * The earlier frames are kept whole, and the new frame's strings are
++ * readable, so that diag_render can be called after any push, by a program
++ * proved with this contract alone (VERIFY-073).
+  * Space: O(1).
+  *
+  * @param d     Diag chain. NULL-safe: no-op, returns false.
+- * @param file  Source file name (string literal).
++ * @param file  Source file name (string literal), or NULL. A string
++ *              must lie outside *d (contract).
+  * @param line  Source line number.
+- * @param func  Function name (string literal).
++ * @param func  Function name (string literal), or NULL; as file.
+  * @param code  Error code for this propagation level.
+  * @param msg   Short context message (copied; may be NULL).
+  * @return      true if the oldest frame was dropped due to overflow,
+@@ -386,6 +401,14 @@
+     requires push_no_alias:  msg == \null ||
+              \separated(msg + (0 .. strlen(msg)),
+                         (char *)d + (0 .. sizeof(Diag) - 1));
++    // VERIFY-073: the new frame keeps file and func, which diag_render
++    // reads as strings; outside *d, the push cannot change them.
++    requires push_file_read: file == \null ||
++             (valid_read_string(file) &&
++              \separated(file + (0 .. strlen(file)), d));
++    requires push_func_read: func == \null ||
++             (valid_read_string(func) &&
++              \separated(func + (0 .. strlen(func)), d));
+     assigns d->depth, d->frames[0 .. DIAG_MAX_FRAMES - 1];
+     ensures push_depth_bounds: 1 <= d->depth <= DIAG_MAX_FRAMES;
+     ensures push_depth_step:
+@@ -402,14 +425,17 @@
+       \exists integer k;
+         0 <= k < DIAG_MAX_MSG_LEN
+         && d->frames[d->depth - 1].message[k] == '\0';
++    // VERIFY-073: the new frame is renderable (diag_render's r_strings).
++    ensures push_frame_strings: frame_strings_ok(d->frames[d->depth - 1]);
++    // VERIFY-073: the earlier frames are kept whole, not only their code.
+     ensures push_shift_semantics:
+       \old(d->depth) == DIAG_MAX_FRAMES ==>
+         (\forall integer j; 0 <= j < DIAG_MAX_FRAMES - 1 ==>
+-           d->frames[j].code == \old(d->frames[j + 1].code));
++           d->frames[j] == \old(d->frames[j + 1]));
+     ensures push_frames_preserved:
+       \old(d->depth) < DIAG_MAX_FRAMES ==>
+         (\forall integer j; 0 <= j < \old(d->depth) ==>
+-           d->frames[j].code == \old(d->frames[j].code));
++           d->frames[j] == \old(d->frames[j]));
+
+   complete behaviors;
+   disjoint behaviors;
+@@ -424,6 +450,7 @@
+     bool       dropped;
+     DiagFrame *f;
+     usize      len;
++    usize      i;
+
+     if (d == NULL) {
+         return false;
+@@ -436,10 +463,23 @@
+     dropped = false;
+
+     if (d->depth == DIAG_MAX_FRAMES) {
+-        /* Chain full: discard oldest frame, shift remaining frames down. */
+-        (void)memmove(&d->frames[0],
+-                &d->frames[1],
+-                (DIAG_MAX_FRAMES - 1u) * sizeof(DiagFrame));
++        /* Chain full: discard the oldest frame and shift the rest down one
++         * frame at a time, a copy WP follows; a memmove of their bytes it
++         * could not (VERIFY-073). */
++        /*@
++          loop invariant shift_bounds: 0 <= i <= DIAG_MAX_FRAMES - 1;
++          loop invariant shift_done:
++            \forall integer j; 0 <= j < i ==>
++              d->frames[j] == \at(d->frames[j + 1], LoopEntry);
++          loop invariant shift_rest:
++            \forall integer j; i <= j < DIAG_MAX_FRAMES ==>
++              d->frames[j] == \at(d->frames[j], LoopEntry);
++          loop assigns i, d->frames[0 .. DIAG_MAX_FRAMES - 2];
++          loop variant DIAG_MAX_FRAMES - 1 - i;
++        */
++        for (i = 0u; i < (DIAG_MAX_FRAMES - 1u); i++) {
++            d->frames[i] = d->frames[i + 1u];
++        }
+         d->depth--;
+         dropped = true;
+     }
+@@ -487,5 +527,14 @@
+         f->message[0] = '\0';
+     }
+
++    /* VERIFY-073: the bytes of file and func are as at the call: the push
++     * writes only inside *d, and the requires put them outside it. With
++     * strlen_kept, push_frame_strings follows. */
++    /*@ assert push_file_kept: file == \null ||
++          (\forall integer k; 0 <= k <= \at(strlen(file), Pre) ==>
++             file[k] == \at(file[k], Pre)); */
++    /*@ assert push_func_kept: func == \null ||
++          (\forall integer k; 0 <= k <= \at(strlen(func), Pre) ==>
++             func[k] == \at(func[k], Pre)); */
+     return dropped;
+ }

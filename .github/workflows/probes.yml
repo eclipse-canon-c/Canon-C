@@ -835,19 +835,26 @@ jobs:
   # whole, file and func NULL or strings outside *d, the new frame
   # renderable, and a full chain shifted one frame at a time instead of with
   # memmove, what do frama-c-diag's WP command, its prover agreement and
-  # 14 · Eva's diag.c give? The enforced jobs read semantics/diag.h as it is;
-  # VERIFY-073's change pins what this probe measures.
+  # 14 · Eva's diag.c give? Run 1 left 6 parts of push_frame_strings
+  # unproved; run 1b asks which of four variants proves them, and whether a
+  # program proved with WP alone can then push twice and render. The
+  # enforced jobs read semantics/diag.h as it is; VERIFY-073's change pins
+  # what this probe measures.
   #
-  # PROBE: tools/probes/verify-073/diagpush_probe.py applies diag_push.patch
-  # to a copy of the checkout, or finds it applied, and runs there
-  # frama-c-diag's command, WP with each prover alone, and Eva on diag.c at
-  # the ten models. Report-only: it prints the goals not proved, the
+  # PROBE: tools/probes/verify-073/diagpush_probe.py applies a patch to a
+  # copy of the checkout, or finds it applied, and runs WP there. Run 1b's
+  # steps: diag_push's goals with each variant (diag_push.patch, P0, and
+  # A to D under variants/), and p_caller.c, a program proved with WP alone
+  # that pushes two frames and renders them, with each variant. Run 1's
+  # steps, with diag_push.patch: frama-c-diag's command, WP with each prover
+  # alone, and Eva on diag.c at the ten models. The file steps names the
+  # steps that run. Report-only: it prints the goals not proved, the
   # would-be tools/agreement/pins/frama-c-diag.txt and each Eva block's
-  # difference from its pin, posts notices, and fails only if the patch
-  # neither applies nor is found applied, or a step gives no data. The
-  # enforced tools it runs (agreement.py, eva.py) have their workflow
-  # commands shown as text, so that a difference from their pins, which is
-  # what the probe measures, is not an error annotation here. Each step's
+  # difference from its pin, posts notices, and fails only if a patch
+  # neither applies nor is found applied, or a step gives no data. GitHub
+  # reads a workflow command behind spaces too (VERIFY-073 run 1), so the
+  # probe prints the enforced tools' commands behind "| ": a difference from
+  # their pins is what the probe measures, not an error here. Each step's
   # files are the artifact diagpush-probe. Its predictions and their scores
   # are VERIFY-073's, in docs/deviations.md.
   # -------------------------------------------------------------------------
@@ -864,7 +871,21 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
 
+      # Each step runs if tools/probes/verify-073/steps names it, and
+      # otherwise posts that it did not run.
+      - name: "WP: diag_push with each variant (run 1b)"
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-073/diagpush_probe.py variants
+
+      - name: "WP: a caller, two pushes and a render, with each variant (run 1b)"
+        if: ${{ !cancelled() }}
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-073/diagpush_probe.py caller
+
       - name: "WP: frama-c-diag's command, with the patch"
+        if: ${{ !cancelled() }}
         run: |
           eval $(opam env --switch=frama-c)
           python3 tools/probes/verify-073/diagpush_probe.py wp
