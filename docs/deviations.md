@@ -33924,3 +33924,121 @@ documents: `file_write_all_atomic` cannot replace a file there.
 **What follows.** The `diag_push` contract fix, with the two comments in
 `semantics/`; `random.h`'s fixes; and `file_write_all_atomic` on Windows,
 once the author has decided.
+
+---
+
+## VERIFY-072: Pre-registration — random.h's Ranges Fixed: The Full i32 Range, Spans Above 2^31, and Float Ranges That Never Return max
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-072 |
+| **Date**       | 2026-11-12 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 34ccb74 (VERIFY-071); `1`, `3`, `4`, `5` and `6` #52, `2 · Platforms` #70 and `8 · Records` #78 on it. |
+| **Scope**      | `util/random.h`: `random_i32_range`, `random_f32_range`, `random_f64_range` and their documentation; `test/util/random_test.c`, three tests; `tools/size/pins.txt`, `util/random.h`'s row; `docs/code-size.md`'s tables; `docs/implementation-defined.md`'s findings 1 to 3. |
+| **Category**   | VERIFY-071's findings 1 and 2, fixed. One run. |
+
+### What is decided
+
+The author chose, on 2026-11-12, to fix `random.h` before the `diag_push`
+contract, since this change can be checked here from end to end and the
+contract needs WP, which only CI runs. The author also decided VERIFY-071's
+finding 3: on Windows, `file_write_all_atomic` will replace the file with
+`MoveFileExA`, in a record of its own.
+
+**`random_i32_range`.** The span, `max - min + 1`, is 2 to 2^32. Over 2^32,
+the full range, the offset is any `u32` draw; below it, `random_range`'s.
+The offset is added to `min` in `i64`, where the sum is at most `max`, so
+it converts to `i32` exactly. The result is the old one for every span the
+old code got right, draw for draw.
+
+**`random_f32_range` and `random_f64_range`.** The formula is kept,
+`min + x (max - min)`, and a draw that rounds to `max` is drawn again.
+A draw that gives a value below `max` gives the old value; one that gave
+`max` gives way to the next. Where `max - min` overflows, `-FLT_MAX` to
+`FLT_MAX` say, the value is `min + h + h`, with `h` the draw times half
+the span, which stays finite; the old code gave infinities and NaNs.
+`!(min < max)`, NaN included, and an infinite bound return `min`, as
+`random_i32_range` does when `min >= max`; the old code returned
+`min + x (max - min)` there, in `(max, min]` for reversed bounds, infinite
+or NaN for an infinite one. Both functions check `r` first, as the integer
+ones do, and end for every input.
+
+A first version made an overflowing span a contract violation. The
+coverage job builds with `CANON_NO_REQUIRE`, where the check is gone, and
+its test of the violation looped forever there, as it did here (stopped
+after 31 minutes). So no input depends on the contract to end.
+
+**The cost**, every function kept, at `-Os` as shipped: 436 bytes more on
+Cortex-M0+, 412 on Cortex-M4 and 604 on RV32, 0.9 to 1.1 % of all
+headers' code. On Cortex-M4, `random_i32_range` grows from 72 to 96 bytes,
+`random_f32_range` from 48 to 208 and `random_f64_range` from 56 to 284:
+the bounds' tests, the second formula and the loop, in `f64` by calls to
+the floating-point library, since Cortex-M4's unit is single precision.
+
+### Measured here
+
+With gcc 13.3.0, gcc 14, clang 18.1.3, and VERIFY-070's bare-metal
+toolchains and size measure.
+
+- **The old header, with the new tests**: 2140 checks fail. Over the full
+  range all 1000 draws are `INT32_MIN`; from `INT32_MIN + 1` up, the draws
+  above 2^30 are too few, and gcc's UBSan reports the signed overflow at
+  `util/random.h:232`; at seed 83909295, stream 1, `random_f32_range(r,
+  0.0f, 1.0f)` returns 1.0f; from 2^60 to 2^60 + 1024, 130 of 1000 draws
+  are `max`, against an eighth expected; reversed and infinite bounds do
+  not return `min`; and from `-FLT_MAX` to `FLT_MAX`, and `-DBL_MAX` to
+  `DBL_MAX`, all 1000 draws of each are infinite or NaN.
+- **The new header**: `random_test`'s 162567 checks pass, with gcc and
+  clang at `-O0` and `-O2`, in C2x, with `NDEBUG` and `CANON_NO_REQUIRE`,
+  with `CANON_NO_GNU_EXTENSIONS`, under ASan and UBSan, with gcc 14 and
+  the coverage job's flags, and under Valgrind. Built with sanitizers,
+  ctest passes 59 of 59.
+- **The bare-metal targets**: `random.h`, with and without
+  `CANON_NO_GNU_EXTENSIONS`, and `random_test.c` compile for the six
+  targets at `-O0`, `-Os` and `-O2`.
+- **The size measure**: 13 figures differ from the pins, all
+  `util/random.h`'s: its twelve sizes and its tokens, 857 to 1185. They are
+  pinned again from this run. The notices: cortex-m0plus "-Os 44696 bytes
+  as shipped, 28706 with checks off; -O2 75320 bytes as shipped, 41984
+  with checks off", cortex-m4 44588, 29080, 71208 and 40544, rv32imac
+  54684, 33126, 90032 and 48070, each with "51 headers with code, 855
+  functions at -Os as shipped"; build cost "56 headers alone: 418565
+  tokens of Canon-C after preprocessing, the most 25271
+  (data/hashmap/hashmap_range.h)".
+- **The misra job's steps**: "real 57; canary 3; total 60", and "as
+  pinned: 57 real finding(s) in 32 file and rule pair(s)": no finding in
+  the new code.
+- **The static-analysis job's steps**: clang-tidy, 0 errors; Cppcheck
+  2.13.0 and 2.19.0 find nothing in `random_test.c`.
+- **The coverage job's steps**, with gcc 14: "MC/DC 2062 / 2228", with
+  #52's eight rows. `util/random.h` goes from 5 of 6 condition outcomes
+  covered to 28 of 28.
+- **The records checks** pass, the size pins' "size pins: 57 rows; 0
+  problem(s)".
+
+Not run here: Windows, macOS, i386, AArch64, s390x, musl and CompCert. The
+new tests rest there on IEEE 754 doubles, which all of them use; on i386,
+whose x87 unit computes in extended precision, the sum is rounded to a
+double when it is stored, and the loop compares the stored value.
+
+### The workflows
+
+`tools/which_workflows.py`: 1, 2, 3, 4, 5, 6 and 8 run; 7, 9, 10, 11, 12,
+13 and 14 do not. `util/` and `test/` changed, which 1 to 6 do not ignore,
+and the size pins, which 2 and 8 read.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| U1 | **1, 2, 3, 4, 5, 6 and 8 run**; the others do not. | another set | H |
+| U2 | **1 is green**: `random_test` passes in every job that runs ctest, the sanitizer and Valgrind builds among them. 1's notices are #52's, GitHub's own on the macOS runners' capacity aside. | a failure, or another notice | M–H: Windows, macOS and i386 are not run here. |
+| U3 | **2 is green**: `random_test` passes in its 14 jobs that run ctest. The embedded job's size notices are the ones measured here; its pins notice reads "as pinned: 57 rows, 798 figures"; its build cost's reads "56 headers alone: 418565 tokens of Canon-C after preprocessing, the most 25271 (data/hashmap/hashmap_range.h)" up to its time; the embedded check's and the AVR check's are #70's. | a failure, or another notice | H: the size and tokens measured here with the runner's toolchains. |
+| U4 | **3 is green**: CompCert's notice reads "60 / 60 compiled, 60 ran"; coverage's reads "MC/DC 2062 / 2228", with #52's eight rows; misra's are #52's; the three static-analysis jobs pass. | a failure, or another notice | M for CompCert, not run here; H for the rest. |
+| U5 | **4, 5 and 6 give #52's notices**, every job green. | a failure, or another notice | H: `random.h` is not proved. |
+| U6 | **8 is green**; its size pins line reads "size pins: 57 rows; 0 problem(s)". | a failure, or another line | H (run here) |
+
+**What follows.** U1 to U6 scored, and the record closed. Then the
+`diag_push` contract fix, with the two comments in `semantics/`; and
+`file_write_all_atomic`'s replacement on Windows.
