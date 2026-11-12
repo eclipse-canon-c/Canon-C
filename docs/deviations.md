@@ -33138,7 +33138,7 @@ read and argued, and each program's line pinned; then run 3, enforced.
 | **ID**         | VERIFY-068 |
 | **Date**       | 2026-11-11 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-11 — Run 1 scored: the push of 076b1c9 and 7ecd37c matched all eleven predictions, M1 to M11; CI's 57 findings are the 57 measured here, rule, file and line. Run 2 scored: the push of 0fde881 and 63b346a matched N1 to N6; the job reads its 57 findings as pinned. Run 3, enforced, is pre-registered below ("Run 3, enforced, pre-registered"). The Status above is the record as committed. |
+| **Status update** | 2026-11-11 — Run 1 scored: the push of 076b1c9 and 7ecd37c matched all eleven predictions, M1 to M11; CI's 57 findings are the 57 measured here, rule, file and line. Run 2 scored: the push of 0fde881 and 63b346a matched N1 to N6; the job reads its 57 findings as pinned. 2026-11-12 — CLOSED: run 3, the push of ab2812c and 79ab1ca, matched E1 to E6; the misra job is enforced, and its 57 findings are as pinned. The Status above is the record as committed. |
 | **Baseline**   | 9427017 (`README: a Usage section that compiles; packaging waits for a stable release`), which changes documentation only. The workflows' last runs: `1 · Build & test` #46, `3 · Static analysis & coverage` #46 (`misra`: real 66; canary 3; total 69), `4`, `5`, `6` #46, `7` #27, `11` #11 and `13` #8, on b5042af; `2 · Platforms` #62 on b0e644d; `8 · Records` #70 and `14 · Eva` #7 on 1fd064e; the probes g4, g13 and pointer last ran in `9 · Probes` #15, on b5042af. |
 | **Scope**      | Ten findings fixed, in `core/primitives/contract.h`, `core/primitives/limits.h`, `core/memory.h`, `data/range.h`, `data/convenience/dynstring.h`, `data/vec/vec_impl.h`, `util/parse.h` and `algo/sort/sort_impl.h`, with a test of `parse_f64`'s `errno` (`test/util/parse_test.c`); the others argued in MISRA-DEV-019 to 027 and MISRA-TOOL-001 to 007; the `misra` job's text (`analysis.yml`). The job stays advisory in this run: no gate changes. |
 | **Category**   | The project's item 2 (AUTOSAR Classic), part a: MISRA C:2012 enforced with deviations. Run 1 of 3. |
@@ -33427,3 +33427,91 @@ parts: the two headers' checks part b still lacks (the hashmap headers,
 and each header alone with `CANON_NO_GNU_EXTENSIONS`), then code size and
 build time (item 6), then part c, the implementation-defined behaviours
 (MISRA Directive 1.1).
+
+### Scored: run 3 (2026-11-12)
+
+The push of ab2812c and 79ab1ca started `1 · Build & test` #49,
+`2 · Platforms` #65, `3 · Static analysis & coverage` #49, `4`, `5` and `6`
+#49, and `8 · Records` #73. Every job is green.
+
+| # | scored |
+|---|--------|
+| E1 | **MATCH.** 1, 2, 3, 4, 5, 6 and 8 ran; the others did not. |
+| E2 | **MATCH.** The misra job is green, enforced: "real 57; canary 3; total 60", and "as pinned: 57 real finding(s) in 32 file and rule pair(s)". |
+| E3 | **MATCH.** 3's other jobs gave #48's notices. |
+| E4 | **MATCH.** Each job of 1 and 2 gave #48's and #64's notices. |
+| E5 | **MATCH.** Each proof job of 4, 5 and 6 gave #48's notices. |
+| E6 | **MATCH.** 8 is green; its pins check reads as #72's, "pins: 32 pair(s), 57 finding(s); 0 problem(s)". |
+
+All six match, and VERIFY-068 closes. Across its three runs, 23 of 23
+predictions matched. Of the 66 findings the misra job reported at its
+start, ten are fixed; 19 findings now are deviations with a record each, and 38
+are shown not to be violations. The job fails on any finding not as pinned.
+The compliance summary waits, in `docs/for-future.md`, for a qualified
+checker.
+
+---
+
+## VERIFY-069: Pre-registration — Each Header Alone, With and Without CANON_NO_GNU_EXTENSIONS, and data/hashmap/'s Five
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-069 |
+| **Date**       | 2026-11-12 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 79ab1ca (VERIFY-068's run 3); `2 · Platforms` #65 on it, whose `embedded` job reads "6 targets x 3 levels, 136 units each, 0 failed". |
+| **Scope**      | `tools/embedded_compile_check.sh`; `docs/architectures.md`'s table. No library code changes. |
+| **Category**   | The project's item 2 (AUTOSAR Classic), part b: the C99 compile check. |
+
+### What is decided
+
+Part b was to check that every public header compiles as strict C99. Most
+of it was there already: since VERIFY-046 and VERIFY-048, the `embedded`
+job compiles every public header as its own translation unit, and every
+test, with `-std=c99 -Wall -Wextra -Wpedantic -Werror`, for six bare-metal
+targets at three levels. Two gaps remained (decided with the author,
+2026-11-11):
+
+- **`data/hashmap/`'s five headers** were left out, since each needs a key
+  and value type first, and were compiled only through the tests that use
+  them. Each is now compiled after just what its documentation asks before
+  it: the two types, the hash and equality functions (declared: nothing is
+  linked), and for `hashmap_range.h` and `hashmap_fmt.h`, `hashmap.h` with
+  Vec<K> and Vec<V> (`test/support/hashmap_vecs.h`, as the tests
+  instantiate them), or StringBuf and two formatting functions.
+- **The portable path.** A compiler that is not GCC's does not take
+  Canon-C's GNU branches; `CANON_NO_GNU_EXTENSIONS` selects that path under
+  GCC. CompCert compiles and runs the tests that way (`3 · Static analysis
+  & coverage`), but with CompCert's warnings. Each header, the five
+  hashmap units among them, is now compiled a second time with the flag,
+  under the same warning flags.
+
+The tests are compiled once, as before: 2 × 84 header units and 57 tests,
+225 units for each target and level.
+
+### Measured here
+
+- With gcc 13 and clang 18 on the host, and arm-none-eabi-gcc 13.2.1
+  (Cortex-M4) at `-O0`, `-Os` and `-O2`: each of the 79 headers compiles
+  alone with `CANON_NO_GNU_EXTENSIONS`, under the job's warning flags.
+- The five hashmap units, with and without the flag: compile with gcc and
+  clang on the host, and with arm-none-eabi-gcc for Cortex-M0+ and
+  Cortex-M4, at the three levels. `hashmap_range.h`'s unit takes its
+  vectors from `test/support/hashmap_vecs.h`, as the tests do: written in
+  the unit itself, they make clang warn of unused static inline functions
+  defined in the main file.
+- The script, cut to its two newlib targets (picolibc and RISC-V are not
+  installed here): 225 of 225 at each of the six target-level pairs, in
+  1 min 39 s.
+
+### Predictions
+
+`tools/which_workflows.py`: 2 and 8 run, the others do not.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| B1 | **2 and 8 run**; the others do not. | another set | H |
+| B2 | **2's embedded job is green**, and its notice reads "6 targets x 3 levels, 225 units each (84 headers, with and without CANON_NO_GNU_EXTENSIONS, and 57 tests), 0 failed"; the AVR notice reads as #65's, "80 headers: 29 compile, 49 refused by Tier 1, 2 other; 0 check(s) failed". | a failure, or another notice | H for the newlib targets (measured); M–H for picolibc and RISC-V, not installed here. |
+| B3 | **The embedded job takes less than ten minutes** (#65's: 3 min 42 s). | ten minutes or more | M: about 70% more compiles; here, the two newlib targets took 1 min 39 s. |
+| B4 | **2's other jobs give #65's notices.** | a failure, or another notice | H |
+| B5 | **8 is green.** | a failure | H (run here) |
