@@ -34072,7 +34072,7 @@ input, and give the old value for every draw the old code got right.
 | **ID**         | VERIFY-073 |
 | **Date**       | 2026-11-12 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-12 — Run 1 scored: D1 to D7 and D9 to D11 MATCH, D8 MISS. Run 1b scored: E1 to E6, E8 and E11 MATCH, E7, E9, E10 and E12 to E14 MISS: no variant proves `push_frame_strings`, and no variant lets a program proved with WP alone push twice and render ("Run 1b scored", below). Open: the author's decision, then run 2. The Status above is the record as committed. |
+| **Status update** | 2026-11-12 — Run 1 scored: D1 to D7 and D9 to D11 MATCH, D8 MISS. Run 1b scored: E1 to E6, E8 and E11 MATCH, E7, E9, E10 and E12 to E14 MISS: no variant proves `push_frame_strings`, and no variant lets a program proved with WP alone push twice and render ("Run 1b scored", below). The author chose to land the proved core; run 1c measures it, pre-registered below. The Status above is the record as committed. |
 | **Baseline**   | 9610ceb (VERIFY-072); `1`, `3`, `4`, `5` and `6` #53, `2 · Platforms` #71 and `8 · Records` #79 on it; `9 · Probes` #15 (b5042af), #17 (b0e644d) and #18 (7ecd37c), each probe's last run. |
 | **Scope**      | Run 1: `tools/probes/verify-073/` (`diag_push.patch`, `diagpush_probe.py`, `README.md`); `.github/workflows/probes.yml`, the job `diagpush-probe`; the workflow map's row 9. Run 2: `semantics/diag.h`'s `diag_push`, its contract and its shift, with the pins and documents that read it; `test/semantics/diag_test.c`; two comments in `semantics/`. |
 | **Category**   | VERIFY-066's run 2, "Found while reading", 1: fixed. Run 1 measures the change in CI before it lands (report-only); run 2 makes it, pinned from run 1. |
@@ -34453,3 +34453,70 @@ number counted the rows of the notice files the scoring reads, which
 have one row more for each workflow.
 
 **What follows.** The author decides what run 2 makes of it.
+
+### Run 1c: pre-registration (2026-11-12)
+
+**What is decided.** On 2026-11-12 the author chose, of the three courses
+run 1b left, to land the proved core: run 1's patch without
+`push_frame_strings`, and without `push_file_read` and `push_func_read`,
+which asked of `file` and `func` only what that postcondition needed. What
+stays: the earlier frames kept whole (`push_frames_preserved`,
+`push_shift_semantics`) and the frame-by-frame shift, with its loop
+invariants. The header's own notes say so: `diag_push`'s comment states
+the frames kept whole and that the strings are not promised, and the
+verification notes count one own residual, `memset`'s, where they counted
+eight. That is `tools/probes/verify-073/diag_push.patch` now; run 1's is
+kept as `variants/p0_run1.patch`, which the variants and caller steps read
+as P0.
+
+**The probe.** `steps` names `wp`, `agree` and `eva`: `frama-c-diag`'s
+command, each prover alone and Eva's `diag.c` at the ten models, measuring
+the patch as they measured run 1's. Nothing else of the probe changes.
+
+**Measured here**, with the patch applied:
+
+- **Frama-C 25 parses and types it**, with `frama-c-diag`'s preprocessing.
+- **Eva's `diag.c`**, at `x86_64`, `ppc_32` and `msvc_x86_64`: its block
+  differs from its pin in two lines, preconditions 76/4/0 to 74/4/0, and
+  `snprintf`'s call at line 1019, not 998.
+- **`diag_test` passes** in the seven configurations of run 1, and
+  `diag_push` compiles for Cortex-M4 at `-Os` and `-O2` with no warning.
+  Its C is run 1's.
+- **Its size is run 1's**: the five figures that differ from the pins
+  (Cortex-M0+ and Cortex-M4 at `-O2` with checks off, 924 and 770; RV32 at
+  `-O2`, 1036 and 972) and 2020 tokens, against 2015 pinned.
+
+**Correction to run 1's "Measured here".** It counted Eva's six
+preconditions more as the two requires at `diag.c`'s four pushes and as
+clauses of `diag_push`, ten, less `memmove`'s two at its call and two of
+its own. Eva's count, which this patch's 74 shows, has neither clauses nor
+`memmove`'s own: eight at the four pushes, less two at `memmove`'s call.
+
+**What run 1b's caller should have been predicted from.** The header's
+own notes, VERIFY-017's, record that a string-validity goal is
+"triple-prover-resistant under this model even for literals": 32 caller
+obligations of `snprintf`'s format, all timeouts. E12 rated M what they
+had measured.
+
+**The workflows.** `tools/which_workflows.py`: 2, 8 and 9 run. `2 ·
+Platforms` reads `tools/` (VERIFY-070's size measure); 1 and 3 to 6 do
+not. In 9, only `diagpush` watches `tools/probes/verify-073/`.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| F1 | **2, 8 and 9 run**, and no other. | another set | H |
+| F2 | **2 and 8 are green**, each job with the notices of its last run (2 #73, 8 #81), times aside. | a failure, or another notice | H: nothing they build or read changes. |
+| F3 | **In 9, only `changes` and `diagpush-probe` run**; the nine older probes are skipped. | another probe runs | H |
+| F4 | **The diag_push probe's job is green**: `variants` and `caller` each post that they did not run, and `wp`, `agree` and `eva` post their notices. No error annotation, though `agreement.py` gives its error: the patch's goals are not the pins'. | a failure, a notice missing, or an error annotation | H |
+| F5 | **WP: "Proved goals: 3073 / 3074"**, the one not proved `memset`'s `requires_valid_s`, Timeout or Unknown. | another count, or another goal unproved | M–H: run 1's 3080 / 3087, less `push_frame_strings`' 13 goals, 7 of them "Prove: true" and 6 not proved; the two requires dropped are no goal of `diag.h`'s; a proof near 120 s could fall either way. |
+| F6 | **Each prover alone: the three runs report, the would-be pin file has run 1's 39 class lines** (3 one Alt-Ergo, 5 one CVC5, 31 two Alt-Ergo+CVC5), and the goals no prover proves alone are `memset`'s alone. | a run without a report, another class line, or another goal no prover proves | M: a proof near a limit could move class; the slow lines are not predicted. |
+| F7 | **Eva: at each of the ten models, `diag.c`'s block differs from its pin in two lines**, as measured here: preconditions 76/4/0 to 74/4/0, and `snprintf`'s call at line 1019. The notice reads "not as pinned, 2 line(s) of the pin out and 2 in, preconditions 74/4/0" for each. | another difference, at any model | H at the three models measured here; M–H at the seven Frama-C 25 cannot read. |
+
+**What follows.** F1 to F7 scored. Then run 2 makes the change: the patch
+into `semantics/diag.h`, and with it `frama-c-diag`'s count and its one
+unproved goal, its agreement pins (run 1c's class lines, and the slow
+lines of runs 1 and 1c), Eva's `diag.c` blocks at the ten models,
+`diag.h`'s size row, VERIFY-017's ledger and `docs/verification.md`'s
+`diag.h` section, a test in `diag_test.c` that a push to a full chain
+keeps every other frame whole and renders after it, and VERIFY-071's
+findings 4 and 5, the comments in `semantics/error.h` and `option.h`.
