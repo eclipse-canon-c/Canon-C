@@ -33543,7 +33543,7 @@ picolibc and RISC-V toolchains installed here since, the script gives
 | **ID**         | VERIFY-070 |
 | **Date**       | 2026-11-12 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-12 — Run 1 scored: the push of 56d83d2 and 701eb5c matched S1 to S7; CI's table of sizes is the one measured here, figure for figure. Run 2, the pins, is pre-registered below ("Run 2, the pins, pre-registered"). The Status above is the record as committed. |
+| **Status update** | 2026-11-12 — Run 1 scored: the push of 56d83d2 and 701eb5c matched S1 to S7; CI's table of sizes is the one measured here, figure for figure. Run 2 scored: the push of 080bbc3 and d1759dd matched P1 to P6; the job reads its 798 figures as pinned. Run 3, enforced, is pre-registered below ("Run 3, enforced, pre-registered"). The Status above is the record as committed. |
 | **Baseline**   | 075f45f (VERIFY-069); `2 · Platforms` #66 on it, its embedded job 4 min 30 s; `1`, `3`, `4`, `5` and `6` last ran at #49, on 79ab1ca. |
 | **Scope**      | `tools/size/size.py`, new; a step and an artifact in `platforms.yml`'s embedded job; `docs/code-size.md`, new; the README's list of documents; the workflow map. No library code changes. |
 | **Category**   | The project's item 6: code size and build time. Run 1 of 3: pinned and enforced from run 3, decided with the author (2026-11-12). |
@@ -33720,3 +33720,56 @@ the others do not.
 
 **What follows.** P1 to P6 scored. Run 3: `ENFORCE = True`, so that a figure
 not as pinned fails the embedded job.
+
+### Scored: run 2 (2026-11-12)
+
+The push of 080bbc3 and d1759dd started `1 · Build & test` #51,
+`2 · Platforms` #68, `3 · Static analysis & coverage` #51, `4`, `5` and `6`
+#51, and `8 · Records` #76. Every job is green.
+
+| # | scored |
+|---|--------|
+| P1 | **MATCH.** 1, 2, 3, 4, 5, 6 and 8 ran; the others did not. |
+| P2 | **MATCH.** The embedded job is green. Its size notices are #67's but for cortex-m4's `-O2` with checks off, 40064 bytes, and rv32imac's, 47286, and its pins notice reads "as pinned: 57 rows, 798 figures". |
+| P3 | **MATCH.** The build cost notice begins "56 headers alone: 418237 tokens of Canon-C after preprocessing, the most 25271 (data/hashmap/hashmap_range.h)". |
+| P4 | **MATCH.** The embedded check's and the AVR check's notices are #67's. |
+| P5 | **MATCH.** 1, 3, 4, 5 and 6 gave #50's notices. |
+| P6 | **MATCH.** 8 is green; its new step reads "size pins: 57 rows; 0 problem(s)". |
+
+All six match: the pins read CI's measure as they read the one here.
+
+The embedded job took 7 min 7 s, against run 1's 4 min 58 s, which this
+run did not predict. Its compile check, which did not change, took 241 s
+against 166 s, and its size step 136 s against 90 s: each about one and
+a half times as long. Run here one after the other, twice each, on two
+cores, run 1's `size.py` took 221 s and 217 s, and run 2's, which reads
+each function's file from the debug information, 220 s and 225 s: a few
+seconds apart, against the 46 s the step gained in CI. The runner was
+slower, not the measure.
+
+### Run 3, enforced, pre-registered
+
+**The change.** `tools/size/size.py` sets `ENFORCE = True`: a figure not as
+pinned now fails the embedded job. A change that moves one pins it again
+with `size.py pin`, from that change's run, with its reason. The workflow
+map and `docs/code-size.md` say so.
+
+**Measured here.** `size.py run`, with `ENFORCE` set, exits 0: its three
+size notices and its pins notice, "as pinned: 57 rows, 798 figures", are
+#68's, and so are its build cost's tokens. Its comparison with a figure
+changed, a header added and one removed names the three and exits 1.
+
+**The workflows.** `tools/which_workflows.py`: 2 and 8 run, on
+`tools/size/size.py`; the others do not.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Q1 | **2 and 8 run**; the others do not. | another set | H |
+| Q2 | **2 is green, its embedded job enforced**: that job's size notices are #68's, and its pins notice reads "as pinned: 57 rows, 798 figures". | a failure, or another notice | H: no figure's source changes. |
+| Q3 | **2's other notices are #68's**: its other jobs', the embedded check's, the AVR check's, and the build cost's up to its time, which varies and is reported only. | another notice, or other tokens | H |
+| Q4 | **The embedded job takes less than 12 minutes.** | 12 minutes or more | M: #68 took 7 min 7 s, on a slow runner. |
+| Q5 | **8 is green**, its size pins line as #76's. | a failure, or another line | H (run here) |
+
+**What follows.** Q1 to Q5 scored, and the record closed. Then the project's
+item 2's part c: the implementation-defined behaviours Canon-C relies on
+(MISRA Directive 1.1).
