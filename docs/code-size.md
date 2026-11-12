@@ -67,18 +67,21 @@ the runner's toolchains. They are CI's first run (`2 · Platforms` #67,
 VERIFY-070), figure for figure, but for what VERIFY-070's run 2 changed in
 the measure: two of `core/memory.h`'s figures, whose function the first
 run had counted for no header, and the tokens, which it counted as lines.
+`util/random.h`'s row is VERIFY-072's, whose fixes gave its range
+functions the full `i32` range, spans that overflow, infinite bounds, and a
+draw again where rounding reached `max`.
 In bytes, at `-Os` as shipped unless the column says otherwise.
 
 **All headers together**, every function kept:
 
 | target | -Os, as shipped | -Os, checks off | -O2, as shipped | -O2, checks off |
 |--------|----------------:|----------------:|----------------:|----------------:|
-| cortex-m0plus | 44,260 | 28,364 | 74,788 | 41,496 |
-| cortex-m4 | 44,176 | 28,744 | 70,668 | 40,064 |
-| rv32imac | 54,080 | 32,616 | 89,088 | 47,286 |
+| cortex-m0plus | 44,696 | 28,706 | 75,320 | 41,984 |
+| cortex-m4 | 44,588 | 29,080 | 71,208 | 40,544 |
+| rv32imac | 54,684 | 33,126 | 90,032 | 48,070 |
 
 The run-time checks are about a third of the code at `-Os`: on Cortex-M4,
-15,432 of 44,176 bytes. `require()` stays on in release builds by design
+15,508 of 44,588 bytes. `require()` stays on in release builds by design
 (`core/primitives/contract.h`); a program whose contracts are proved can
 turn it off with `CANON_NO_REQUIRE`.
 
@@ -136,7 +139,7 @@ turn it off with `CANON_NO_REQUIRE`.
 | `util/log/log.h` | 5 | 282 | 298 | 346 | 298 | 572 | 1,878 |
 | `util/log/log_macros.h` | 0 | 0 | 0 | 0 | 0 | 0 | 1,878 |
 | `util/parse.h` | 56 | 2,996 | 3,090 | 3,466 | 2,312 | 3,128 | 3,926 |
-| `util/random.h` | 8 | 496 | 508 | 750 | 320 | 1,368 | 857 |
+| `util/random.h` | 8 | 932 | 920 | 1,354 | 656 | 1,908 | 1,185 |
 | `util/str/intern.h` | 6 | 658 | 698 | 924 | 406 | 1,148 | 12,960 |
 | `util/str/str.h` | 28 | 1,674 | 1,726 | 2,218 | 932 | 2,928 | 9,539 |
 | `util/str/str_join.h` | 4 | 912 | 896 | 1,268 | 442 | 1,324 | 10,750 |

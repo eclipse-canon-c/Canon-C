@@ -16,6 +16,7 @@
 #ifndef CANON_UTIL_RANDOM_H
 #define CANON_UTIL_RANDOM_H
 
+#include <float.h>
 #include <stdbool.h>
 
 #include "core/primitives/types.h"
@@ -67,6 +68,9 @@
  * - r (Random pointer) must not be NULL — violated → contract abort
  * - bound == 0 in random_range returns 0 (defined, not a contract violation)
  * - min >= max in random_i32_range returns min (defined, not a contract violation)
+ * - !(min < max) in random_f32_range and random_f64_range, NaN included,
+ *   and an infinite bound, return min (defined, not a contract violation);
+ *   any finite bounds work, -FLT_MAX to FLT_MAX included (VERIFY-072)
  *
  * What is PCG32?
  * ────────────────────────────────────────────────────────────────────────────
@@ -219,6 +223,12 @@ static inline bool random_bool(borrowed(Random*) r) {
 /**
  * @brief Random signed integer in [min, max] inclusive
  *
+ * Any i32 range, the full one included. The span, max - min + 1, is 2 to
+ * 2^32, and the full range's 2^32 takes every u32 draw. The draw is added to
+ * min in i64, where the sum is at most max, so it converts to i32 exactly
+ * (VERIFY-072; before it, a span above 2^31 overflowed int, and the full
+ * range returned min every time).
+ *
  * @param r   Valid Random pointer (must not be NULL — contract)
  * @param min Lower bound (inclusive)
  * @param max Upper bound (inclusive) — if min >= max, returns min
@@ -228,32 +238,82 @@ static inline i32 random_i32_range(borrowed(Random*) r, i32 min, i32 max) {
     require_msg(r != NULL, "random_i32_range: r is NULL");
     if (min >= max) { return min; }
     const i64 span = ((i64)max - (i64)min) + 1;
-    u32 range = (u32)span;
-    return min + (i32)random_range(r, range);
+    u32 offset;
+    if (span > (i64)UINT32_MAX) {
+        offset = random_u32(r);         /* the full range: every u32 */
+    } else {
+        offset = random_range(r, (u32)span);
+    }
+    return (i32)((i64)min + (i64)offset);
 }
 
 /**
  * @brief Random f32 in [min, max)
  *
+ * min + x (max - min), with x from random_f64 converted to f32; where
+ * max - min overflows, min + h + h, with h = x (max / 2 - min / 2).
+ * Rounding can give max: x rounds to 1.0f for 128 of the 2^32 draws, and
+ * the sum rounds up to max when max - min is small beside min. Such a draw
+ * is drawn again, so the result is below max (VERIFY-072): 128 draws in
+ * 2^32 for [0, 1), and at most half, when min and max are adjacent floats.
+ *
  * @param r   Valid Random pointer (must not be NULL — contract)
  * @param min Lower bound (inclusive)
- * @param max Upper bound (exclusive)
+ * @param max Upper bound (exclusive) — if !(min < max), NaN included, or
+ *            either bound is infinite, returns min
  * @return f32 in [min, max)
  */
 static inline f32 random_f32_range(borrowed(Random*) r, f32 min, f32 max) {
-    return min + (f32)random_f64(r) * (max - min);
+    f32 v;
+    require_msg(r != NULL, "random_f32_range: r is NULL");
+    if (!(min < max) || !(min >= -FLT_MAX) || !(max <= FLT_MAX)) {
+        return min;                     /* empty, NaN, or an infinite bound */
+    }
+    do {
+        const f32 x = (f32)random_f64(r);
+        if ((max - min) <= FLT_MAX) {
+            v = min + (x * (max - min));
+        } else {
+            /* max - min overflows: add two halves of it */
+            const f32 h = x * ((max * 0.5f) - (min * 0.5f));
+            v = (min + h) + h;
+        }
+    } while (!(v < max));
+    return v;
 }
 
 /**
  * @brief Random f64 in [min, max)
  *
+ * min + x (max - min), with x from random_f64; where max - min overflows,
+ * min + h + h, with h = x (max / 2 - min / 2). The sum rounds up to max
+ * when max - min is small beside min: from 2^60 to 2^60 + 1024, an eighth
+ * of the draws. Such a draw is drawn again, so the result is below max
+ * (VERIFY-072).
+ *
  * @param r   Valid Random pointer (must not be NULL — contract)
  * @param min Lower bound (inclusive)
- * @param max Upper bound (exclusive)
+ * @param max Upper bound (exclusive) — if !(min < max), NaN included, or
+ *            either bound is infinite, returns min
  * @return f64 in [min, max)
  */
 static inline f64 random_f64_range(borrowed(Random*) r, f64 min, f64 max) {
-    return min + random_f64(r) * (max - min);
+    f64 v;
+    require_msg(r != NULL, "random_f64_range: r is NULL");
+    if (!(min < max) || !(min >= -DBL_MAX) || !(max <= DBL_MAX)) {
+        return min;                     /* empty, NaN, or an infinite bound */
+    }
+    do {
+        const f64 x = random_f64(r);
+        if ((max - min) <= DBL_MAX) {
+            v = min + (x * (max - min));
+        } else {
+            /* max - min overflows: add two halves of it */
+            const f64 h = x * ((max * 0.5) - (min * 0.5));
+            v = (min + h) + h;
+        }
+    } while (!(v < max));
+    return v;
 }
 
 #endif /* CANON_UTIL_RANDOM_H */

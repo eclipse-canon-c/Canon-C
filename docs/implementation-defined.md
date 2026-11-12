@@ -251,26 +251,29 @@ them as they are.
 
 ## Found by the survey
 
-1. **`random_i32_range` is wrong for spans above 2^31.** It converts the
-   draw, a `u32` up to the span, to `i32`, which for draws above
-   `INT32_MAX` is the out-of-range conversion of section 5, and adds it to
-   `min`, which then overflows `int`: undefined behaviour. UBSan reports it
-   at `util/random.h:232` for `random_i32_range(r, INT32_MIN + 1,
-   INT32_MAX)`. The full range, `INT32_MIN` to `INT32_MAX`, makes the span
-   2^32, which `u32` reduces to 0: every call returns `INT32_MIN`. To fix
-   in its own record.
-2. **`random_f32_range` and `random_f64_range` can return `max`**, which
-   they document as excluded. `random_f64`'s largest value, 1 − 2^−32,
-   rounds to 1.0f as an `f32` (6.3.1.5 leaves the direction to the
-   implementation; IEEE 754's default rounds to nearest): for 128 of the
-   2^32 values of `random_u32`, `random_f32_range(r, 0.0f, 1.0f)` returns
-   1.0f. And in `f64`, `min + x * (max - min)` rounds to `max` where
-   `max - min` is small beside `min`: from 2^60 to 2^60 + 1024, the largest
-   `x` gives `max`. To fix in its own record.
+1. **`random_i32_range` was wrong for spans above 2^31.** It converted
+   the draw, a `u32` up to the span, to `i32`, which for draws above
+   `INT32_MAX` is the out-of-range conversion of section 5, and added it to
+   `min`, which then overflowed `int`: undefined behaviour. UBSan reported
+   it at `util/random.h:232` for `random_i32_range(r, INT32_MIN + 1,
+   INT32_MAX)`. The full range, `INT32_MIN` to `INT32_MAX`, made the span
+   2^32, which `u32` reduced to 0: every call returned `INT32_MIN`.
+   **Fixed** by VERIFY-072: the draw is added in `i64`, and the full range
+   takes every `u32`.
+2. **`random_f32_range` and `random_f64_range` could return `max`**,
+   which they document as excluded. `random_f64`'s largest value,
+   1 − 2^−32, rounds to 1.0f as an `f32` (6.3.1.5 leaves the direction to
+   the implementation; IEEE 754's default rounds to nearest): for 128 of
+   the 2^32 values of `random_u32`, `random_f32_range(r, 0.0f, 1.0f)`
+   returned 1.0f. And in `f64`, `min + x * (max - min)` rounds to `max`
+   where `max - min` is small beside `min`: from 2^60 to 2^60 + 1024, an
+   eighth of the draws. **Fixed** by VERIFY-072: such a draw is drawn
+   again. `!(min < max)` and an infinite bound now return `min`, and a
+   span that overflows is added in two halves, so the value stays finite.
 3. **`file_write_all_atomic` cannot replace a file on Windows**, as above,
-   and `util/file.h` does not say so. To decide: say so, or replace the
-   file on Windows by other means (`MoveFileExA` with
-   `MOVEFILE_REPLACE_EXISTING`, for one).
+   and `util/file.h` does not say so. Decided by the author (2026-11-12):
+   on Windows it will replace the file with `MoveFileExA` and
+   `MOVEFILE_REPLACE_EXISTING`, in a record of its own.
 4. **`Error`'s size with short enumerations was misstated.**
    `semantics/error.h`'s comment in `error_in_range`, and VERIFY-046's
    record, say that with `-fshort-enums` `Error` is `unsigned char`. Its

@@ -33,9 +33,13 @@
  *   random_range        — bounded [0, bound), bound==0, bound==1, bias check
  *   random_f64          — [0.0, 1.0) range
  *   random_bool         — produces both true and false
- *   random_i32_range    — [min, max], min==max, min>max, negative ranges
- *   random_f32_range    — [min, max) float range
- *   random_f64_range    — [min, max) double range
+ *   random_i32_range    — [min, max], min==max, min>max, negative ranges,
+ *                         spans above 2^31 and the full range (VERIFY-072)
+ *   random_f32_range    — [min, max) float range; max never returned, where
+ *                         rounding reaches it (VERIFY-072)
+ *   random_f64_range    — [min, max) double range; the same
+ *   float range edges   — !(min < max) returns min, NaN included, and an
+ *                         infinite bound; a span that overflows works
  *   struct size         — 16 bytes (two u64)
  *   determinism         — same seed+seq → identical sequence
  *   independent streams — different seq → different sequence
@@ -55,6 +59,7 @@
 
 #define CANON_CONTRACT_IMPL
 #include "util/random.h"
+#include <float.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -459,6 +464,120 @@ TEST(f64_range_bounds) {
 }
 
 /* =========================================================================
+ * Spans above 2^31, and the full i32 range (VERIFY-072)
+ * ====================================================================== */
+
+TEST(i32_range_wide_spans) {
+    Random r;
+    int i;
+    int negative = 0;
+    int high = 0;
+
+    random_seed(&r, 42, 1);
+
+    /* The full range: before VERIFY-072, every call returned INT32_MIN. */
+    for (i = 0; i < 1000; i++) {
+        i32 v = random_i32_range(&r, INT32_MIN, INT32_MAX);
+        if (v < 0) { negative++; }
+    }
+    EXPECT(negative > 400);
+    EXPECT(negative < 600);
+
+    /* Above 2^31: before VERIFY-072, a draw above INT32_MAX overflowed int
+       when added to min, which UBSan reported. */
+    for (i = 0; i < 1000; i++) {
+        i32 v = random_i32_range(&r, INT32_MIN + 1, INT32_MAX);
+        EXPECT(v > INT32_MIN);
+        if (v > 1073741824) { high++; }
+    }
+    EXPECT(high > 100);
+
+    for (i = 0; i < 1000; i++) {
+        i32 v = random_i32_range(&r, -10, INT32_MAX);
+        EXPECT(v >= -10);
+    }
+}
+
+/* =========================================================================
+ * The float ranges never return max (VERIFY-072)
+ * ====================================================================== */
+
+TEST(float_ranges_exclude_max) {
+    Random r;
+    int i;
+    int below_top = 0;
+    const f64 lo = 1152921504606846976.0;   /* 2^60 */
+
+    /* Seed 83909295, stream 1: the first draw is 0xFFFFFF8D, whose
+       random_f64 rounds to 1.0f. Before VERIFY-072, random_f32_range
+       returned 1.0f for it. */
+    random_seed(&r, 83909295u, 1u);
+    EXPECT(random_u32(&r) == 0xFFFFFF8Du);
+    random_seed(&r, 83909295u, 1u);
+    EXPECT(random_f32_range(&r, 0.0f, 1.0f) < 1.0f);
+
+    /* From 2^60 to 2^60 + 1024, doubles are 256 apart, and an eighth of
+       the draws round to max. Before VERIFY-072 they were returned. */
+    random_seed(&r, 42, 1);
+    for (i = 0; i < 1000; i++) {
+        f64 v = random_f64_range(&r, lo, lo + 1024.0);
+        EXPECT(v >= lo);
+        EXPECT(v < (lo + 1024.0));
+        if (v < (lo + 768.0)) { below_top++; }
+    }
+    EXPECT(below_top > 0);
+}
+
+/* =========================================================================
+ * The float ranges' edges: empty, NaN, infinite, and spans that overflow
+ * ====================================================================== */
+
+TEST(float_ranges_edges) {
+    Random r;
+    int i;
+    int negative = 0;
+    volatile f64 zero  = 0.0;
+    volatile f32 big32 = FLT_MAX;
+    volatile f64 big64 = DBL_MAX;
+    const f64 nan64 = zero / zero;
+    const f32 nan32 = (f32)nan64;
+    const f32 inf32 = big32 * 2.0f;
+    const f64 inf64 = big64 * 2.0;
+
+    random_seed(&r, 42, 1);
+
+    /* !(min < max): min. */
+    EXPECT(random_f32_range(&r, 1.0f, 1.0f) == 1.0f);
+    EXPECT(random_f32_range(&r, 2.0f, 1.0f) == 2.0f);
+    EXPECT(random_f64_range(&r, 1.0, 1.0) == 1.0);
+    EXPECT(random_f64_range(&r, 2.0, 1.0) == 2.0);
+    {
+        const f32 v32 = random_f32_range(&r, nan32, 1.0f);
+        const f64 v64 = random_f64_range(&r, nan64, 1.0);
+        EXPECT(v32 != v32);
+        EXPECT(v64 != v64);
+    }
+
+    /* An infinite bound: min. */
+    EXPECT(random_f32_range(&r, -inf32, 1.0f) == -inf32);
+    EXPECT(random_f32_range(&r, 0.0f, inf32) == 0.0f);
+    EXPECT(random_f64_range(&r, -inf64, 1.0) == -inf64);
+    EXPECT(random_f64_range(&r, 0.0, inf64) == 0.0);
+
+    /* A span that overflows, the widest there is: the two halves keep
+       every value finite and in range. */
+    for (i = 0; i < 1000; i++) {
+        const f32 v32 = random_f32_range(&r, -big32, big32);
+        const f64 v64 = random_f64_range(&r, -big64, big64);
+        EXPECT((v32 >= -big32) && (v32 < big32));
+        EXPECT((v64 >= -big64) && (v64 < big64));
+        if (v64 < 0.0) { negative++; }
+    }
+    EXPECT(negative > 400);
+    EXPECT(negative < 600);
+}
+
+/* =========================================================================
  * Seed zero — defined behaviour (not degenerate)
  * ====================================================================== */
 
@@ -597,6 +716,9 @@ int main(void) {
     RUN(i32_range_edge_cases);
     RUN(f32_range_bounds);
     RUN(f64_range_bounds);
+    RUN(i32_range_wide_spans);
+    RUN(float_ranges_exclude_max);
+    RUN(float_ranges_edges);
     RUN(seed_zero);
     RUN(known_values);
 
