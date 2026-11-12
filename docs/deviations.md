@@ -34072,7 +34072,7 @@ input, and give the old value for every draw the old code got right.
 | **ID**         | VERIFY-073 |
 | **Date**       | 2026-11-12 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-12 — Run 1 scored: D1 to D7 and D9 to D11 MATCH, D8 MISS ("Run 1 scored", below). `push_frame_strings` is proved in 7 of its 13 parts. Open: the author's decision on the other 6, then run 2. The Status above is the record as committed. |
+| **Status update** | 2026-11-12 — Run 1 scored: D1 to D7 and D9 to D11 MATCH, D8 MISS ("Run 1 scored", below). `push_frame_strings` is proved in 7 of its 13 parts. The author chose to measure four variants first: run 1b, pre-registered below. The Status above is the record as committed. |
 | **Baseline**   | 9610ceb (VERIFY-072); `1`, `3`, `4`, `5` and `6` #53, `2 · Platforms` #71 and `8 · Records` #79 on it; `9 · Probes` #15 (b5042af), #17 (b0e644d) and #18 (7ecd37c), each probe's last run. |
 | **Scope**      | Run 1: `tools/probes/verify-073/` (`diag_push.patch`, `diagpush_probe.py`, `README.md`); `.github/workflows/probes.yml`, the job `diagpush-probe`; the workflow map's row 9. Run 2: `semantics/diag.h`'s `diag_push`, its contract and its shift, with the pins and documents that read it; `test/semantics/diag_test.c`; two comments in `semantics/`. |
 | **Category**   | VERIFY-066's run 2, "Found while reading", 1: fixed. Run 1 measures the change in CI before it lands (report-only); run 2 makes it, pinned from run 1. |
@@ -34299,3 +34299,98 @@ proof.
 **What follows.** The author decides on `push_frame_strings`' six parts,
 as "What follows" above foresaw: argued residuals, as VERIFY-017's are, or
 a form the provers prove, measured by the probe before run 2.
+
+### Run 1b: pre-registration (2026-11-12)
+
+**What is decided.** Of the courses run 1 left for `push_frame_strings`'
+six parts (argued residuals, a form the provers prove, or no such
+postcondition), the author chose on 2026-11-12 to measure forms the
+provers might prove, before run 2.
+
+**The variants.** Each is a whole patch of `semantics/diag.h` from the
+checkout, under `tools/probes/verify-073/variants/`, and differs from P0,
+run 1's `diag_push.patch`, in annotations only: their C is P0's.
+
+- **A**, `a_lemma.patch`: P0 and the lemma `strlen_kept{L1, L2}`: a string
+  whose bytes, terminator included, are at L2 as at L1 has the same
+  `strlen`. It follows from the libc's axioms `strlen_before_null`,
+  `strlen_at_null` and `strlen_pos_or_null`, and it is what
+  `push_frame_strings` asks of the provers for `file` and `func`, the
+  writes aside.
+- **B**, `b_nocast.patch`: P0, with `push_file_read`'s and
+  `push_func_read`'s separation written from `*d` itself,
+  `\separated(file + (0 .. strlen(file)), d)`, without the cast `(char *)d`
+  that WP warns of.
+- **C**, `c_lemma_kept.patch`: A, and two assertions at the end of
+  `diag_push`, `push_file_kept` and `push_func_kept`: each byte of `file`
+  and `func`, terminator included, is as at the call. They carry the
+  writes alone; with them, `push_frame_strings` asks only for the lemma.
+- **D**, `d_all.patch`: C and B.
+
+And `tools/probes/verify-073/p_caller.c`: `caller(buf)` pushes two frames,
+with literals, as `DIAG_PUSH` does, and renders the chain into `buf`, the
+use VERIFY-066 found the contract did not allow. WP proves it from
+`diag.h`'s contracts.
+
+**The probe.** Two steps are new. `variants`: WP on `diag_push` alone
+(`-wp-fct diag_push`, `frama-c-diag`'s options otherwise) with P0 and each
+variant, and on the lemma alone (`-wp-prop strlen_kept`) where there is
+one; and for P0, WP's text of `push_frame_strings`' goals, what the
+provers are asked (`-wp-prover none -wp-print`). `caller`: WP on
+`p_caller.c` (`-wp-fct caller`) with each variant and `-wp-literals`, and
+with P0 also without: WP knows a literal's bytes only with that option,
+off by default (Frama-C's WP parameters, `Literals`). A file, `steps`,
+names the steps that run: run 1b's are `variants` and `caller`; `wp`,
+`agree` and `eva` measured P0 in run 1, and will measure the variant the
+author picks. Run 1's finding 1 is fixed: the tools' lines that GitHub
+would read as commands are printed behind "| ".
+
+**Choosing.** The author picks after the scoring. This record proposes
+the first of A, B, C and D, in that order, whose lemma, if it has one, and
+every goal of `diag_push` are proved: the smallest change that does.
+
+**Measured here**, with Frama-C 25 and gcc 13:
+
+- **Frama-C 25 parses and types** each variant and `p_caller.c`, with
+  `frama-c-diag`'s preprocessing.
+- **`p_caller.c` compiles** with no warning: C99, `-Wall -Wextra
+  -Wpedantic -Werror`.
+- **Eva's `diag.c`**, at the three models Frama-C 25 reads: with A and B,
+  its block differs from its pin as with P0, in two lines, `snprintf`'s
+  call at line 1040 (A) and 1028 (B). With C and D, also in two lines
+  more: Eva does not decide the two assertions and lists them as unknown
+  (`snprintf`'s call at 1049 and 1047). Eva's pins would carry them if C
+  or D were chosen.
+- **The probe's five steps**, with a stand-in for frama-c (Eva the local
+  Frama-C 25), on a copy of this checkout: `variants` and `caller` post a
+  notice for each variant and each run, `wp`, `agree` and `eva` that they
+  did not run; with `steps` naming them, they run as in run 1, and
+  `agreement.py`'s notices and error come out behind "| ".
+
+Not run here: WP, at all.
+
+**The workflows.** `tools/which_workflows.py`: 1 to 6, 8 and 9 run;
+`probes.yml` changes, so every probe runs.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| E1 | **1 to 6, 8 and 9 run**, and no other. | another set | H |
+| E2 | **1 to 6 and 8 are green**, each job with the notices of its last run (1, 3, 4, 5 and 6 #54, 2 #72, 8 #80), times and GitHub's own on the macOS runners' capacity aside. | a failure, or another notice | H: nothing they build or read changes. |
+| E3 | **The nine older probes are green**, each with #19's notices, times aside. | a failure, or another notice | M–H: a WP goal near its prover's limit could fall either way. |
+| E4 | **The diag_push probe's job is green**: `variants` posts a notice for each of the five, `caller` one for each of its six runs, and `wp`, `agree` and `eva` each one that it did not run. | a failure, or a notice missing | H |
+| E5 | **P0: as in run 1.** Of `diag_push`'s goals, `push_frame_strings`' parts 5 to 7 and 11 to 13 are unproved, and only they. The log has WP's text of `push_frame_strings`' goals. | another goal unproved or one of the six proved; no text | M–H: the same goals as run 1's; a proof near 120 s could fall either way. |
+| E6 | **A: `strlen_kept` is proved.** | the lemma unproved, or no goal of it | M–H: the libc's axioms give it in three instantiations. |
+| E7 | **A: every goal of `diag_push` is proved.** | a goal unproved | L–M: the lemma takes `strlen` off the provers, not the writes: each byte of `file` must still be shown kept across up to three of them. |
+| E8 | **B: as P0**, the same six parts unproved. | another set | M: in WP's typed model the cast keeps the pointer's value (it warns and keeps it), so the separation says the same with it or without. |
+| E9 | **C: the lemma, both assertions and every goal of `diag_push` are proved.** | a goal unproved | M: each assertion asks the writes alone, as `memcpy`'s separation, proved in run 1, asks them of `msg`; `push_frame_strings` then asks only the lemma, with the assertions as its premise. |
+| E10 | **D: as C**, every goal proved. | a goal unproved | M |
+| E11 | **The caller without `-wp-literals`** (P0): each push's `push_msg_read`, `push_file_read` and `push_func_read` are unproved. | one of them proved | H: without a literal's bytes, WP has no `strlen` of it. |
+| E12 | **The caller with `-wp-literals`**, every variant: every precondition of both pushes is proved. | one unproved | M: each literal's `strlen` follows from its bytes; the second push reads its literals after the first push's writes, which are to `d`, another object. |
+| E13 | **The caller with `-wp-literals`: `diag_render`'s `r_strings` is proved with A, C and D**, and not with P0 and B. | another split | L–M: the first frame's strings must be carried across the second push; the lemma gives `strlen`, the bytes are in another object. Without it, the provers face what they did not do in `diag_push`. |
+| E14 | **The caller with `-wp-literals`: no goal of it is unproved but `r_strings`'** (E13), with any variant. | another goal unproved | M |
+
+**What follows.** E1 to E14 scored, and the author picks a variant, or
+none. With one picked, run 1c: `diag_push.patch` becomes it and `steps`
+names `wp`, `agree` and `eva`, which measure it as they measured P0 in run
+1; only 8 and 9 run, since it changes nothing outside `tools/` and `docs/`.
+Then run 2 makes the change, pinned from run 1c.
