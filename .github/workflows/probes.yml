@@ -46,6 +46,8 @@ on:
       - 'tools/eva/programs/arena.c'
       - 'tools/eva/programs/eva_program.h'
       - 'tools/agreement/agreement.py'
+      - 'tools/probes/verify-073/**'
+      - 'tools/eva/programs/diag.c'
   workflow_dispatch:
 
 concurrency:
@@ -70,6 +72,7 @@ jobs:
       pointer: ${{ steps.f.outputs.pointer }}
       char: ${{ steps.f.outputs.char }}
       evaerror: ${{ steps.f.outputs.evaerror }}
+      diagpush: ${{ steps.f.outputs.diagpush }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -78,7 +81,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
-          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/ptr.h", "data/vec/**", "data/deque/**", "data/stack.h", "vmacros/vdrivers/**", "data/priority_queue.h", "data/stringbuf.h", "core/region.h", "semantics/borrow.h"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"]}'
+          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/ptr.h", "data/vec/**", "data/deque/**", "data/stack.h", "vmacros/vdrivers/**", "data/priority_queue.h", "data/stringbuf.h", "core/region.h", "semantics/borrow.h"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"], "diagpush": ["tools/probes/verify-073/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/diag.c", "tools/eva/programs/eva_program.h"]}'
         run: |
           python3 - <<'PY'
           import json, os, subprocess, fnmatch
@@ -818,4 +821,70 @@ jobs:
         with:
           name: evaerror-probe
           path: evaerror_out
+          retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # diag_push probe (VERIFY-073, diag_push's contract before it lands)
+  #
+  # VERIFY-073: an experiment, not a gate. It runs when the probe, this file,
+  # the toolchain pins, or what the probe reads of 13 · Prover agreement and
+  # 14 · Eva (tools/agreement/agreement.py, tools/eva/eva.py, diag.c's
+  # program) change, and on demand.
+  #
+  # QUESTION: with diag_push's contract stating the earlier frames kept
+  # whole, file and func NULL or strings outside *d, the new frame
+  # renderable, and a full chain shifted one frame at a time instead of with
+  # memmove, what do frama-c-diag's WP command, its prover agreement and
+  # 14 · Eva's diag.c give? The enforced jobs read semantics/diag.h as it is;
+  # VERIFY-073's change pins what this probe measures.
+  #
+  # PROBE: tools/probes/verify-073/diagpush_probe.py applies diag_push.patch
+  # to a copy of the checkout, or finds it applied, and runs there
+  # frama-c-diag's command, WP with each prover alone, and Eva on diag.c at
+  # the ten models. Report-only: it prints the goals not proved, the
+  # would-be tools/agreement/pins/frama-c-diag.txt and each Eva block's
+  # difference from its pin, posts notices, and fails only if the patch
+  # neither applies nor is found applied, or a step gives no data. The
+  # enforced tools it runs (agreement.py, eva.py) have their workflow
+  # commands shown as text, so that a difference from their pins, which is
+  # what the probe measures, is not an error annotation here. Each step's
+  # files are the artifact diagpush-probe. Its predictions and their scores
+  # are VERIFY-073's, in docs/deviations.md.
+  # -------------------------------------------------------------------------
+  diagpush-probe:
+    needs: changes
+    if: needs.changes.outputs.diagpush == 'true'
+    # Pinned, not ubuntu-latest: see the runner note in
+    # ci.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    # WP with three provers, then with each alone, then Eva at ten models;
+    # setup can take 47 minutes when its cache misses (VERIFY-060 run 1).
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+
+      - name: "WP: frama-c-diag's command, with the patch"
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-073/diagpush_probe.py wp
+
+      - name: "Prover agreement: frama-c-diag, each prover alone, with the patch"
+        if: ${{ !cancelled() }}
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-073/diagpush_probe.py agree
+
+      - name: "Eva: diag.c at the ten models, with the patch"
+        if: ${{ !cancelled() }}
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-073/diagpush_probe.py eva
+
+      - name: Upload each step's output (diag_push probe)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: diagpush-probe
+          path: diagpush_out
           retention-days: 90
