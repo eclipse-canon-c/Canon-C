@@ -34062,3 +34062,180 @@ The push of 808be14, 470467d and 9610ceb started `1 · Build & test` #53,
 All six match, and VERIFY-072 closes: `random_i32_range` covers every
 `i32` range, and the float ranges never return `max`, end for every
 input, and give the old value for every draw the old code got right.
+
+---
+
+## VERIFY-073: Pre-registration — diag_push's Contract Kept Whole: the Earlier Frames, a Renderable New Frame, and a Shift WP Can Follow; Run 1, a Probe
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-073 |
+| **Date**       | 2026-11-12 |
+| **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 9610ceb (VERIFY-072); `1`, `3`, `4`, `5` and `6` #53, `2 · Platforms` #71 and `8 · Records` #79 on it; `9 · Probes` #15 (b5042af), #17 (b0e644d) and #18 (7ecd37c), each probe's last run. |
+| **Scope**      | Run 1: `tools/probes/verify-073/` (`diag_push.patch`, `diagpush_probe.py`, `README.md`); `.github/workflows/probes.yml`, the job `diagpush-probe`; the workflow map's row 9. Run 2: `semantics/diag.h`'s `diag_push`, its contract and its shift, with the pins and documents that read it; `test/semantics/diag_test.c`; two comments in `semantics/`. |
+| **Category**   | VERIFY-066's run 2, "Found while reading", 1: fixed. Run 1 measures the change in CI before it lands (report-only); run 2 makes it, pinned from run 1. |
+
+### What is wrong
+
+`diag_render`, `diag_render_frame` and `diag_print` require each frame they
+read to be renderable: its `file` and `func` NULL or strings, its message
+terminated (`frame_strings_ok`). `diag_push`'s contract does not give that
+to its caller:
+
+- of the frames before the one it pushes, it states that their `code` is
+  kept (`push_frames_preserved`, `push_shift_semantics`), not their
+  strings or their message;
+- of the new frame, it states that its `file` and `func` are the
+  arguments, and asks nothing of the arguments.
+
+So a program proved with WP, which knows `diag_push` by its contract
+alone, cannot call `diag_render` after a push. The body is right: it keeps
+the frames whole, and moves them whole when the chain is full. VERIFY-066's
+run 2 found it, reading the three calls Eva leaves undecided in `diag.c`.
+
+The shift is the other half. A full chain drops its oldest frame with a
+`memmove` of the other seven, which WP reads by its specification, a copy
+of bytes, and under Typed+Cast cannot carry the typed frames across. Seven
+of `frama-c-diag`'s eight unproved goals are there (VERIFY-017):
+`memmove`'s `valid_dest` and `valid_src`, `push_shift_semantics`' parts 5
+to 7, and the assigns' exit part 2 and normal part 3. The eighth is
+`diag_init`'s `memset`.
+
+### What is decided
+
+The author chose, on 2026-11-12:
+
+- **the shift is a loop**, one frame at a time, `d->frames[i] =
+  d->frames[i + 1]` for `i` from 0 to 6, with invariants WP can use,
+  instead of `memmove`;
+- **`file` and `func` are required** to be NULL or strings whose bytes lie
+  outside `*d`, as `__FILE__` and `__func__` do. A string inside `*d`, a
+  frame's own message say, could be overwritten by the push that keeps a
+  pointer to it.
+
+`tools/probes/verify-073/diag_push.patch` is the change to
+`semantics/diag.h`:
+
+- `push_frames_preserved` and `push_shift_semantics` state whole frames:
+  `d->frames[j] == \old(d->frames[j])`, and `== \old(d->frames[j + 1])`;
+- `push_file_read`: `file == \null || (valid_read_string(file) &&
+  \separated(file + (0 .. strlen(file)), (char *)d + (0 .. sizeof(Diag) -
+  1)))`, and `push_func_read` the same of `func`;
+- `push_frame_strings`: `frame_strings_ok(d->frames[d->depth - 1])`;
+- the loop, with `shift_bounds`, `shift_done` (each frame before `i` is
+  the next one as at the loop's entry), `shift_rest` (each from `i` on is
+  as at the loop's entry), its assigns and its variant;
+- the documentation: the complexity table's "frame-by-frame shift", the
+  shift's cost, the two `@param`, and why.
+
+Every clause the contract had stays; the two it changes say more.
+
+### Run 1, a probe
+
+WP runs only in CI: Frama-C 29 cannot be installed here (VERIFY-060). And
+`frama-c-diag`, its agreement pins and Eva's `diag.c` are enforced, so a
+change to `diag.h` whose results are not known would fail them, and their
+pins would be written blind. Run 1 measures the change without making it.
+`tools/probes/verify-073/diagpush_probe.py`, in `9 · Probes`
+(`diagpush-probe`, report-only), applies the patch to a copy of the
+checkout and runs there, in three steps:
+
+- `wp`: `frama-c-diag`'s command; its summary, and each goal not proved;
+- `agree`: `13 · Prover agreement`'s unit `frama-c-diag`, WP with each
+  prover alone; the goals one or two provers prove, as its pin file would
+  list them, each of `diag_push`'s goals with the provers that prove it,
+  and the comparison with the pins as they are;
+- `eva`: Eva's `diag.c` at the ten models, each against its pin.
+
+`agreement.py` and `eva.py` exit 1 on a difference from their pins, and
+`agreement.py` posts an error annotation. Here a difference is the
+measurement: the probe shows the tools' workflow commands as text, and
+posts its own notices. It fails only if the patch neither applies nor is
+found applied, or a step gives no data. Each step's files are kept as the
+job's artifact, `diagpush-probe`; its log has every name and line the
+predictions below are scored by.
+
+### Measured here
+
+With Frama-C 25.0 (Eva, no WP), gcc 13.3.0 and 14, clang 18.1.3,
+arm-none-eabi-gcc 13.2.1 and VERIFY-070's size measure, the patch applied:
+
+- **Frama-C 25 parses and types every annotation** of the patched
+  header, with `-c11` and `frama-c-diag`'s preprocessing.
+- **Eva's `diag.c`**, at the three models Frama-C 25 reads (`x86_64`,
+  `ppc_32` and `msvc_x86_64`; not the YAML ones), where it gives `diag.c`
+  as pinned with the header as it is, reaches its end, and its block
+  differs from its pin in two lines. Its summary's preconditions go
+  from 76/4/0 to 82/4/0: the two new requires, valid at each of `diag.c`'s
+  four pushes and as clauses of `diag_push`, ten, less `memmove`'s two at
+  its call and two of its own. And `diag_render`'s call of `snprintf`,
+  undecided as before, is at line 1030, not 998: the patch adds 32 lines
+  above it. The three calls Eva leaves undecided in `diag.c` stay so: Eva
+  reads `diag_push`'s body, not its contract, and does not decide
+  `frame_strings_ok` there. Nor does it decide the loop's `shift_done` and
+  `shift_rest`, over whole frames (assertions 4/1/0 to 5/3/0), which the
+  pins do not count: those are WP's.
+- **`diag_test` passes** with gcc 13 and 14 under ASan and UBSan, gcc 13
+  and 14 and clang 18 at `-O3` (Release), clang 18 at `-O0`, and gcc 13
+  with `CANON_NO_REQUIRE` and `--coverage`. clang's sanitizers are not
+  installed here.
+- **A program of its own** pushes eight frames, each with its own file,
+  function, line, code and message, and a ninth whose message is too long
+  to keep whole. Each of the first seven frames is then the next one
+  before it, in every field; the new frame is the ninth push's, its
+  message cut to 127 characters; and `diag_render` writes the seven kept
+  frames and the new one, in order, and not the dropped one. It gives the
+  same with the header as it is, with gcc 13 under ASan and UBSan, gcc 14
+  at `-O3` and clang 18 at `-O2`: the body did keep the frames whole.
+- **For Cortex-M4**, `diag_push` compiles with no warning at `-Os` and
+  `-O2`, C99, `-Wall -Wextra -Wpedantic -Werror`.
+- **The cost**: at `-Os`, none, on the three targets, as shipped and with
+  checks off. At `-O2`, from 2 to 12 bytes more: Cortex-M0+ with checks off
+  922 to 924, Cortex-M4 with checks off 758 to 770, RV32 as shipped 1034
+  to 1036 and with checks off 966 to 972. The tokens, 2015 to 2020. These
+  five figures are `semantics/diag.h`'s pins to change in run 2.
+
+Not run here: WP, at all; Eva at the seven YAML models; MSVC and macOS.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 6, 8 and 9 run; 7 and 10 to 14 do not.
+`.github/workflows/probes.yml` changes, which 1 to 6 do not ignore, and in
+9 every probe runs, since each watches `probes.yml`. No probe's own files
+have changed since its last run.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| D1 | **1 to 6, 8 and 9 run**, and no other. | another set | H |
+| D2 | **1 to 6 and 8 are green**, each job with the notices of its last run (1, 3, 4, 5 and 6 #53, 2 #71, 8 #79), times and GitHub's own on the macOS runners' capacity aside. | a failure, or another notice | H: nothing they build or read changes. |
+| D3 | **The nine older probes are green**, each with the notices of its last run: #15 for G11, Count, G19, Round 3 and the char probe; #17 for the Eva error probe; #18 for G4, G13 and the pointer probe. Times aside. | a failure, or another notice | M–H: a WP goal near its prover's limit could fall either way; and five of them read headers VERIFY-068 changed after #15 and #17 (a declaration in `contract.h`, two preprocessor tests in `limits.h`, comments and `mem_copy`'s `restrict` in `memory.h`, an `#include` in `vec_impl.h`), on which the proof jobs that read the same headers have run since, their pins held. |
+| D4 | **The diag_push probe's job is green**, and each of its three steps posts its notices. | a failure, or a step without its counts | H |
+| D5 | **WP gives a summary, no goal of `memmove`, and `memset`'s goal unproved.** No goal is Invalid; `typed_cast_diag_init_call_memset_requires_valid_s` is Timeout or Unknown, as in every run of `frama-c-diag`. | no summary, a goal Invalid, a goal of `memmove`, or the `memset` goal proved | H |
+| D6 | **The loop is proved**: its three invariants, established and preserved, its assigns, its variant, and the accesses to `d->frames[i]` and `d->frames[i + 1]`. | any of them unproved | M: each invariant compares whole frames, their 128-character messages with them, across a write to one frame. |
+| D7 | **`push_shift_semantics` and `push_frames_preserved` are proved in every part**, the shift's parts included, and so are the assigns goals `memmove` left unproved. | a part unproved | M: they rest on D6, and on WP keeping the earlier frames across the new frame's writes, as it did for their `code`. |
+| D8 | **`push_frame_strings` is proved in every part.** | a part unproved | L–M: its message is `push_msg_terminated`'s, proved since VERIFY-017; but `file` and `func` need WP to keep a string's `strlen` across writes separated from it. In `vec_fmt.h`'s loop (VERIFY-042) only CVC5 proves that, in over 30 s (13's pins: "one CVC5", "slow CVC5"), across one write; here there are up to three: the loop's, `memcpy`'s and the terminator's. |
+| D9 | **Each prover alone: the three runs report, and `diag_render`'s sixteen lines are as pinned** (`render_terminated` parts 1 to 16, two: Alt-Ergo+CVC5). `diag_push`'s lines are not: its accesses and parts are numbered anew, and its new goals are classed. | a run without a report, or a `diag_render` line not as pinned | M–H: `diag_render` does not change, and its lines have held in every run of `frama-c-diag` in 13 since VERIFY-065 pinned them. |
+| D10 | **The goals no prover proves alone are the goals the combined run leaves unproved** (D5 to D8). | the two sets differ | M: a proof near 120 s could fall either way in one of the four runs. |
+| D11 | **Eva: at each of the ten models, `diag.c` reaches its end, and its block differs from its pin in two lines**, as measured here: preconditions 76/4/0 to 82/4/0, and `snprintf`'s call at line 1030, not 998. The notice reads, for each model, "not as pinned, 2 line(s) of the pin out and 2 in, preconditions 82/4/0". | another difference, at any model | H at the three models measured here, where Frama-C 25 gives `diag.c`, with the header as it is, as 14 pins it; M–H at the seven Frama-C 25 cannot read. |
+
+**What follows.** D1 to D11 scored. Then run 2, pre-registered from the
+probe's results:
+
+- If `memset`'s goal is the only one unproved, the patch goes into
+  `semantics/diag.h`, and with it: `frama-c-diag`'s count and its one
+  unproved goal; its agreement pins, the probe's would-be file; Eva's
+  `diag.c` blocks at the ten models; `diag.h`'s size row, measured here;
+  VERIFY-017's ledger, `docs/verification.md`'s `diag.h` section and the
+  header's own notes; the Eva pins' argument for `diag.c`'s three calls,
+  which then hold by the contract too; a test in `diag_test.c` that a push
+  to a full chain keeps every other frame whole, and renders after it; and
+  VERIFY-071's findings 4 and 5, the comments in `semantics/error.h` and
+  `option.h`.
+- If goals stay unproved, the author decides between keeping them as
+  argued residuals, as VERIFY-017's are, and a form the provers prove (an
+  ACSL lemma that keeps `strlen` across a write separated from the string,
+  say, or the invariants stated field by field), which the probe measures
+  again before run 2.
