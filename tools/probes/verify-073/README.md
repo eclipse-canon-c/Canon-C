@@ -3,8 +3,8 @@
 `diag_push`'s contract kept only the `code` of the frames before the one it
 pushes. A program proved with WP alone could therefore not call
 `diag_render` after two pushes, although the body keeps the frames whole
-(VERIFY-066, "Found while reading"). `diag_push.patch` changes
-`semantics/diag.h`:
+(VERIFY-066, "Found while reading"). Run 1's patch, kept as
+`variants/p0_run1.patch` (P0), changed `semantics/diag.h`:
 
 - `push_frames_preserved` and `push_shift_semantics` state the earlier
   frames kept whole (`d->frames[j] == \old(...)`), not only their `code`;
@@ -17,10 +17,10 @@ pushes. A program proved with WP alone could therefore not call
 
 Run 1 found every goal of it proved but 6 of `push_frame_strings`' 13
 parts: that `file` and `func` are still strings after the push. Run 1b
-measures four variants of the patch, each under `variants/`, a whole patch
-of `diag.h` from the checkout:
+measured four variants of it, each under `variants/`, a whole patch of
+`diag.h` from the checkout; none proved them:
 
-| variant | patch | what it adds to `diag_push.patch` (P0) |
+| variant | patch | what it adds to P0 |
 |---------|-------|------------------------------------------|
 | A | `a_lemma.patch` | the lemma `strlen_kept`: a string keeps its length where its bytes are kept |
 | B | `b_nocast.patch` | `file`'s and `func`'s separation from `*d` written as `\separated(..., d)`, without the casts |
@@ -28,7 +28,13 @@ of `diag.h` from the checkout:
 | D | `d_all.patch` | C and B |
 
 And `p_caller.c`, a program proved with WP alone that pushes two frames
-and renders the chain, the use VERIFY-066 found the contract did not allow.
+and renders the chain, the use VERIFY-066 found the contract did not allow;
+no variant let WP prove it.
+
+So `diag_push.patch`, the change run 2 makes, is P0 without
+`push_frame_strings` and without the two requires that served only it: the
+earlier frames kept whole and the frame-by-frame shift, with the header's
+notes to match. Run 1c measures it.
 
 WP runs only in CI, and the units that read `diag.h` are enforced against
 their pins. `diagpush_probe.py` applies a patch to a copy of the checkout
@@ -43,7 +49,8 @@ and measures there what the change's own run will be compared with:
 | `eva` | `tools/eva/programs/diag.c` at the ten machine models, each against its pin | `14 · Eva` |
 
 `wp`, `agree` and `eva` measure `diag_push.patch`. The file `steps` names
-the steps that run; a step it does not name posts that it did not run.
+the steps that run (run 1c: `wp`, `agree` and `eva`); a step it does not
+name posts that it did not run.
 
 It runs in `9 · Probes` (`probes.yml`, `diagpush-probe`), report-only: it
 fails only if a patch neither applies nor is found applied, or a step

@@ -5,19 +5,22 @@ contract and frame-by-frame shift, measured before the header changes.
 
 diag_push's contract kept only the code of the frames before the one it
 pushes, so a program proved with WP alone could not call diag_render after two
-pushes (VERIFY-066, "Found while reading"). diag_push.patch states the frames
-kept whole, asks that file and func be NULL or strings outside *d, promises the
-new frame renderable, and shifts a full chain one frame at a time instead of
-with memmove, whose byte copy WP cannot follow.
+pushes (VERIFY-066, "Found while reading"). Run 1's patch (variants/
+p0_run1.patch, P0) stated the frames kept whole, asked that file and func be
+NULL or strings outside *d, promised the new frame renderable, and shifted a
+full chain one frame at a time instead of with memmove, whose byte copy WP
+cannot follow. WP proved all of it but the promise (runs 1 and 1b), so
+diag_push.patch, the change run 2 makes, keeps the rest: the frames kept whole
+and the shift (run 1c).
 
 WP runs only in CI. This probe applies a patch to a copy of the checkout and
 measures there what the change's run will be compared with, while the enforced
 jobs keep reading the header as it is. Its steps:
 
   variants  diag_push's goals, and its lemma if it has one, with each of
-            VERIFY-073's variants (run 1b): P0, which is diag_push.patch, and
-            A to D, under variants/. And for P0, WP's text of the goals of
-            push_frame_strings, the postcondition run 1 left 6 parts of.
+            VERIFY-073's variants (run 1b): P0 and A to D, under variants/.
+            And for P0, WP's text of the goals of push_frame_strings, the
+            postcondition run 1 left 6 parts of.
   caller    p_caller.c, a program proved with WP alone that pushes two frames
             and renders the chain, with each variant: with -wp-literals, and
             for P0 also without.
@@ -77,7 +80,7 @@ PRINTED = 8000   # lines of WP's text of the goals the log shows
 
 # VERIFY-073's variants (run 1b): name, patch, its lemma, what it is.
 VARIANTS = [
-    ('P0', 'diag_push.patch', None, "run 1's patch"),
+    ('P0', 'variants/p0_run1.patch', None, "run 1's patch"),
     ('A', 'variants/a_lemma.patch', 'strlen_kept', 'P0 and the lemma strlen_kept'),
     ('B', 'variants/b_nocast.patch', None,
      "P0, with file's and func's separation from *d written without casts"),
@@ -225,7 +228,7 @@ def step_variants():
 def step_caller():
     """p_caller.c with each variant, with -wp-literals; P0 also without."""
     runs = [(n, rel, ['-wp-literals']) for n, rel, _, _ in VARIANTS]
-    runs.insert(1, ('P0', 'diag_push.patch', []))
+    runs.insert(1, ('P0', 'variants/p0_run1.patch', []))
     summary, unproved = [], []
     for name, rel, lit in runs:
         how_lit = 'with -wp-literals' if lit else 'without -wp-literals'

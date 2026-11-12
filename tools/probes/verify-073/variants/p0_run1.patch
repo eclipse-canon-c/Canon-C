@@ -1,0 +1,117 @@
+diff --git a/semantics/diag.h b/semantics/diag.h
+index 84da21a..6ba0515 100644
+--- a/semantics/diag.h
++++ b/semantics/diag.h
+@@ -21,7 +21,7 @@
+ #include "semantics/error.h"          /* Error, ERR_OK */
+
+ /* Standard library headers required by this file */
+-#include <string.h>  /* memmove, memcpy */
++#include <string.h>  /* memcpy */
+ /* cppcheck-suppress misra-c2012-21.6 ; MISRA-DEV-016 */
+ #include <stdio.h>   /* FILE, fprintf, snprintf */
+
+@@ -127,7 +127,7 @@ extern int fprintf(FILE *stream, const char *format, ...);
+  *   diag_init             | O(N × M)      | O(1)  (returns by value)
+  *   diag_clear            | O(1)          | O(1)
+  *   diag_push             | O(M) normal   | O(1)
+- *                         | O(N × M) overflow (memmove shift)
++ *                         | O(N × M) overflow (frame-by-frame shift)
+  *   diag_depth            | O(1)          | O(1)
+  *   diag_has_error        | O(1)          | O(1)
+  *   diag_frame_at         | O(1)          | O(1)
+@@ -360,13 +360,18 @@ static inline void diag_clear(Diag *d)
+  * __FILE__, __LINE__, and __func__ are captured automatically.
+  *
+  * Time:  O(M) normal (message copy).
+- *        O(N × M) on overflow (memmove shifts N-1 frames, each ~M bytes).
++ *        O(N × M) on overflow (shifts N-1 frames, each ~M bytes, one by one).
++ *
++ * The earlier frames are kept whole, and the new frame's strings are
++ * readable, so that diag_render can be called after any push, by a program
++ * proved with this contract alone (VERIFY-073).
+  * Space: O(1).
+  *
+  * @param d     Diag chain. NULL-safe: no-op, returns false.
+- * @param file  Source file name (string literal).
++ * @param file  Source file name (string literal), or NULL. A string
++ *              must lie outside *d (contract).
+  * @param line  Source line number.
+- * @param func  Function name (string literal).
++ * @param func  Function name (string literal), or NULL; as file.
+  * @param code  Error code for this propagation level.
+  * @param msg   Short context message (copied; may be NULL).
+  * @return      true if the oldest frame was dropped due to overflow,
+@@ -386,6 +391,16 @@ static inline void diag_clear(Diag *d)
+     requires push_no_alias:  msg == \null ||
+              \separated(msg + (0 .. strlen(msg)),
+                         (char *)d + (0 .. sizeof(Diag) - 1));
++    // VERIFY-073: the new frame keeps file and func, which diag_render
++    // reads as strings; outside *d, the push cannot change them.
++    requires push_file_read: file == \null ||
++             (valid_read_string(file) &&
++              \separated(file + (0 .. strlen(file)),
++                         (char *)d + (0 .. sizeof(Diag) - 1)));
++    requires push_func_read: func == \null ||
++             (valid_read_string(func) &&
++              \separated(func + (0 .. strlen(func)),
++                         (char *)d + (0 .. sizeof(Diag) - 1)));
+     assigns d->depth, d->frames[0 .. DIAG_MAX_FRAMES - 1];
+     ensures push_depth_bounds: 1 <= d->depth <= DIAG_MAX_FRAMES;
+     ensures push_depth_step:
+@@ -402,14 +417,17 @@ static inline void diag_clear(Diag *d)
+       \exists integer k;
+         0 <= k < DIAG_MAX_MSG_LEN
+         && d->frames[d->depth - 1].message[k] == '\0';
++    // VERIFY-073: the new frame is renderable (diag_render's r_strings).
++    ensures push_frame_strings: frame_strings_ok(d->frames[d->depth - 1]);
++    // VERIFY-073: the earlier frames are kept whole, not only their code.
+     ensures push_shift_semantics:
+       \old(d->depth) == DIAG_MAX_FRAMES ==>
+         (\forall integer j; 0 <= j < DIAG_MAX_FRAMES - 1 ==>
+-           d->frames[j].code == \old(d->frames[j + 1].code));
++           d->frames[j] == \old(d->frames[j + 1]));
+     ensures push_frames_preserved:
+       \old(d->depth) < DIAG_MAX_FRAMES ==>
+         (\forall integer j; 0 <= j < \old(d->depth) ==>
+-           d->frames[j].code == \old(d->frames[j].code));
++           d->frames[j] == \old(d->frames[j]));
+
+   complete behaviors;
+   disjoint behaviors;
+@@ -424,6 +442,7 @@ static inline bool diag_push(Diag       *d,
+     bool       dropped;
+     DiagFrame *f;
+     usize      len;
++    usize      i;
+
+     if (d == NULL) {
+         return false;
+@@ -436,10 +455,23 @@ static inline bool diag_push(Diag       *d,
+     dropped = false;
+
+     if (d->depth == DIAG_MAX_FRAMES) {
+-        /* Chain full: discard oldest frame, shift remaining frames down. */
+-        (void)memmove(&d->frames[0],
+-                &d->frames[1],
+-                (DIAG_MAX_FRAMES - 1u) * sizeof(DiagFrame));
++        /* Chain full: discard the oldest frame and shift the rest down one
++         * frame at a time, a copy WP follows; a memmove of their bytes it
++         * could not (VERIFY-073). */
++        /*@
++          loop invariant shift_bounds: 0 <= i <= DIAG_MAX_FRAMES - 1;
++          loop invariant shift_done:
++            \forall integer j; 0 <= j < i ==>
++              d->frames[j] == \at(d->frames[j + 1], LoopEntry);
++          loop invariant shift_rest:
++            \forall integer j; i <= j < DIAG_MAX_FRAMES ==>
++              d->frames[j] == \at(d->frames[j], LoopEntry);
++          loop assigns i, d->frames[0 .. DIAG_MAX_FRAMES - 2];
++          loop variant DIAG_MAX_FRAMES - 1 - i;
++        */
++        for (i = 0u; i < (DIAG_MAX_FRAMES - 1u); i++) {
++            d->frames[i] = d->frames[i + 1u];
++        }
+         d->depth--;
+         dropped = true;
+     }

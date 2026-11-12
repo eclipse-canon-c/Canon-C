@@ -1,5 +1,4 @@
 diff --git a/semantics/diag.h b/semantics/diag.h
-index 84da21a..6ba0515 100644
 --- a/semantics/diag.h
 +++ b/semantics/diag.h
 @@ -21,7 +21,7 @@
@@ -11,7 +10,7 @@ index 84da21a..6ba0515 100644
  /* cppcheck-suppress misra-c2012-21.6 ; MISRA-DEV-016 */
  #include <stdio.h>   /* FILE, fprintf, snprintf */
 
-@@ -127,7 +127,7 @@ extern int fprintf(FILE *stream, const char *format, ...);
+@@ -127,7 +127,7 @@
   *   diag_init             | O(N × M)      | O(1)  (returns by value)
   *   diag_clear            | O(1)          | O(1)
   *   diag_push             | O(M) normal   | O(1)
@@ -20,51 +19,40 @@ index 84da21a..6ba0515 100644
   *   diag_depth            | O(1)          | O(1)
   *   diag_has_error        | O(1)          | O(1)
   *   diag_frame_at         | O(1)          | O(1)
-@@ -360,13 +360,18 @@ static inline void diag_clear(Diag *d)
+@@ -250,9 +250,10 @@
+
+    Verification notes (VERIFY-017):
+    - Own residuals are a single class: libc byte-view through Typed+Cast
+-     (the memset/memmove byte specs vs. typed Diag/DiagFrame locations,
+-     VERIFY-007/-008 pattern at two new sites) — 8 goals in
+-     diag_init/diag_push. Round-1's predicted class (b), stdio-intrinsic
++     (the memset byte spec vs. the typed Diag location, VERIFY-007/-008
++     pattern) — 1 goal, in diag_init. diag_push's shift was a memmove,
++     whose byte spec left 7 more until VERIFY-073 made it a loop of frame
++     copies, proved. Round-1's predicted class (b), stdio-intrinsic
+      residuals, did NOT materialize: with sound trusted axioms (see the
+      __FRAMAC__ block at the top of this header) the stdio surface
+      contributes zero residuals, so diag.h adds no new residual class to
+@@ -360,9 +361,14 @@
   * __FILE__, __LINE__, and __func__ are captured automatically.
   *
   * Time:  O(M) normal (message copy).
 - *        O(N × M) on overflow (memmove shifts N-1 frames, each ~M bytes).
 + *        O(N × M) on overflow (shifts N-1 frames, each ~M bytes, one by one).
-+ *
-+ * The earlier frames are kept whole, and the new frame's strings are
-+ * readable, so that diag_render can be called after any push, by a program
-+ * proved with this contract alone (VERIFY-073).
   * Space: O(1).
   *
++ * The frames before the new one are kept whole, each as it was or, when
++ * the chain was full, as the next one was (VERIFY-073). That file and
++ * func are still strings after the push is not stated: WP did not prove
++ * it of the frame as a whole (VERIFY-073, runs 1 and 1b).
++ *
   * @param d     Diag chain. NULL-safe: no-op, returns false.
-- * @param file  Source file name (string literal).
-+ * @param file  Source file name (string literal), or NULL. A string
-+ *              must lie outside *d (contract).
+  * @param file  Source file name (string literal).
   * @param line  Source line number.
-- * @param func  Function name (string literal).
-+ * @param func  Function name (string literal), or NULL; as file.
-  * @param code  Error code for this propagation level.
-  * @param msg   Short context message (copied; may be NULL).
-  * @return      true if the oldest frame was dropped due to overflow,
-@@ -386,6 +391,16 @@ static inline void diag_clear(Diag *d)
-     requires push_no_alias:  msg == \null ||
-              \separated(msg + (0 .. strlen(msg)),
-                         (char *)d + (0 .. sizeof(Diag) - 1));
-+    // VERIFY-073: the new frame keeps file and func, which diag_render
-+    // reads as strings; outside *d, the push cannot change them.
-+    requires push_file_read: file == \null ||
-+             (valid_read_string(file) &&
-+              \separated(file + (0 .. strlen(file)),
-+                         (char *)d + (0 .. sizeof(Diag) - 1)));
-+    requires push_func_read: func == \null ||
-+             (valid_read_string(func) &&
-+              \separated(func + (0 .. strlen(func)),
-+                         (char *)d + (0 .. sizeof(Diag) - 1)));
-     assigns d->depth, d->frames[0 .. DIAG_MAX_FRAMES - 1];
-     ensures push_depth_bounds: 1 <= d->depth <= DIAG_MAX_FRAMES;
-     ensures push_depth_step:
-@@ -402,14 +417,17 @@ static inline void diag_clear(Diag *d)
+@@ -402,14 +408,15 @@
        \exists integer k;
          0 <= k < DIAG_MAX_MSG_LEN
          && d->frames[d->depth - 1].message[k] == '\0';
-+    // VERIFY-073: the new frame is renderable (diag_render's r_strings).
-+    ensures push_frame_strings: frame_strings_ok(d->frames[d->depth - 1]);
 +    // VERIFY-073: the earlier frames are kept whole, not only their code.
      ensures push_shift_semantics:
        \old(d->depth) == DIAG_MAX_FRAMES ==>
@@ -79,7 +67,7 @@ index 84da21a..6ba0515 100644
 
    complete behaviors;
    disjoint behaviors;
-@@ -424,6 +442,7 @@ static inline bool diag_push(Diag       *d,
+@@ -424,6 +431,7 @@
      bool       dropped;
      DiagFrame *f;
      usize      len;
@@ -87,7 +75,7 @@ index 84da21a..6ba0515 100644
 
      if (d == NULL) {
          return false;
-@@ -436,10 +455,23 @@ static inline bool diag_push(Diag       *d,
+@@ -436,10 +444,23 @@
      dropped = false;
 
      if (d->depth == DIAG_MAX_FRAMES) {

@@ -1,4 +1,4 @@
 # The steps of diagpush_probe.py that run; the others post that they did not.
-# VERIFY-073 run 1b: the variants and the caller. wp, agree and eva measured
-# diag_push.patch in run 1, and measure the variant the author picks next.
-variants caller
+# VERIFY-073 run 1c: wp, agree and eva measure diag_push.patch, the change
+# run 2 makes. variants and caller measured run 1b's variants.
+wp agree eva
