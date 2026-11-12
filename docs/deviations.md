@@ -34072,9 +34072,9 @@ input, and give the old value for every draw the old code got right.
 | **ID**         | VERIFY-073 |
 | **Date**       | 2026-11-12 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-12 — Run 1 scored: D1 to D7 and D9 to D11 MATCH, D8 MISS. Run 1b scored: E1 to E6, E8 and E11 MATCH, E7, E9, E10 and E12 to E14 MISS: no variant proves `push_frame_strings`, and no variant lets a program proved with WP alone push twice and render. The author chose to land the proved core. Run 1c scored: F1 to F5 and F7 MATCH, F6 MISS ("Run 1c scored", below). Open: run 2. The Status above is the record as committed. |
+| **Status update** | 2026-11-13 — Run 1 scored: D1 to D7 and D9 to D11 MATCH, D8 MISS. Run 1b scored: E1 to E6, E8 and E11 MATCH, E7, E9, E10 and E12 to E14 MISS: no variant proves `push_frame_strings`, and no variant lets a program proved with WP alone push twice and render. The author chose to land the proved core. Run 1c scored: F1 to F5 and F7 MATCH, F6 MISS. Run 2 makes the change, pre-registered below ("Run 2: pre-registration"). The Status above is the record as committed. |
 | **Baseline**   | 9610ceb (VERIFY-072); `1`, `3`, `4`, `5` and `6` #53, `2 · Platforms` #71 and `8 · Records` #79 on it; `9 · Probes` #15 (b5042af), #17 (b0e644d) and #18 (7ecd37c), each probe's last run. |
-| **Scope**      | Run 1: `tools/probes/verify-073/` (`diag_push.patch`, `diagpush_probe.py`, `README.md`); `.github/workflows/probes.yml`, the job `diagpush-probe`; the workflow map's row 9. Run 2: `semantics/diag.h`'s `diag_push`, its contract and its shift, with the pins and documents that read it; `test/semantics/diag_test.c`; two comments in `semantics/`. |
+| **Scope**      | Run 1: `tools/probes/verify-073/` (`diag_push.patch`, `diagpush_probe.py`, `README.md`); `.github/workflows/probes.yml`, the job `diagpush-probe`; the workflow map's row 9. Run 2: `semantics/diag.h`'s `diag_push`, its contract and its shift, with the pins and documents that read it; `test/semantics/diag_test.c`; two comments in `semantics/`; two in `.github/workflows/analysis.yml`. |
 | **Category**   | VERIFY-066's run 2, "Found while reading", 1: fixed. Run 1 measures the change in CI before it lands (report-only); run 2 makes it, pinned from run 1. |
 
 ### What is wrong
@@ -34545,3 +34545,125 @@ Six of the seven match; F6 misses.
 hypotheses fewer, `push_file_read` and `push_func_read`, and seven of them
 moved class. F6 counted the goals the same and the provers' results with
 them. Run 2 pins run 1c's classes, measured on the patch it makes.
+
+### Run 2: pre-registration (2026-11-13)
+
+**What is decided.** Run 2 makes the change the author chose on
+2026-11-12, as run 1c measured it: `semantics/diag.h` is the checkout with
+`tools/probes/verify-073/diag_push.patch` applied, byte for byte. Each pin
+that reads it is set from run 1c's measurement, or from this run's where it
+is measured here:
+
+- **`frama-c-diag`** (`proofs-semantics.yml`): `EXPECTED_PROVED="3073 /
+  3074"`, `EXPECTED_UNPROVED=1`, and one name in the roll-call of its own
+  residuals, `memset`'s, where it had eight; its comments with them.
+- **Its agreement pins** (`tools/agreement/pins/frama-c-diag.txt`): run
+  1c's 36 class lines, as its probe wrote them; and 9 slow lines, the goals
+  a prover proved in over 30 s in run 1c (3) or, under the same name, in run
+  1 (7), one goal in both. Three slow lines go, Z3's on `push_frame_code`
+  part 11, `push_frame_line` part 12 and `copy_scanned` part 4: Z3 took over
+  30 s for them with the `memmove`, and in runs 1 and 1c proved each in
+  under 30 s or not at all.
+- **Eva's pins** (`tools/eva/pins/`, the ten models): `diag.c`'s block, with
+  run 1c's two lines, preconditions 74/4/0 and `snprintf`'s call at line
+  1019.
+- **The size pins** (`tools/size/pins.txt`): `semantics/diag.h`'s row, with
+  the five figures run 1 measured, from `size.py pin`; `docs/code-size.md`'s
+  totals and row.
+- **Two tests** in `test/semantics/diag_test.c`.
+  `test_overflow_shift_keeps_frames_whole` pushes eleven frames into a
+  chain of eight, each with its own file, function, line, code and message,
+  and checks that each of the eight kept is the push it should be, in every
+  field. `test_overflow_then_render` pushes ten and renders: the text is
+  whole, and has the eight kept frames, in order, and neither dropped one.
+- **The documents**: `docs/verification.md`'s card and its `diag.h` section
+  (a note, the expected output, the status row); `docs/traceability.md`'s
+  row and total, and its line on `diag.h`'s MC/DC; the header's own notes;
+  `tools/eva/README.md`'s argument for `diag.c`'s three calls, which cites
+  the contract for the frames kept whole and the body for their strings;
+  and the comments that named the `memmove` or `diag.h`'s 86 condition
+  outcomes: the fuzz entry's in `diag_test.c`, and two in the coverage
+  job's `diag.h` step in `analysis.yml`.
+- **VERIFY-071's findings 4 and 5**: `semantics/error.h`'s comment says
+  `unsigned short`, and `option.h`'s `parse_int` example returns none for a
+  value outside `int`'s range. `docs/implementation-defined.md` marks both
+  corrected.
+
+**Left to the scoring.** Three records name what this push removes:
+VERIFY-017's goal table lists the `memmove`'s seven goals, under a heading
+that counts eight; VERIFY-039 G4's row 8 argues the goals after the
+`memmove`'s write, and excludes two of the seven (`assigns_exit` part 2 and
+`assigns_normal` part 3); and MCDC-009 counts 86 condition outcomes in
+`diag.h`. `8 · Records` takes a name that a push unpins as pending
+(`--pending-from`, the push's base, a11ae90), so the records are restated
+once CI has given the counts, in the scoring, each with a dated note.
+
+**Measured here**, with gcc 13.3.0 and 14, clang 18.1.3, Frama-C 25.0,
+cppcheck 2.13.0, arm-none-eabi-gcc 13.2.1, riscv64-unknown-elf-gcc 13.2.0
+and avr-gcc 7.3.0:
+
+- **`diag.h` is run 1c's**, byte for byte.
+- **The tests.** ctest passes 59 of 59 with gcc 13 and with clang 18 under
+  ASan and UBSan, and with clang 18 in Release. `diag_test` passes with gcc
+  13 and 14 in Release, gcc 14 under ASan and UBSan, clang 18 in Debug, gcc
+  13 with `CANON_NO_REQUIRE` and `--coverage`, gcc 13 with
+  `CANON_LIFETIME=debug` under ASan and UBSan, and under Valgrind. The
+  fuzzing job's `fuzz_diag_test`, with clang 18 and libFuzzer, runs its
+  25 s, 4,092,582 inputs, without a finding.
+- **The static-analysis job's steps**: clang-tidy, 0 errors; cppcheck, its
+  Linux command, exit 0.
+- **The misra job's steps**: "real 57; canary 3; total 60", and "as pinned:
+  57 real finding(s) in 32 file and rule pair(s)": the base's 60 lines, each
+  file, line and rule.
+- **The coverage job's steps**, with gcc 14: "MC/DC 2064 / 2230", where the
+  base gives 2062 / 2228, with #55's eight rows. `diag.h` goes from 84 of 86
+  condition outcomes covered to 86 of 88: the loop's condition, both ways.
+  The two open are MCDC-009's, the clamp and `n < 0`. The job's `diag.h`
+  step prints "Condition outcomes covered:97.73% of 88" for it.
+- **The embedded job's steps**: the compile check, 226 of 226 units at each
+  of the six targets and three levels; the AVR check, "80 headers: 29
+  compile, 49 refused by Tier 1, 2 other"; and the size measure, "as pinned:
+  57 rows, 798 figures", with the notices G3 names.
+- **Eva**, with Frama-C 25: `diag.c` as pinned at `x86_64`, `ppc_32` and
+  `msvc_x86_64`; at `x86_64`, 25 of 26 programs as pinned, `priority_queue`
+  not finishing, as with the header as it is (Frama-C 25 does not parse
+  it). The native job's command: 26 of 26 programs compile and return 0
+  under ASan and UBSan.
+- **`frama-c-diag`'s script**, run with run 1c's WP output in place of
+  `frama-c`'s: PASS, and the notice G7 names.
+- **`8 · Records`' checks** pass, record_coverage with the seven names
+  pending from a11ae90.
+
+Not run here: WP and the provers alone, which run 1c measured with this
+header; Eva at the seven models Frama-C 25 cannot read, which run 1c also
+measured; Windows, macOS, MinGW, i386, AArch64, big-endian, musl and
+CompCert.
+
+**The workflows.** `tools/which_workflows.py`: 1 to 8, 13 and 14 run; 9 to
+12 do not. 13 takes 12 units (`agreement.py affected`): `diag.h` is
+`frama-c-diag`'s, `error.h` is among nine units' files and `option.h` among
+seven's; 36 runs. 7, 13 and 14 last ran at 7ecd37c (VERIFY-068): #28, #9
+and #8. Of what they read, nothing has changed since but in this push.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| G1 | **1 to 8, 13 and 14 run**; 9 to 12 do not. 13 runs the 12 units, 36 runs. | another set | H |
+| G2 | **1 is green**, each job with #55's notices, GitHub's own on the macOS runners' capacity aside. | a failure, or another notice | M–H: measured here in the builds above; Windows, macOS, MinGW and i386 are not run here. |
+| G3 | **2 is green**, each job with #74's notices but the embedded job's size and build cost notices, which read as measured here: cortex-m0plus "-Os 44696 bytes as shipped, 28706 with checks off; -O2 75320 bytes as shipped, 41986 with checks off", cortex-m4 44588, 29080, 71208 and 40556, rv32imac 54684, 33126, 90034 and 48076, each after "51 headers with code, 855 functions at -Os as shipped"; build cost "56 headers alone: 418570 tokens of Canon-C after preprocessing, the most 25271 (data/hashmap/hashmap_range.h)", up to its times. Its pins notice reads "as pinned: 57 rows, 798 figures", as at #74. | a failure, or another notice | H: measured here with the toolchains the job installs. |
+| G4 | **3's coverage job**: "MC/DC 2064 / 2230", with #55's eight cover rows; its `diag.h` step prints 97.73% of 88 condition outcomes for `diag.h`. | another count | H: the job's commands give #55's count here on the base. |
+| G5 | **3's misra job**: #55's notices, "real 57; canary 3; total 60" and "as pinned: 57 real finding(s) in 32 file and rule pair(s)". | another count, or a difference from the pins | H (run here) |
+| G6 | **3's other jobs are green**: static-analysis on Linux, macOS and Windows, and compcert with #55's notice, "60 / 60 compiled, 60 ran". | a failure, or another notice | M–H: clang-tidy and the Linux cppcheck are run here; macOS and Windows install other versions of cppcheck, and CompCert is not run here. |
+| G7 | **4, 5 and 6 give #55's notices, but `frama-c-diag`'s**, which reads "wp_diag_output.txt: proved 3073 / 3074; unproved 1; failed/invalid/stepout 0"; every job green. | another line, or a failure | M–H: run 1c gave 3073 / 3074 with this header and this command, and a proof near 120 s could fall either way. No other job reads `diag.h`, and `error.h` and `option.h` change in comments only. |
+| G8 | **7 gives #28's**: its seven jobs green, without notices. | a failure, or a notice | H: no macro body changes; `option.h`, which one family reads, changes in a comment. |
+| G9 | **8 is green**: record-coverage with the seven names pending from a11ae90, and the size pins line "size pins: 57 rows; 0 problem(s)". | a failure, or another line | H (run here) |
+| G10 | **13 is green**: each of the 12 units reports "Against its pins: 0 difference(s)", and its unproved goals are the names its job pins, `frama-c-diag`'s `memset`'s alone. | a failure, or a difference | M–H for the eleven units whose goals do not change; M for `frama-c-diag`, whose pins come from one run, run 1c. |
+| G11 | **13's counts**: `frama-c-diag`'s three runs give run 1c's, Alt-Ergo 3069 / 3074, Z3 3038 / 3074 and CVC5 3070 / 3074; in each of the eleven other units, each prover's proved count and the goals in all are #9's. | another count | M: a proof near the limit moves a count, as one did in VERIFY-067 (L4). |
+| G12 | **14 is green**, with #8's notices but `diag.c`'s, which at each of the ten models reads "preconditions 74/4/0" where it read 76/4/0, times aside; `eva total` and the native job as #8's. | a failure, or another notice | H: run 1c measured `diag.c` at the ten models with this header, and the native job's command is run here. |
+
+**What follows.** G1 to G12 scored. If they hold, the scoring restates the
+three records above, and VERIFY-073 closes: `diag_push`'s contract keeps
+the earlier frames whole, and its shift is proved; that a frame's `file`
+and `func` are still strings after a push is what the contract does not
+state (runs 1 and 1b). The probe stays in `9 · Probes` as the record of
+runs 1 to 1c; with the patch in the checkout, it measures the checkout as
+it is. Then `file_write_all_atomic` on Windows (VERIFY-071's finding 3).
