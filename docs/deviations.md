@@ -34937,6 +34937,7 @@ supplies, which does not return.
 | **ID**         | VERIFY-075 |
 | **Date**       | 2026-11-13 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-13 — CLOSED: the push of 0062326 and bd82618, with VERIFY-074's scoring, bbbe48f, matched W1 to W6 ("Scored", below). Every job that runs the tests, 40, passes the two new ones, on Linux, macOS and Windows. The Status above is the record as committed. |
 | **Baseline**   | 67a6242 (VERIFY-074): `1`, `3`, `4`, `5` and `6` #57, `2 · Platforms` #76 and `8 · Records` #85, each on 67a6242. VERIFY-074's scoring, which changes documents only and starts only `8`, is pushed before this record or with it. |
 | **Scope**      | New: `integrations/autosar/canon_autosar.h`; its test, `test/integrations/autosar/autosar_test.c`, built twice; three stand-in AUTOSAR headers, in `test/integrations/autosar/stubs/`; `test/integrations/autosar/misra_adapter.h`, the misra job's view of the adapter; `docs/autosar-classic.md`. Changed: `CMakeLists.txt`, the two tests; `.github/workflows/analysis.yml`, the include path of the static-analysis job's Cppcheck and of CompCert, and the misra job's reading of the adapter; `tools/embedded_compile_check.sh`, its include path; `.github/workflows/README.md`, where such a test's include directories go; `README.md`, the Guidelines badges and the documents list; MISRA-DEV-017, ten sites. No library header changes. |
 | **Category**   | The project's item 2 (AUTOSAR Classic), part d: the adapter. One run. |
@@ -35156,3 +35157,38 @@ the workflow map and `docs/deviations.md` start 8.
 parts are then done. Next, CERT C and CWE: clang-tidy's `cert-*` checks,
 Cppcheck's CERT addon, and `docs/cert-cwe.md`, with ISO/IEC TS 17961 and a
 map to CWE.
+
+### Scored (2026-11-13)
+
+The push of bbbe48f (VERIFY-074's scoring), 0062326 and bd82618 started
+seven workflows at 08:49 UTC: `1 · Build & test` #58, `2 · Platforms`
+#77, `3 · Static analysis & coverage` #58, `4 · Proofs: core/` #58, `5 ·
+Proofs: semantics/` #58, `6 · Proofs: data/` #58 and `8 · Records` #86.
+All seven are green, 79 jobs, each at its first attempt; the last, 6,
+finished at 10:18.
+
+| # | scored |
+|---|--------|
+| W1 | **MATCH.** 1 to 6 and 8 ran; 7 and 9 to 14 did not. |
+| W2 | **MATCH.** 1's 27 jobs are green, each with #57's notices. In each of the ten Windows jobs, ctest passes 61 of 61, `autosar_test` and `autosar_bool_test` among them: eight build with MSVC 19.51, the two `mingw` jobs with GCC 16.2.0. |
+| W3 | **MATCH.** 2's 15 jobs are green, each with #76's notices, up to their times, but the embedded check's, which reads "6 targets x 3 levels, 227 units each (84 headers, with and without CANON_NO_GNU_EXTENSIONS, and 59 tests), 0 failed". |
+| W4 | **MATCH.** 3's six jobs are green, each with #57's notices but two: coverage's "MC/DC 2065 / 2232", its eight rows #57's, and compcert's "61 / 61 compiled, 61 ran". static-analysis passes on the three systems, whose Cppcheck, 2.13.0 on Linux and 2.19.0 on macOS and Windows, each reads `autosar_test.c`; the misra job reads `misra_adapter.h`. |
+| W5 | **MATCH.** 4's 13 jobs, 5's five and 6's 11 are green, each with #57's notices. |
+| W6 | **MATCH.** 8's two jobs are green; its size pins line reads "size pins: 57 rows; 0 problem(s)". |
+
+**Six of six.**
+
+**Beyond the predictions.** Each job of 1 and 2 that runs ctest, 40 of
+them, passes both new tests: 39 pass 61 of 61, and `fuzzing`, which
+registers its fuzz targets too, 101 of 101. They cover Linux on x86-64,
+i386, AArch64 and s390x, with glibc and musl; C11, C17 and C23; macOS; and
+Windows. The coverage job's log gives `core/primitives/contract.h` 1 of 4
+condition outcomes in the new tests' two translation units, and lines
+2976 of 3058, functions 759 of 762 and branches 1810 of 1964, as measured
+here.
+
+**Closed.** `integrations/autosar/canon_autosar.h` checks the platform's
+types against Canon-C's, converts `Error` and `bool`, and reports a failed
+contract check to DET before the project's safe state; CI checks it
+against stand-ins for AUTOSAR's headers, not against an AUTOSAR stack.
+Item 2's four parts are done. Next: CERT C and CWE.
