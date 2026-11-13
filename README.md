@@ -37,6 +37,11 @@
 ![LDRA](https://img.shields.io/badge/LDRA-planned-lightgrey)
 ![Astrée](https://img.shields.io/badge/Astr%C3%A9e-planned-lightgrey)
 
+<!-- Guidelines -->
+### Guidelines
+[![MISRA C:2012](https://img.shields.io/badge/MISRA%20C%3A2012-Cppcheck%20addon-green)](docs/misra-campaign.md)
+[![AUTOSAR Classic](https://img.shields.io/badge/AUTOSAR%20Classic-adapter-green)](docs/autosar-classic.md)
+
 <!-- Formal Verification & Timing Analysis -->
 ### Formal Verification & Timing Analysis
 [![MC/DC](https://img.shields.io/badge/MC--DC-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/analysis.yml)
@@ -76,6 +81,13 @@
 > "Configurable" badges name tools and standards you can use Canon-C with.
 > They are not CI results and not certifications — what CI checks, and what
 > its proofs rest on, is in `docs/verification.md`.
+>
+> "Guidelines" badges name a guideline and what Canon-C does about it, each
+> linking to the document that says so. MISRA C:2012: CI checks the library
+> with Cppcheck's MISRA addon, which is not a qualified checker, and every
+> finding it reports is pinned and argued. AUTOSAR Classic: an adapter,
+> checked in CI against stand-ins for the AUTOSAR headers. Neither is a
+> certification.
 
 ---
 
@@ -228,6 +240,12 @@ For current numbers, see:
   integers, how `#include "..."` searches, IEEE 754 floating point, and the
   rest of C99's list, each relied on, not relied on, or passed on to the
   program, with what checks it (MISRA C:2012 Directive 1.1, VERIFY-071).
+- **`docs/autosar-classic.md`** — Canon-C in an AUTOSAR Classic build: the
+  opt-in adapter `integrations/autosar/canon_autosar.h`, which checks the
+  platform's types against Canon-C's, converts `Error` and `bool` to
+  `Std_ReturnType` and `boolean`, and reports a failed contract check to the
+  Default Error Tracer before the project's safe state; and what Canon-C
+  does not do there (VERIFY-075).
 
 All currently unproved goals resist Alt-Ergo, Z3 and CVC5 at a 120-second
 timeout and are pinned in their CI jobs, and each is listed in

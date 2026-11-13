@@ -8835,6 +8835,13 @@ are exactly the checks a MISRA project should want to keep.
 **Mitigation**: per-site inline suppressions; rule 2.3 stays live for genuinely
 unused typedefs.
 
+**Sites added (2026-11-13, VERIFY-075).** Ten more, in
+`integrations/autosar/canon_autosar.h`: its checks of the AUTOSAR
+platform's types against Canon-C's, `uint8` to `sint64` in width and
+signedness, `float32` and `float64` in size. The same idiom, each with the
+same inline suppression; the misra job reads the adapter since VERIFY-075.
+The Scope above counts the sites as filed.
+
 ## MISRA-DEV-019: Rule 15.1 — `goto` to one cleanup label in `file_read_all_arena`
 
 | ID | Date | Scope | Category |

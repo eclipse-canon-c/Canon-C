@@ -44,7 +44,12 @@ still there for detail.
   For a test that needs a second translation unit, list both files under
   `SRC`, and name the second `X_defs.c` beside `X_test.c` so that CompCert
   links it too. Every build job then runs it, and the embedded check
-  compiles it, with no workflow edit.
+  compiles it, with no workflow edit. A test that includes from
+  directories outside the library's, as
+  `test/integrations/autosar/autosar_test.c` does (VERIFY-075), needs them
+  on three more include paths: the embedded check's
+  (`tools/embedded_compile_check.sh`), CompCert's and the static-analysis
+  job's Cppcheck's (`analysis.yml`).
 - **A newly verified unit**: a new job in the proof file of its layer
   (`proofs-core.yml`, `proofs-semantics.yml` or `proofs-data.yml`).
   `frama-c-stack` in `proofs-data.yml` is the shortest complete template:

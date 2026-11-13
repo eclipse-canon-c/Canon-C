@@ -17,6 +17,12 @@
 #   *_impl.h, *_mangle.h                — template fragments, reached through
 #                                         the headers that include them
 #
+# The AUTOSAR adapter, integrations/autosar/canon_autosar.h, is compiled
+# through its test, test/integrations/autosar/autosar_test.c, with the
+# stand-in AUTOSAR headers beside the test on the include path (VERIFY-075):
+# it needs a ModuleId and the project's AUTOSAR headers, which the test gives
+# it.
+#
 # data/hashmap/'s five headers need a key and value type first, and each
 # what its documentation asks before it; each is compiled after just that
 # (hashmap_tu below, VERIFY-069), and through the tests that use them
@@ -37,7 +43,7 @@ TARGETS=(
   "riscv64-unknown-elf-gcc --specs=picolibc.specs -march=rv64imac -mabi=lp64 -mcmodel=medany"
 )
 OPTS=(-O0 -Os -O2)
-INC="-I . -I core/primitives -I core -I semantics -I data -I algo -I util"
+INC="-I . -I core/primitives -I core -I semantics -I data -I algo -I util -I integrations/autosar -I test/integrations/autosar/stubs"
 WARN="-std=c99 -Wall -Wextra -Wpedantic -Werror"
 
 mapfile -t HEADERS < <(find core semantics data algo util -name '*.h' \

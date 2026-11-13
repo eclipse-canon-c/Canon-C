@@ -201,6 +201,8 @@ jobs:
             -I "${{ github.workspace }}/algo" \
             -I "${{ github.workspace }}/util" \
             -I "${{ github.workspace }}" \
+            -I "${{ github.workspace }}/integrations/autosar" \
+            -I "${{ github.workspace }}/test/integrations/autosar/stubs" \
             "${{ github.workspace }}/test"
       - name: Run Cppcheck (Windows)
         if: runner.os == 'Windows'
@@ -239,6 +241,8 @@ jobs:
             -I "${{ github.workspace }}/algo" `
             -I "${{ github.workspace }}/util" `
             -I "${{ github.workspace }}" `
+            -I "${{ github.workspace }}/integrations/autosar" `
+            -I "${{ github.workspace }}/test/integrations/autosar/stubs" `
             "${{ github.workspace }}/test"
 
   # -------------------------------------------------------------------------
@@ -294,6 +298,13 @@ jobs:
   #    under the then-active suppression set, i.e. lower bounds. The
   #    1672-finding baseline unmasked 224 shadowed findings when the
   #    892 deviation-covered findings were suppressed (-> 1004).
+  #
+  #    THE AUTOSAR ADAPTER (VERIFY-075): integrations/autosar/canon_autosar.h
+  #    is read through test/integrations/autosar/misra_adapter.h, which
+  #    defines the ModuleId the adapter requires; the stand-in AUTOSAR
+  #    headers beside it are on the include path. Findings in
+  #    test/integrations/autosar/, test scaffolding and not the library,
+  #    are suppressed; the adapter's own are reported like any header's.
   #
   #    Suppressions (tool limitations):
   #      - misra-config:*_impl.h — macro-templated implementation headers
@@ -382,6 +393,7 @@ jobs:
             --suppress=misra-c2012-18.4 \
             --suppress=misra-c2012-17.1 \
             --suppress=misra-c2012-11.6 \
+            "--suppress=*:${{ github.workspace }}/test/integrations/autosar/*" \
             -I "${{ github.workspace }}/core/primitives" \
             -I "${{ github.workspace }}/core" \
             -I "${{ github.workspace }}/semantics" \
@@ -389,7 +401,10 @@ jobs:
             -I "${{ github.workspace }}/algo" \
             -I "${{ github.workspace }}/util" \
             -I "${{ github.workspace }}" \
+            -I "${{ github.workspace }}/integrations/autosar" \
+            -I "${{ github.workspace }}/test/integrations/autosar/stubs" \
             $HEADERS \
+            "${{ github.workspace }}/test/integrations/autosar/misra_adapter.h" \
             2>&1 | tee misra_report.txt
           echo ""
           # ---- Instrument self-test: the canary MUST be flagged ----
@@ -2050,12 +2065,17 @@ jobs:
           # -fall enables CompCert's optional features (struct passing and
           # return by value, bit-fields, etc). Canon-C passes bytes_t, str_t
           # and Result by value throughout, so this is not optional for it.
+          #
+          # The last two -I directories are the AUTOSAR adapter's and its
+          # test's stand-in AUTOSAR headers (VERIFY-075); no other test
+          # includes from them.
           CCOMP_FLAGS=(
             -fall
             -DCANON_NO_GNU_EXTENSIONS
             -DCANON_CHECKED_FORCE_FALLBACK
             -DCANON_BITS_FORCE_FALLBACK
             -I core/primitives -I core -I semantics -I .
+            -I integrations/autosar -I test/integrations/autosar/stubs
           )
           # The include set is deliberately NARROW. Tests reference library
           # headers path-qualified from the repo root ("data/bitset.h"), so

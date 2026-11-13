@@ -446,6 +446,24 @@ canon_c_test(
     INCLUDES core/primitives core semantics data algo util .
 )
 
+# The AUTOSAR Classic adapter (integrations/autosar/canon_autosar.h), with
+# stand-in AUTOSAR headers. Built twice: boolean as unsigned char (AUTOSAR
+# 4.3.1) with every DET ID configured, and boolean as _Bool (R22-11) with the
+# IDs at their defaults. See test/integrations/autosar/autosar_test.c.
+canon_c_test(
+    NAME     autosar_test
+    SRC      test/integrations/autosar/autosar_test.c
+    INCLUDES core/primitives core semantics integrations/autosar test/integrations/autosar/stubs .
+)
+
+canon_c_test(
+    NAME     autosar_bool_test
+    SRC      test/integrations/autosar/autosar_test.c
+    INCLUDES core/primitives core semantics integrations/autosar test/integrations/autosar/stubs .
+)
+target_compile_definitions(autosar_bool_test PRIVATE
+    CANON_AUTOSAR_STUB_BOOLEAN_BOOL CANON_AUTOSAR_TEST_DEFAULTS)
+
 canon_c_test(
     NAME     priority_queue_test
     SRC      test/data/priority_queue_test.c
