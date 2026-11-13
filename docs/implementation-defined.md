@@ -26,8 +26,10 @@ behaviour turned out to be one of three kinds:
 `test/integration/impl_defined_test.c` checks each assumption a running
 program can check. It runs wherever CI runs the tests: Linux on x86-64,
 AArch64, i386 and big-endian s390x, with glibc and with musl; macOS; Windows
-with MSVC, clang-cl and MinGW; with GCC, Clang and CompCert. The bare-metal
-targets (Cortex-M0+, Cortex-M4, RV32, RV64) compile it and do not run it.
+with MSVC and with MinGW-w64's GCC; with GCC, Clang and CompCert. CI's
+Windows jobs named `clang` build with MSVC (VERIFY-074), so Clang is not
+run on Windows. The bare-metal targets (Cortex-M0+, Cortex-M4, RV32,
+RV64) compile it and do not run it.
 
 Clauses are C99's. "GCC says" quotes GCC's manual, "C Implementation-Defined
 Behavior"; "MSVC says" quotes Microsoft's C language and C runtime

@@ -34765,6 +34765,7 @@ finding 3).
 | **ID**         | VERIFY-074 |
 | **Date**       | 2026-11-13 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-13 — CLOSED: the push of 68b3cd1 and 67a6242 matched V1 to V6 ("Scored", below). It also found that CI's Windows jobs named `clang` build with MSVC. The Status above is the record as committed. |
 | **Baseline**   | d74d5c8 (VERIFY-073); `1`, `3`, `4`, `5` and `6` #56 and `2 · Platforms` #75 on d1d4d2e, `8 · Records` #84 on d74d5c8. |
 | **Scope**      | `util/file.h`: `file_write_all_atomic`'s move on Windows and its documentation, and `<windows.h>` there; `test/util/file_test.c`, two tests; `test/integration/impl_defined_test.c`, `rename_existing`; `docs/implementation-defined.md`'s `rename` entry and finding 3. |
 | **Category**   | VERIFY-071's finding 3, fixed. One run. |
@@ -34880,3 +34881,42 @@ musl jobs, and CompCert.
 
 **What follows.** V1 to V6 scored, and the record closed. Then the
 AUTOSAR adapter, which waits on the author's decision on DET.
+
+### Scored (2026-11-13)
+
+The push of 68b3cd1 and 67a6242 started seven workflows at 04:27 UTC:
+`1 · Build & test` #57, `2 · Platforms` #76, `3 · Static analysis &
+coverage` #57, `4 · Proofs: core/` #57, `5 · Proofs: semantics/` #57, `6 ·
+Proofs: data/` #57 and `8 · Records` #85. All seven are green, 79 jobs,
+each at its first attempt; the last, 6, finished at 05:55.
+
+| # | scored |
+|---|--------|
+| V1 | **MATCH.** 1 to 6 and 8 ran; 7 and 9 to 14 did not. |
+| V2 | **MATCH.** 1's 27 jobs are green, each with #56's notices. In each of the ten Windows jobs, ctest passes 59 of 59, `file_test` and `impl_defined_test` among them. |
+| V3 | **MATCH.** 2's 15 jobs are green, each with #75's notices, up to their times. |
+| V4 | **MATCH.** 3's six jobs are green, each with #56's notices: "MC/DC 2064 / 2230" with its eight rows, misra's, and compcert's "60 / 60 compiled, 60 ran". |
+| V5 | **MATCH.** 4's 13 jobs, 5's five and 6's 11 are green, each with #56's notices. |
+| V6 | **MATCH.** 8's two jobs are green; its size pins line reads "size pins: 57 rows; 0 problem(s)". |
+
+**Six of six.**
+
+**A finding: CI's Windows jobs named `clang` build with MSVC.** Each of
+the ten Windows jobs' logs names its compiler. The four the matrix names
+`clang`, two of `build` and two of `lifetime-debug`, say "The C compiler
+identification is MSVC 19.51.36260.0", as the four named `cl` do: on
+Windows CMake's default generator is Visual Studio's, which ignores
+`-DCMAKE_C_COMPILER=clang`. The two `mingw` jobs build with GCC 16.2.0.
+So CI tests Windows with MSVC and with MinGW-w64's GCC, and not with
+Clang. `docs/implementation-defined.md` said the tests run on "Windows
+with MSVC, clang-cl and MinGW": this push corrects it. The jobs' names
+stay as they are. Building with Clang on Windows, or naming the jobs for
+what they build with, is a change of its own, on the list.
+
+**Closed.** On Windows `file_write_all_atomic` replaces the file with
+`MoveFileExA`, and on each system a move that fails leaves the file as it
+was; `util/file.h` says what each move promises. VERIFY-071's finding 3
+is fixed. Next: the AUTOSAR adapter, whose DET handling the author
+decided on 2026-11-13: the adapter reports a failed contract check with
+`Det_ReportError`, then calls a safe-state function the integrator
+supplies, which does not return.
