@@ -3677,20 +3677,29 @@ error.h only — error.h is VERIFY-013 clean and contributes nothing —
 exactly as the round-1 prediction anticipated. Seventh composability
 data point.
 
-### diag-own residuals (8)
+### diag-own residuals (1)
 
-**Category 1 — libc byte-view through Typed+Cast (8)**
+**Category 1 — libc byte-view through Typed+Cast (1)**
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
 | 1 | `typed_cast_diag_init_call_memset_requires_valid_s` | `frama-c-diag` | the bytes of the local `d`, a complete `Diag`, are valid |
-| 2 | `typed_cast_diag_push_call_memmove_requires_valid_dest` | `frama-c-diag` | the destination's bytes, `frames[0 .. DIAG_MAX_FRAMES - 2]`, inside `*d`, valid by `push_valid` |
-| 3 | `typed_cast_diag_push_call_memmove_requires_valid_src` | `frama-c-diag` | the source's bytes, `frames[1 .. DIAG_MAX_FRAMES - 1]`, inside `*d` |
-| 4 | `typed_cast_diag_push_valid_diag_ensures_push_shift_semantics_part05` | `frama-c-diag` | the shift: `frames[j].code` is the old `frames[j + 1].code`, on one of three paths through the rest of the push |
-| 5 | `typed_cast_diag_push_valid_diag_ensures_push_shift_semantics_part06` | `frama-c-diag` | the same, on the second |
-| 6 | `typed_cast_diag_push_valid_diag_ensures_push_shift_semantics_part07` | `frama-c-diag` | the same, on the third |
-| 7 | `typed_cast_diag_push_valid_diag_assigns_exit_part02` | `frama-c-diag` | the move's bytes in `d->frames[0 .. DIAG_MAX_FRAMES - 1]` |
-| 8 | `typed_cast_diag_push_valid_diag_assigns_normal_part03` | `frama-c-diag` | the same, on the normal path |
+
+**Restated (2026-11-13, VERIFY-073).** The table listed eight goals, and
+the heading and category counted 8, until VERIFY-073 (d1d4d2e) made
+`diag_push`'s shift of a full chain a loop of frame copies. The goals of
+rows 2 to 8 are gone with the `memmove` or proved: rows 2 and 3,
+`memmove`'s two preconditions, `valid_dest` and `valid_src`, with the call;
+rows 4 to 6, `push_shift_semantics` parts 5 to 7, the shift's `.code`
+across it on three paths; rows 7 and 8, `valid_diag_assigns_exit` part 2
+and `valid_diag_assigns_normal` part 3, the move's bytes in the `assigns`
+clause's frames. `frama-c-diag` proves 3073 / 3074, `memset`'s goal
+unproved (`5 · Proofs: semantics/` #56). Since then `push_shift_semantics`
+and `push_frames_preserved` state the frames whole. **Functions affected**,
+**Goals**, **Root cause**, the manual argument and **Mitigation** below
+describe the header before VERIFY-073, and so does the MC/DC count after
+them: gcov counts 86 of 88 condition outcomes since, the loop's condition
+covered both ways and MCDC-009's two open.
 
 **Functions affected**: `diag_init` (1), `diag_push` (7).
 
@@ -7580,6 +7589,18 @@ argument. WP's typed model never lets a `char` write reach `d->depth`, so
 the proof would stand even if the footprint covered it; that it does not is
 the evidence. The assertion is filed under VERIFY-039's proved-goal argument
 (fact F5, row 8).
+
+**Reading note (2026-11-13, VERIFY-073).** Since d1d4d2e the overflow
+branch shifts the frames with a loop of frame copies, not a `memmove`.
+gcov counts the loop's condition, which the tests cover both ways, so
+`diag.h` has 86 of 88 condition outcomes covered (the coverage job's
+`diag.h` step, `3 · Static analysis & coverage` #56); the two missing are
+this record's, unchanged. Between the branch and the clamp there is no
+byte-level write now: the loop's `assigns` names the frames it writes and
+its index, not `depth`, and WP proves `dead_by_invariant_clamp` across it
+(`5 · Proofs: semantics/` #56). Where this record counts 86 outcomes, gives
+84/86, or speaks of the `memmove`, it describes the header before
+VERIFY-073.
 
 ### Outcome 2 — the encoding-error skip (libc-environmental, permanent)
 
@@ -14680,6 +14701,19 @@ eight units are `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`,
 147, 38 and 16 before it; row 6's `ensures_3` and `ensures_5` since VERIFY-040
 round 1's score, 152 before it; rows 27's and 30's `ensures_5` since round
 2's, 154 before it; row 41 since round 3's, 156 at 40 before it).
+
+**Note (2026-11-13, VERIFY-073).** Row 8's write site, the `memmove`, is
+gone since d1d4d2e: `diag_push`'s shift of a full chain is a loop of frame
+copies, whose writes WP follows through the loop's `assigns`, and
+`frama-c-diag` proves every goal of `diag_push` (3073 / 3074, `memset`'s in
+`diag_init` the one unproved; `5 · Proofs: semantics/` #56). The row and F5
+describe the header before. The two parts the row excludes,
+`valid_diag_assigns_exit` part 2 and `valid_diag_assigns_normal` part 3, are
+among those proved, so `tools/record_coverage.py` reports them as excluded
+parts no longer pinned, a note it does not count as a problem. Row 9
+stands: `push_frames_preserved` states the other frames whole since, and F6
+places each of them outside the pushed frame's `message`, where the copy
+writes. The block keeps its rows and its count as filed.
 
 ### G4 — the proved-goal argument, group A: `memory.h`, `arena.h`, `pool.h`
 
@@ -34072,7 +34106,7 @@ input, and give the old value for every draw the old code got right.
 | **ID**         | VERIFY-073 |
 | **Date**       | 2026-11-12 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-13 — Run 1 scored: D1 to D7 and D9 to D11 MATCH, D8 MISS. Run 1b scored: E1 to E6, E8 and E11 MATCH, E7, E9, E10 and E12 to E14 MISS: no variant proves `push_frame_strings`, and no variant lets a program proved with WP alone push twice and render. The author chose to land the proved core. Run 1c scored: F1 to F5 and F7 MATCH, F6 MISS. Run 2 makes the change, pre-registered below ("Run 2: pre-registration"). The Status above is the record as committed. |
+| **Status update** | 2026-11-13 — CLOSED: the push of bf25217, 4f85ecd and d1d4d2e, run 2, matched G1 to G10 and G12; G11 missed by one goal in each of two runs, both pinned slow ("Run 2 scored", below). `diag_push`'s contract keeps the earlier frames whole, and its shift is proved; a frame's `file` and `func` after a push are what it does not state. Run 1 scored: D1 to D7 and D9 to D11 MATCH, D8 MISS. Run 1b scored: E1 to E6, E8 and E11 MATCH, E7, E9, E10 and E12 to E14 MISS: no variant proves `push_frame_strings`, and no variant lets a program proved with WP alone push twice and render. The author chose to land the proved core. Run 1c scored: F1 to F5 and F7 MATCH, F6 MISS. The Status above is the record as committed. |
 | **Baseline**   | 9610ceb (VERIFY-072); `1`, `3`, `4`, `5` and `6` #53, `2 · Platforms` #71 and `8 · Records` #79 on it; `9 · Probes` #15 (b5042af), #17 (b0e644d) and #18 (7ecd37c), each probe's last run. |
 | **Scope**      | Run 1: `tools/probes/verify-073/` (`diag_push.patch`, `diagpush_probe.py`, `README.md`); `.github/workflows/probes.yml`, the job `diagpush-probe`; the workflow map's row 9. Run 2: `semantics/diag.h`'s `diag_push`, its contract and its shift, with the pins and documents that read it; `test/semantics/diag_test.c`; two comments in `semantics/`; two in `.github/workflows/analysis.yml`. |
 | **Category**   | VERIFY-066's run 2, "Found while reading", 1: fixed. Run 1 measures the change in CI before it lands (report-only); run 2 makes it, pinned from run 1. |
@@ -34667,3 +34701,57 @@ and `func` are still strings after a push is what the contract does not
 state (runs 1 and 1b). The probe stays in `9 · Probes` as the record of
 runs 1 to 1c; with the patch in the checkout, it measures the checkout as
 it is. Then `file_write_all_atomic` on Windows (VERIFY-071's finding 3).
+
+### Run 2 scored (2026-11-13)
+
+The push of bf25217, 4f85ecd and d1d4d2e started ten workflows at 01:29
+UTC: `1 · Build & test` #56, `2 · Platforms` #75, `3 · Static analysis &
+coverage` #56, `4 · Proofs: core/` #56, `5 · Proofs: semantics/` #56, `6 ·
+Proofs: data/` #56, `7 · Proofs: -CC` #29, `8 · Records` #83, `13 · Prover
+agreement` #10 and `14 · Eva` #9. All ten are green, 148 jobs, each at its
+first attempt; the last, 6, finished at 02:57.
+
+| # | scored |
+|---|--------|
+| G1 | **MATCH.** 1 to 8, 13 and 14 ran; 9 to 12 did not. 13's `changes` job named the 12 units, and 13 ran them: 36 runs of a prover alone, a sort for each unit and the total, 50 jobs. |
+| G2 | **MATCH.** 1's 27 jobs are green, each with #55's notices. |
+| G3 | **MATCH.** 2's 15 jobs are green, each with #74's notices but the embedded job's, which read as predicted, figure for figure: cortex-m0plus 41986 bytes at -O2 with checks off, cortex-m4 40556, rv32imac 90034 as shipped and 48076 with checks off, the other figures as at #74; 418570 tokens; "as pinned: 57 rows, 798 figures". |
+| G4 | **MATCH.** "MC/DC 2064 / 2230", with #55's eight rows. The `diag.h` step prints "Condition outcomes covered:97.73% of 88". |
+| G5 | **MATCH.** "real 57; canary 3; total 60", and "as pinned: 57 real finding(s) in 32 file and rule pair(s)". |
+| G6 | **MATCH.** static-analysis is green on Linux, macOS and Windows, and compcert gives "60 / 60 compiled, 60 ran". |
+| G7 | **MATCH.** 4's 13 jobs and 6's 11 give #55's notices, and 5's five too but `frama-c-diag`'s: "wp_diag_output.txt: proved 3073 / 3074; unproved 1; failed/invalid/stepout 0". |
+| G8 | **MATCH.** 7's seven jobs are green, without notices. |
+| G9 | **MATCH.** record-coverage passes with the seven names pending from a11ae90 and "heading counts as at the base 1"; "size pins: 57 rows; 0 problem(s)". |
+| G10 | **MATCH.** Each of the 12 units reports "Against its pins: 0 difference(s)", and its unproved goals are the names its job pins: `frama-c-diag`'s 1, `memset`'s. |
+| G11 | **MISS.** 34 of the 36 runs give the count predicted. Z3 alone proves 3037 / 3074 of `frama-c-diag`, not run 1c's 3038: it did not prove `push_frame_file` part 11, which it proved in 83 s in run 1c. CVC5 alone proves 4728 / 4784 of `frama-c-hashmap`, not #9's 4729: it did not prove `hashmap_insert`'s loop invariant 7 preserved, part 3, which it proved in 91 s at #9. Each unit's goals in all are as predicted. |
+| G12 | **MATCH.** 14's 12 jobs are green. At each of the ten models, the one line that differs from #8's, times aside, is `diag.c`'s, with "preconditions 74/4/0" for 76/4/0. `eva total` is #8's, and so is the native job's "26 of 26 programs compile with gcc and return 0 under ASan and UBSan". |
+
+**Eleven of twelve.** G11 named exact counts, and each count that moved
+moved by a goal pinned slow, one that a prover proved in over 60 s and the
+next run can prove within the 120 s or not. The comparison leaves such
+goals out, and 13 is green. In the other 32 runs of the eleven units the
+proved counts held; in 14 of them the unproved goals' split among Timeout,
+Unknown and Failed moved, as at VERIFY-068.
+
+Two proofs took over 30 s here that the pins do not list as slow, both
+Z3's in `frama-c-diag`: `push_frame_line` part 12, in 45 s, one of the
+three slow lines run 2 removed, and `push_frames_preserved` part 13, in
+38 s. The comparison left them out as slow in this run. Z3 did not prove
+the first under the same name in run 1, and proved it in under 30 s in
+run 1c, so a run in which it times out would fail on a difference. No run
+has; as VERIFY-065 set, a proof joins the slow lines when a run fails on
+its time.
+
+**The records restated.** This push makes the restatements run 2 left to
+the scoring, each with a dated note: VERIFY-017's goal table lists
+`memset`'s goal alone, under a heading of 1; VERIFY-039 G4's row 8 and
+MCDC-009's count read as the header before VERIFY-073. Here,
+`tools/record_coverage.py --strict --complete` passes with nothing pending.
+
+**Closed.** `diag_push`'s contract keeps the earlier frames whole, and its
+shift, a loop of frame copies, is proved: `frama-c-diag` has one unproved
+goal, `memset`'s in `diag_init`, where it had eight. That a frame's `file`
+and `func` are still strings after a push is what the contract does not
+state: no form of it that WP proves was found (runs 1 and 1b), and the
+tests check it. Next: `file_write_all_atomic` on Windows (VERIFY-071's
+finding 3).
