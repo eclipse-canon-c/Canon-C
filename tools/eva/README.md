@@ -109,7 +109,7 @@ precondition when it proves that function: in `arena_free_bytes` and
 `pool_try_alloc` and `pool_try_alloc_zero` (of `pool_alloc` and
 `pool_alloc_zero`); `pool_reset_secure` (of `pool_reset`);
 `hashmap_contains_key` (of `hashmap_get`); `stringbuf_append` (of
-`_stringbuf_append_bytes`); `stringbuf_append_fmt` (of
+`stringbuf_append_bytes`); `stringbuf_append_fmt` (of
 `stringbuf_append_fmt_va`); `stringbuf_append_fmt_va` (of `vsnprintf`);
 `vec_int_to_stringbuf` (of `stringbuf_append_fmt`); `diag_render` (of
 `snprintf`); `ptr_align_up` (of `align_up`). None is among the residuals the

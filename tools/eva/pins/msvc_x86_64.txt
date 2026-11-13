@@ -110,7 +110,7 @@ stringbuf @ msvc_x86_64: end reached, fails {0; 1; 2; 3; 4; 5}; alarms 0; progra
   call: Unknown: tools/eva/programs/stringbuf.c:33 main: precondition of stringbuf_buffer_as_borrowed_bytes: sb ≡ \null ∨ (\valid_read(sb) ∧ (sb->data ≡ \null ∨ stringbuf_wf((StringBuf *)sb)))
   call: Unknown: tools/eva/programs/stringbuf.c:36 main: precondition of stringbuf_truncate: sb_ok: sb ≡ \null ∨ stringbuf_ok(sb)
   call: Unknown: tools/eva/programs/stringbuf.c:49 main: precondition of stringbuf_append: sb_ok: sb ≡ \null ∨ stringbuf_ok(sb)
-  library call: Unknown: data/stringbuf.h:672 stringbuf_append: precondition of _stringbuf_append_bytes: wf: stringbuf_wf(sb)
+  library call: Unknown: data/stringbuf.h:672 stringbuf_append: precondition of stringbuf_append_bytes: wf: stringbuf_wf(sb)
 
 stack @ msvc_x86_64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 60/0/0; functions 37/213
 

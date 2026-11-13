@@ -408,3 +408,17 @@ dump or its addon's source. Run 1 matched all eleven predictions
 (`real 57; canary 3; total 60` at 7ecd37c). Runs 2 and 3 pin the 57 by
 file and rule and make a difference fail the job: the count stops being
 read by hand.
+
+## 2026-11-13 — held at 57 (VERIFY-077), four rule-21.2 violations the addon missed
+
+clang-tidy's `cert-dcl37-c`, CERT's DCL37-C, found four functions at file
+scope whose names began with an underscore, which C reserves there, as
+rule 21.2 forbids: `_hm_home`, `_hm_wrap` and `_hm_normalize_hash` in
+`data/hashmap/hashmap_impl.h`, and `_stringbuf_append_bytes` in
+`data/stringbuf.h`. A search of the headers found a fifth,
+`_hm_lifetime_next_id_`, under `CANON_LIFETIME_DEBUG`. Cppcheck's addon
+reported none of them: its rule 21.2 check (`misra_21_2` in 2.13's
+`misra.py`) flags a function named as one of the standard library's, and a
+macro named like `__BUILTIN_`, not other reserved names. Each was renamed
+without its underscore, so the count stays 57; `docs/cert-cwe.md` lists
+the CERT checks that found them.

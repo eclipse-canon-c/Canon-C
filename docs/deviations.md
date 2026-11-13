@@ -8466,6 +8466,14 @@ added in ptr.h.
 
 **Mitigation**: The block is `#ifndef _WIN32`-guarded and confined to a Tier 2 utility header outside the verified core. Each of the three directives carries an individual inline `cppcheck-suppress` citing this record, so any *new* 21.1 finding anywhere in the tree surfaces in CI rather than being absorbed by a rule-wide suppression. util/time.h's behavior is exercised by the test suite on Linux, macOS (both POSIX arm) and MSVC/MinGW (the `_WIN32` arm) across the CI matrix.
 
+**CERT C (2026-11-13, VERIFY-077).** CERT's DCL37-C, "Do not declare or
+define a reserved identifier", covers the same three directives as rule
+21.1, and clang-tidy's `cert-dcl37-c` reports the first, the one a build
+without a caller's `_POSIX_C_SOURCE` reads. The argument above holds for it
+unchanged. Each of the three directives carries
+`/* NOLINT(cert-dcl37-c): MISRA-DEV-011 */` at its end, beside the
+`cppcheck-suppress` comment above it.
+
 ## MISRA-DEV-012: Rule 20.7 — macro parameters in type-name, declarator, and token-composition positions (template machinery)
 
 | ID | Date | Scope | Category |

@@ -530,9 +530,9 @@ static inline bool diag_push(Diag       *d,
  * @def DIAG_PUSH_FMT(diag, code, buf, buf_size, fmt, ...)
  * @brief Push a frame with a formatted message using a caller-supplied buffer.
  *
- * Formats the message into `buf` (size `buf_size`) via snprintf, then pushes
- * it. No heap allocation — the caller owns the buffer and it need only live
- * until diag_push copies the message inline.
+ * Formats the message into `buf` (size `buf_size`) with snprintf and pushes
+ * it, cut to buf_size - 1 characters; if snprintf fails, an empty message
+ * (CERT ERR33-C, VERIFY-077). No heap allocation: `buf` need only outlive it.
  *
  * Requirements (caller's responsibility):
  *   - buf  != NULL
@@ -558,7 +558,7 @@ static inline bool diag_push(Diag       *d,
         require_msg((buf)      != NULL, "DIAG_PUSH_FMT: buf must not be NULL"); \
         require_msg((buf_size) >= 1u,   "DIAG_PUSH_FMT: buf_size must be >= 1"); \
         require_msg((fmt)      != NULL, "DIAG_PUSH_FMT: fmt must not be NULL"); \
-        snprintf((buf), (buf_size), (fmt), ##__VA_ARGS__); \
+        if (snprintf((buf), (buf_size), (fmt), ##__VA_ARGS__) < 0) { (buf)[0] = '\0'; } \
         DIAG_PUSH((diag), (code), (buf)); \
     } while (0)
 #endif /* CANON_NO_GNU_EXTENSIONS */

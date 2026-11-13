@@ -510,6 +510,25 @@ static void test_diag_push_fmt_null_diag_no_crash(void)
     EXPECT(1);
 }
 
+#if defined(__GLIBC__)
+#include <wchar.h>
+
+/* snprintf fails (VERIFY-077, CERT ERR33-C): in the "C" locale glibc cannot
+ * convert U+20AC for %lc, returns a negative value and leaves "ab" in tmp.
+ * The frame's message is empty, not that partial output. */
+static void test_diag_push_fmt_snprintf_failure_pushes_empty_message(void)
+{
+    Diag d = diag_init();
+    char tmp[32];
+
+    DIAG_PUSH_FMT(&d, ERR_UNKNOWN, tmp, sizeof(tmp), "ab%lccd", (wint_t)0x20AC);
+
+    EXPECT(diag_depth(&d) == 1u);
+    EXPECT(d.frames[0].code == ERR_UNKNOWN);
+    EXPECT(d.frames[0].message[0] == '\0');
+}
+#endif /* __GLIBC__ */
+
 #if defined(_MSC_VER)
 #  pragma warning(pop)
 #endif
@@ -1206,6 +1225,9 @@ int main(void)
     test_diag_push_fmt_formats_message();
     test_diag_push_fmt_truncates_long_format();
     test_diag_push_fmt_null_diag_no_crash();
+#if defined(__GLIBC__)
+    test_diag_push_fmt_snprintf_failure_pushes_empty_message();
+#endif
 #endif
 
     /* diag_depth */

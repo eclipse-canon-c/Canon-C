@@ -601,7 +601,7 @@ static inline void stringbuf_close(borrowed(StringBuf*) sb) {
   ensures failure_unchanged: !\result ==> stringbuf_unchanged{Pre, Post}(sb);
   ensures prefix: stringbuf_prefix{Pre, Post}(sb, \old(sb->len));
 */
-static inline bool _stringbuf_append_bytes(
+static inline bool stringbuf_append_bytes(
         borrowed(StringBuf*)  sb,
         borrowed(const char*) src,
         usize                 add_len)
@@ -669,7 +669,7 @@ static inline bool stringbuf_append(
 {
     if (!sb || !sb->data) { return false; }
     if (!s) { return true; }
-    return _stringbuf_append_bytes(sb, s, (usize)strlen(s));
+    return stringbuf_append_bytes(sb, s, (usize)strlen(s));
 }
 
 /**
@@ -716,7 +716,7 @@ static inline bool stringbuf_append_str(
 {
     if (!sb || !sb->data)     { return false; }
     if (!s.ptr || (s.len == 0u)) { return true; }
-    return _stringbuf_append_bytes(sb, s.ptr, s.len);
+    return stringbuf_append_bytes(sb, s.ptr, s.len);
 }
 
 /**
@@ -991,7 +991,7 @@ static inline bool stringbuf_append_n(
     while ((actual_len < n) && (s[actual_len] != '\0')) { actual_len++; }
 
     if (actual_len == 0u) { return true; }
-    return _stringbuf_append_bytes(sb, s, actual_len);
+    return stringbuf_append_bytes(sb, s, actual_len);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

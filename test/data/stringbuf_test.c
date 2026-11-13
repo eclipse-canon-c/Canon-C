@@ -625,13 +625,13 @@ static void test_out_of_domain_guards(void)
     StringBuf f;
     str_t huge;
 
-    /* _stringbuf_append_bytes: len + add_len overflows */
+    /* stringbuf_append_bytes: len + add_len overflows */
     stringbuf_init_buffer(&sb, buf, sizeof buf);
     EXPECT(stringbuf_append(&sb, "a"));
     huge.ptr = "x";
     huge.len = CANON_USIZE_MAX;                       /* never read */
     EXPECT(!stringbuf_append_str(&sb, huge));
-    /* _stringbuf_append_bytes: end + 1 overflows */
+    /* stringbuf_append_bytes: end + 1 overflows */
     huge.len = CANON_USIZE_MAX - 1u;
     EXPECT(!stringbuf_append_str(&sb, huge));
     EXPECT(stringbuf_len(&sb) == 1u && buf[1] == '\0');

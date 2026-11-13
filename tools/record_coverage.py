@@ -373,9 +373,8 @@ def proved_goal_blocks():
             fn = re.fullmatch(r'`(\w+)`', c[col[3]]) if col[3] is not None else None
             # WP writes a function's name as declared in a call-site goal's
             # name, and in the others through the kernel's sanitizer, which
-            # drops leading, trailing and repeated underscores:
-            # _stringbuf_append_bytes's postconditions are
-            # typed_cast_stringbuf_append_bytes_ensures_...
+            # drops leading, trailing and repeated underscores: the
+            # postconditions of a function _f_ are typed_cast_f_ensures...
             forms = {fn.group(1), re.sub(r'_+', '_', fn.group(1)).strip('_')} if fn else set()
             for q, _ in props:
                 if fn and not any(f"_{f}_" in q for f in forms):

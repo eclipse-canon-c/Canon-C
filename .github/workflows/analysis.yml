@@ -164,6 +164,37 @@ jobs:
             --extra-arg="-I${{ github.workspace }}/core" \
             --extra-arg="-I${{ github.workspace }}" \
             $FILES
+      # CERT C (VERIFY-077): clang-tidy's checks for CERT's C rules and
+      # recommendations (cert-*-c), over the same test files, for the
+      # library's code only: what they find in the library's headers, and
+      # in a test where a library macro expands. tools/cert/cert_check.py
+      # sorts the findings; the tests' own code is not checked, as the
+      # author decided (2026-11-13), and its findings do not fail the step.
+      # docs/cert-cwe.md says what the checks cover.
+      - name: Run clang-tidy's CERT C checks on the library (Linux only)
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        run: |
+          SKIP="dynstring_test.c dynvec_test.c"
+          FILES=""
+          for f in $(find "${{ github.workspace }}/test" -name "*.c" 2>/dev/null | sort); do
+            if ! grep -qE '[^[:space:]]' "$f"; then continue; fi
+            BASENAME=$(basename "$f")
+            SKIP_THIS=0
+            for s in $SKIP; do
+              if [ "$BASENAME" = "$s" ]; then SKIP_THIS=1; break; fi
+            done
+            if [ "$SKIP_THIS" = "1" ]; then continue; fi
+            FILES="$FILES $f"
+          done
+          clang-tidy \
+            -p build \
+            --checks='-*,cert-*-c' \
+            --extra-arg="-I${{ github.workspace }}/core/primitives" \
+            --extra-arg="-I${{ github.workspace }}/core" \
+            --extra-arg="-I${{ github.workspace }}" \
+            $FILES > cert_tidy.txt 2>&1 || true
+          python3 tools/cert/cert_check.py "${{ github.workspace }}" cert_tidy.txt
       - name: Run Cppcheck (Linux / macOS)
         if: runner.os != 'Windows'
         shell: bash

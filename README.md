@@ -36,11 +36,16 @@
 ![Polyspace](https://img.shields.io/badge/Polyspace-planned-lightgrey)
 ![LDRA](https://img.shields.io/badge/LDRA-planned-lightgrey)
 ![Astrée](https://img.shields.io/badge/Astr%C3%A9e-planned-lightgrey)
+![CodeQL](https://img.shields.io/badge/CodeQL-planned-lightgrey)
+![Coverity](https://img.shields.io/badge/Coverity-planned-lightgrey)
+![PVS-Studio](https://img.shields.io/badge/PVS--Studio-planned-lightgrey)
+![SonarQube](https://img.shields.io/badge/SonarQube-planned-lightgrey)
 
 <!-- Guidelines -->
 ### Guidelines
 [![MISRA C:2012](https://img.shields.io/badge/MISRA%20C%3A2012-Cppcheck%20addon-green)](docs/misra-campaign.md)
 [![AUTOSAR Classic](https://img.shields.io/badge/AUTOSAR%20Classic-adapter-green)](docs/autosar-classic.md)
+[![CERT C / CWE](https://img.shields.io/badge/CERT%20C%20%2F%20CWE-clang--tidy-green)](docs/cert-cwe.md)
 
 <!-- Formal Verification & Timing Analysis -->
 ### Formal Verification & Timing Analysis
@@ -57,6 +62,8 @@
 [![CVC5](https://img.shields.io/badge/CVC5-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/prover-agreement.yml)
 [![Coq](https://img.shields.io/badge/Coq-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/coq.yml)
 [![CompCert](https://img.shields.io/badge/CompCert-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/analysis.yml)
+![CBMC](https://img.shields.io/badge/CBMC-planned-lightgrey)
+![CPAchecker](https://img.shields.io/badge/CPAchecker-planned-lightgrey)
 ![aiT](https://img.shields.io/badge/aiT-Configurable-lightgrey)
 
 <!-- Production / Certification -->
@@ -75,8 +82,8 @@
 > that runs each prover alone. CompCert's job is informational: its result
 > blocks nothing.
 >
-> "Planned" badges name tools the project has asked their makers to run, or
-> to let it run, on Canon-C; none has run yet.
+> "Planned" badges name tools the project plans to run on Canon-C; none
+> has run yet.
 >
 > "Configurable" badges name tools and standards you can use Canon-C with.
 > They are not CI results and not certifications — what CI checks, and what
@@ -86,8 +93,9 @@
 > linking to the document that says so. MISRA C:2012: CI checks the library
 > with Cppcheck's MISRA addon, which is not a qualified checker, and every
 > finding it reports is pinned and argued. AUTOSAR Classic: an adapter,
-> checked in CI against stand-ins for the AUTOSAR headers. Neither is a
-> certification.
+> checked in CI against stand-ins for the AUTOSAR headers. CERT C / CWE:
+> clang-tidy's CERT C checks, run in CI on the library's code, with their
+> map to CWE. None is a certification.
 
 ---
 
@@ -246,6 +254,10 @@ For current numbers, see:
   `Std_ReturnType` and `boolean`, and reports a failed contract check to the
   Default Error Tracer before the project's safe state; and what Canon-C
   does not do there (VERIFY-075).
+- **`docs/cert-cwe.md`** — CERT C: the 19 clang-tidy checks CI runs on the
+  library's code, each mapped to its CERT guideline, ISO/IEC TS 17961 and
+  CWE as CERT gives them, what they found, and what is not checked
+  (VERIFY-077).
 
 All currently unproved goals resist Alt-Ergo, Z3 and CVC5 at a 120-second
 timeout and are pinned in their CI jobs, and each is listed in

@@ -22,12 +22,12 @@
 #ifndef _WIN32
     #ifndef _POSIX_C_SOURCE
         /* cppcheck-suppress misra-c2012-21.1 ; MISRA-DEV-011 */
-        #define _POSIX_C_SOURCE 199309L
+        #define _POSIX_C_SOURCE 199309L /* NOLINT(cert-dcl37-c): MISRA-DEV-011 */
     #elif _POSIX_C_SOURCE < 199309L
         /* cppcheck-suppress misra-c2012-21.1 ; MISRA-DEV-011 */
-        #undef  _POSIX_C_SOURCE
+        #undef  _POSIX_C_SOURCE /* NOLINT(cert-dcl37-c): MISRA-DEV-011 */
         /* cppcheck-suppress misra-c2012-21.1 ; MISRA-DEV-011 */
-        #define _POSIX_C_SOURCE 199309L
+        #define _POSIX_C_SOURCE 199309L /* NOLINT(cert-dcl37-c): MISRA-DEV-011 */
     #endif
 #endif
 

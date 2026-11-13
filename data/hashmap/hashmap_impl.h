@@ -84,7 +84,7 @@
  * When a single translation unit instantiates multiple hashmap types (via
  * repeated #include with different HASHMAP_TYPE_NAME), each instantiation
  * gets its own type-specific open/restamp helpers via HASHMAP_FN-mangled
- * names. They all share a single TU-wide counter helper, _hm_lifetime_next_id_,
+ * names. They all share a single TU-wide counter helper, hm_lifetime_next_id_,
  * which is guarded against duplicate definition. Two hashmap types in the
  * same TU therefore produce distinct ids relative to each other — desirable.
  *
@@ -277,7 +277,7 @@ typedef struct {
     /* Delegates to the single shared generator in
      * core/primitives/lifetime.h — see docs/thread-safety.md for the
      * concurrency contract on token generation. */
-    static inline region_id_t _hm_lifetime_next_id_(void* mp) {
+    static inline region_id_t hm_lifetime_next_id_(void* mp) {
         return canon_lifetime_next_id_(mp);
     }
 #endif
@@ -293,11 +293,11 @@ typedef struct {
 
 #ifdef CANON_LIFETIME_DEBUG
     HASHMAP_LINKAGE void HM_LIFETIME_OPEN_(HASHMAP_TYPE_NAME* map) {
-        map->lt.id   = _hm_lifetime_next_id_(map);
+        map->lt.id   = hm_lifetime_next_id_(map);
         map->lt.open = true;
     }
     HASHMAP_LINKAGE void HM_LIFETIME_RESTAMP_(HASHMAP_TYPE_NAME* map) {
-        map->lt.id = _hm_lifetime_next_id_(map);
+        map->lt.id = hm_lifetime_next_id_(map);
         /* lt.open stays true — restamp is not destruction */
     }
 #else
@@ -318,21 +318,21 @@ typedef struct {
 /*@ requires capacity >= 1;
     assigns \nothing;
     ensures \result < capacity; */
-static inline usize _hm_home(u64 hash, usize capacity) {
+static inline usize hm_home(u64 hash, usize capacity) {
     return (usize)(hash & (u64)(capacity - 1u));
 }
 
 /*@ requires capacity >= 1;
     assigns \nothing;
     ensures \result < capacity; */
-static inline usize _hm_wrap(usize index, usize capacity) {
+static inline usize hm_wrap(usize index, usize capacity) {
     return index & (capacity - 1u);
 }
 
 /*@ assigns \nothing;
     ensures \result != 0;
     ensures h != 0 ==> \result == h; */
-static inline u64 _hm_normalize_hash(u64 h) {
+static inline u64 hm_normalize_hash(u64 h) {
     return (h == 0u) ? 1u : h;
 }
 #endif /* CANON_HM_INTERNAL_HELPERS_DEFINED */
@@ -517,8 +517,8 @@ HASHMAP_LINKAGE result__Bool_Error HM_INSERT_(
         return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED);
     }
 
-    u64   h         = _hm_normalize_hash(HASHMAP_HASH_FN(key, map->ctx));
-    usize home      = _hm_home(h, map->capacity);
+    u64   h         = hm_normalize_hash(HASHMAP_HASH_FN(key, map->ctx));
+    usize home      = hm_home(h, map->capacity);
     usize probe_idx = home;
     u32   psl       = 0;
 
@@ -585,7 +585,7 @@ HASHMAP_LINKAGE result__Bool_Error HM_INSERT_(
 
         psl++;
         incoming.psl = psl;
-        probe_idx = _hm_wrap(probe_idx + 1u, map->capacity);
+        probe_idx = hm_wrap(probe_idx + 1u, map->capacity);
     }
 
     /* Should never reach here if load factor is respected */
@@ -607,8 +607,8 @@ HASHMAP_LINKAGE HM_OPT_T_ HM_GET_(
     require_msg(map->slots != NULL, "hashmap_get: map is uninitialized");
     require_msg(key != NULL,        "hashmap_get: key cannot be NULL");
 
-    u64   h         = _hm_normalize_hash(HASHMAP_HASH_FN(key, map->ctx));
-    usize probe_idx = _hm_home(h, map->capacity);
+    u64   h         = hm_normalize_hash(HASHMAP_HASH_FN(key, map->ctx));
+    usize probe_idx = hm_home(h, map->capacity);
     u32   psl       = 0;
 
     /*@ loop invariant 0 <= i <= map->capacity;
@@ -627,7 +627,7 @@ HASHMAP_LINKAGE HM_OPT_T_ HM_GET_(
         }
 
         psl++;
-        probe_idx = _hm_wrap(probe_idx + 1u, map->capacity);
+        probe_idx = hm_wrap(probe_idx + 1u, map->capacity);
     }
 
     return HM_OPT_FN_(_none)();
@@ -650,8 +650,8 @@ HASHMAP_LINKAGE borrowed(hm_val_t*) HM_GET_OR_NULL_(
     require_msg(map->slots != NULL, "hashmap_get_or_null: map is uninitialized");
     require_msg(key != NULL,        "hashmap_get_or_null: key cannot be NULL");
 
-    u64   h         = _hm_normalize_hash(HASHMAP_HASH_FN(key, map->ctx));
-    usize probe_idx = _hm_home(h, map->capacity);
+    u64   h         = hm_normalize_hash(HASHMAP_HASH_FN(key, map->ctx));
+    usize probe_idx = hm_home(h, map->capacity);
     u32   psl       = 0;
 
     /*@ loop invariant 0 <= i <= map->capacity;
@@ -670,7 +670,7 @@ HASHMAP_LINKAGE borrowed(hm_val_t*) HM_GET_OR_NULL_(
         }
 
         psl++;
-        probe_idx = _hm_wrap(probe_idx + 1u, map->capacity);
+        probe_idx = hm_wrap(probe_idx + 1u, map->capacity);
     }
 
     return NULL;
@@ -718,8 +718,8 @@ HASHMAP_LINKAGE HM_RES_T_ HM_REMOVE_(
     if (!key) { return HM_RES_FN_(_err)(ERR_INVALID_ARG); }
     require_msg(map->slots != NULL, "hashmap_remove: map is uninitialized");
 
-    u64   h         = _hm_normalize_hash(HASHMAP_HASH_FN(key, map->ctx));
-    usize probe_idx = _hm_home(h, map->capacity);
+    u64   h         = hm_normalize_hash(HASHMAP_HASH_FN(key, map->ctx));
+    usize probe_idx = hm_home(h, map->capacity);
     u32   psl       = 0;
     usize found_idx = map->capacity; /* sentinel: not found */
 
@@ -741,7 +741,7 @@ HASHMAP_LINKAGE HM_RES_T_ HM_REMOVE_(
         }
 
         psl++;
-        probe_idx = _hm_wrap(probe_idx + 1u, map->capacity);
+        probe_idx = hm_wrap(probe_idx + 1u, map->capacity);
     }
 
     if (found_idx == map->capacity) {
@@ -760,7 +760,7 @@ HASHMAP_LINKAGE HM_RES_T_ HM_REMOVE_(
     loop assigns i, curr, map->slots[0 .. map->capacity - 1];
     loop variant map->capacity - 1 - i; */
     for (usize i = 0u; i < (map->capacity - 1u); i++) {
-        usize next = _hm_wrap(curr + 1u, map->capacity);
+        usize next = hm_wrap(curr + 1u, map->capacity);
         HASHMAP_SLOT_NAME* next_slot = &map->slots[next];
 
         if (!next_slot->occupied || (next_slot->psl == 0u)) {

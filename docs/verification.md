@@ -5157,10 +5157,10 @@ padding, bytes may differ where values do not).
 |------------------------|-------------------------------------------------|
 | **Status**             | Verified (6 own residuals, each filed by name); a defect found after VERIFY-055's enforcement repaired by VERIFY-056 (the note below) |
 | **Baseline commit**    | VERIFY-055: 173b7a2 (run 1) → 978e4de (run 2) → enforced from run 3. VERIFY-056: 8152928 (run 1) → 2bad3cd (run 2, the same line and names) → enforced from run 3 |
-| **Functions**          | 19, at `u64 → int`: 13 public (`buffer_size`, `init`, `clear`, `len`, `capacity`, `is_empty`, `load_factor`, `insert`, `get`, `get_or_null`, `contains_key`, `remove`, `iter_next`), four helpers (`_hm_home`, `_hm_wrap`, `_hm_normalize_hash`, `empty_slots_`) and the two lifetime no-ops; loop annotations in every loop |
+| **Functions**          | 19, at `u64 → int`: 13 public (`buffer_size`, `init`, `clear`, `len`, `capacity`, `is_empty`, `load_factor`, `insert`, `get`, `get_or_null`, `contains_key`, `remove`, `iter_next`), four helpers (`hm_home`, `hm_wrap`, `_hm_normalize_hash`, `empty_slots_`) and the two lifetime no-ops; loop annotations in every loop |
 | **Proof obligations**  | 4738 / 4784 discharged automatically (99.04%); 4585 / 4640 at VERIFY-055 |
 | **Unproved**           | 46: **40 inherited** (bits.h's 12, checked.h's 2, slice.h's 8 memcmp-danglingness, result's 6 at `(Bool, Error)`, and option's 6 and result's 6 at `hashmap_val_t`) and **6 own**; 0 Failed, 0 Invalid, 0 Stepout |
-| **Own residuals**      | 2 masks (`_hm_home`, `_hm_wrap`: `x & (capacity - 1u) < capacity`), filed under VERIFY-039's fixed-width block; 4 frame goals of `insert` and `remove`, filed under VERIFY-056's block on the frames of the probe loops. The probe distance bound, VERIFY-055's block of 13, retired at VERIFY-056 |
+| **Own residuals**      | 2 masks (`hm_home`, `hm_wrap`: `x & (capacity - 1u) < capacity`), filed under VERIFY-039's fixed-width block; 4 frame goals of `insert` and `remove`, filed under VERIFY-056's block on the frames of the probe loops. The probe distance bound, VERIFY-055's block of 13, retired at VERIFY-056 |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast`, preprocessed with `-CC` |
