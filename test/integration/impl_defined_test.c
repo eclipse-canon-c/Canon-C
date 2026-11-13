@@ -44,8 +44,9 @@
  *                       binary64, and a NaN is unequal to itself
  *                       (algo_cmp_f32, algo_cmp_f64)
  *   rename_existing     rename onto an existing file (7.19.4.2) replaces it
- *                       on POSIX systems and fails on Windows
- *                       (file_write_all_atomic)
+ *                       on POSIX systems, which file_write_all_atomic
+ *                       relies on, and fails on Windows, where it moves
+ *                       with MoveFileExA instead (VERIFY-074)
  */
 
 #define CANON_CONTRACT_IMPL
@@ -259,27 +260,44 @@ TEST(rename_existing) {
     Arena arena;
     result_usize_Error first;
     result_usize_Error second;
+    result_usize_Error third;
+    int renamed;
     option_charp got;
+    option_charp got_after;
 
     (void)remove(RENAME_PATH);
     (void)remove(RENAME_PATH_TMP);
-    first  = file_write_all(RENAME_PATH, "old");
-    second = file_write_all_atomic(RENAME_PATH, "new");
+    first   = file_write_all(RENAME_PATH, "old");
+    second  = file_write_all(RENAME_PATH_TMP, "new");
+    renamed = rename(RENAME_PATH_TMP, RENAME_PATH);
     arena_init(&arena, buf, sizeof buf);
     got = file_read_all_arena(RENAME_PATH, &arena);
 
     EXPECT(result_usize_Error_is_ok(first));
-    EXPECT(option_charp_is_some(got));
-#if defined(_WIN32)
-    /* The Windows C library's rename refuses a name that exists (EACCES):
-       the write fails, and the file is as it was. */
-    EXPECT(result_usize_Error_is_err(second));
-    EXPECT(option_charp_is_some(got) && (strcmp(option_charp_unwrap(got), "old") == 0));
-#else
-    /* POSIX rename replaces the file that has the name, atomically. */
     EXPECT(result_usize_Error_is_ok(second));
+#if defined(_WIN32)
+    /* The Windows C library's rename refuses a name that exists: the file
+       is as it was, and the source keeps its name. file_write_all_atomic
+       moves with MoveFileExA here instead (VERIFY-074). */
+    EXPECT(renamed != 0);
+    EXPECT(option_charp_is_some(got) && (strcmp(option_charp_unwrap(got), "old") == 0));
+    EXPECT(file_exists(RENAME_PATH_TMP));
+#else
+    /* POSIX rename replaces the file that has the name, atomically:
+       file_write_all_atomic relies on it. */
+    EXPECT(renamed == 0);
     EXPECT(option_charp_is_some(got) && (strcmp(option_charp_unwrap(got), "new") == 0));
+    EXPECT(!file_exists(RENAME_PATH_TMP));
 #endif
+
+    /* file_write_all_atomic replaces the file on each. */
+    (void)remove(RENAME_PATH_TMP);
+    third = file_write_all_atomic(RENAME_PATH, "newer");
+    arena_reset(&arena);
+    got_after = file_read_all_arena(RENAME_PATH, &arena);
+    EXPECT(result_usize_Error_is_ok(third));
+    EXPECT(option_charp_is_some(got_after) &&
+           (strcmp(option_charp_unwrap(got_after), "newer") == 0));
     EXPECT(!file_exists(RENAME_PATH_TMP));
     (void)remove(RENAME_PATH);
 }

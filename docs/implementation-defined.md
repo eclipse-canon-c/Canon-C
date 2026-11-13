@@ -235,9 +235,13 @@ them as they are.
 - **`rename` onto a file that exists** (J.3.12; 7.19.4.2):
   `file_write_all_atomic` writes a temporary file and renames it over the
   target. POSIX replaces the target, atomically. MSVC says "The new name
-  must not be the name of an existing file or directory": on Windows the
-  call returns `ERR_IO_FAILED` and the file is as it was. **Checked**:
-  `rename_existing`, which expects each. See "Found by the survey".
+  must not be the name of an existing file or directory", so on Windows
+  `file_write_all_atomic` moves the file with `MoveFileExA` and
+  `MOVEFILE_REPLACE_EXISTING` instead, which replaces it (VERIFY-074);
+  Microsoft does not document that move as atomic. **Checked**:
+  `rename_existing`, which expects `rename` to replace the file on POSIX
+  systems and to refuse on Windows, and `file_write_all_atomic` to replace
+  it on each. See "Found by the survey".
 - **Binary streams** (7.19.2p3, 7.19.9.2p3): a binary stream need not
   support `fseek` to `SEEK_END`, and `file_read_all_arena` reads in chunks
   when it fails; it may carry null characters appended at its end, which
@@ -270,10 +274,11 @@ them as they are.
    eighth of the draws. **Fixed** by VERIFY-072: such a draw is drawn
    again. `!(min < max)` and an infinite bound now return `min`, and a
    span that overflows is added in two halves, so the value stays finite.
-3. **`file_write_all_atomic` cannot replace a file on Windows**, as above,
-   and `util/file.h` does not say so. Decided by the author (2026-11-12):
-   on Windows it will replace the file with `MoveFileExA` and
-   `MOVEFILE_REPLACE_EXISTING`, in a record of its own.
+3. **`file_write_all_atomic` could not replace a file on Windows**, as
+   above, and `util/file.h` did not say so. Decided by the author
+   (2026-11-12): on Windows it replaces the file with `MoveFileExA` and
+   `MOVEFILE_REPLACE_EXISTING`. **Fixed** by VERIFY-074, and `util/file.h`
+   says how it moves the file on each system, and what it does not promise.
 4. **`Error`'s size with short enumerations was misstated.**
    `semantics/error.h`'s comment in `error_in_range`, and VERIFY-046's
    record, say that with `-fshort-enums` `Error` is `unsigned char`. Its

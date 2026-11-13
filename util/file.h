@@ -19,6 +19,11 @@
 #include <stdbool.h>
 /* cppcheck-suppress misra-c2012-21.6 ; MISRA-DEV-016 */
 #include <stdio.h>
+#if defined(_WIN32)
+    /* MoveFileExA and MOVEFILE_REPLACE_EXISTING, for
+       file_write_all_atomic (VERIFY-074) */
+    #include <windows.h>
+#endif
 
 #include "core/primitives/types.h"
 #include "core/primitives/contract.h"
@@ -68,7 +73,8 @@
  *
  * Side effects:
  * ────────────────────────────────────────────────────────────────────────────
- * - File system operations (fopen, fwrite, rename, remove) modify external state
+ * - File system operations (fopen, fwrite, rename, remove; MoveFileExA on
+ *   Windows) modify external state
  * - file_write_all_atomic() creates and removes a temporary ".tmp" file
  * - file_exists() opens and immediately closes the file (TOCTOU advisory)
  */
@@ -267,11 +273,23 @@ static inline result_usize_Error file_write_all(
 /**
  * @brief Atomic write: writes to temp file then renames
  *
+ * Writes content to path with ".tmp" appended, then moves that file onto
+ * path. On Windows, whose C library's rename() refuses a name that exists,
+ * the move is MoveFileExA() with MOVEFILE_REPLACE_EXISTING (VERIFY-074),
+ * which replaces the file; Microsoft does not document that move as
+ * atomic. Elsewhere it is rename(), whose effect on a file that exists C
+ * leaves to the implementation: POSIX systems replace the file atomically,
+ * so that path names the old file or the new one throughout. If the move
+ * fails (on Windows, for one, while another handle has path open without
+ * delete sharing), the temporary file is removed and path is as it was.
+ * Nothing is flushed to the device: a power failure can lose the new
+ * contents.
+ *
  * @param path    Final file path (must not be NULL — contract)
  * @param content Null-terminated content to write (must not be NULL — contract)
  * @return Ok(bytes written) on success
  *         Err(ERR_BUFFER_TOO_SMALL) if path is too long for temp buffer
- *         Err(ERR_IO_FAILED) on write or rename failure
+ *         Err(ERR_IO_FAILED) on write or move failure
  */
 static inline result_usize_Error file_write_all_atomic(
     borrowed(const char*) path,
@@ -294,10 +312,19 @@ static inline result_usize_Error file_write_all_atomic(
         return r;
     }
 
+#if defined(_WIN32)
+    /* The temporary file is in path's directory, so on its volume: no
+       MOVEFILE_COPY_ALLOWED. */
+    if (MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING) == 0) {
+        (void)remove(tmp);
+        return result_usize_Error_err(ERR_IO_FAILED);
+    }
+#else
     if (rename(tmp, path) != 0) {
         (void)remove(tmp);
         return result_usize_Error_err(ERR_IO_FAILED);
     }
+#endif
 
     return r;
 }

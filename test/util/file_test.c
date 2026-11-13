@@ -23,7 +23,9 @@
  *   file_write_all         — write success, byte count, empty content
  *   file_read_all_arena    — read back, empty file, large file, arena exhaustion
  *   file_read_all          — heap-backed read, must free with str_free
- *   file_write_all_atomic  — atomic write + verify, path too long
+ *   file_write_all_atomic  — atomic write + verify, path too long; replaces
+ *                            a file that exists, on Windows too, and a
+ *                            target held open (VERIFY-074)
  *   round-trip             — write → read → verify content
  *   overwrite              — second write replaces first
  *
@@ -283,6 +285,76 @@ TEST(atomic_round_trip) {
 }
 
 /* =========================================================================
+ * file_write_all_atomic — replaces a file that exists (VERIFY-074)
+ *
+ * The Windows C library's rename refuses a name that exists;
+ * file_write_all_atomic moves with MoveFileExA there, and replaces the
+ * file on every platform.
+ * ====================================================================== */
+
+TEST(atomic_replaces_existing) {
+    u8 buf[4096];
+    Arena arena;
+    result_usize_Error old_wr;
+    result_usize_Error wr;
+    option_charp rd;
+
+    old_wr = file_write_all(TEST_ATOMIC, "old content");
+    EXPECT(result_usize_Error_is_ok(old_wr));
+
+    wr = file_write_all_atomic(TEST_ATOMIC, "new");
+    EXPECT(result_usize_Error_is_ok(wr) && (result_usize_Error_unwrap(wr) == 3u));
+    EXPECT(file_exists("canon_test_atomic.tmp.tmp") == false);
+
+    arena_init(&arena, buf, sizeof(buf));
+    rd = file_read_all_arena(TEST_ATOMIC, &arena);
+    EXPECT(option_charp_is_some(rd) && (strcmp(option_charp_unwrap(rd), "new") == 0));
+
+    remove(TEST_ATOMIC);
+}
+
+/* =========================================================================
+ * file_write_all_atomic — a target held open (VERIFY-074)
+ *
+ * POSIX rename replaces a file that is open: the open stream keeps the old
+ * file, and the name the new one. On Windows the C library opens a file
+ * without delete sharing, and MoveFileExA cannot replace it while it is
+ * open: the write fails, and the file is as it was. Either way nothing is
+ * left at the temporary name.
+ * ====================================================================== */
+
+TEST(atomic_target_open) {
+    u8 buf[4096];
+    Arena arena;
+    result_usize_Error old_wr;
+    result_usize_Error wr;
+    option_charp rd;
+    FILE* held;
+
+    old_wr = file_write_all(TEST_ATOMIC, "old content");
+    EXPECT(result_usize_Error_is_ok(old_wr));
+
+    held = fopen(TEST_ATOMIC, "rb");
+    EXPECT(held != NULL);
+    wr = file_write_all_atomic(TEST_ATOMIC, "new");
+    if (held != NULL) { (void)fclose(held); }
+
+    arena_init(&arena, buf, sizeof(buf));
+    rd = file_read_all_arena(TEST_ATOMIC, &arena);
+#if defined(_WIN32)
+    EXPECT(result_usize_Error_is_err(wr) &&
+           (result_usize_Error_unwrap_err(wr) == ERR_IO_FAILED));
+    EXPECT(option_charp_is_some(rd) && (strcmp(option_charp_unwrap(rd), "old content") == 0));
+#else
+    EXPECT(result_usize_Error_is_ok(wr) && (result_usize_Error_unwrap(wr) == 3u));
+    EXPECT(option_charp_is_some(rd) && (strcmp(option_charp_unwrap(rd), "new") == 0));
+#endif
+    EXPECT(file_exists("canon_test_atomic.tmp.tmp") == false);
+
+    remove(TEST_ATOMIC);
+}
+
+/* =========================================================================
  * file_write_all_atomic — path too long
  * ====================================================================== */
 
@@ -346,6 +418,8 @@ int main(void) {
 
     /* file_write_all_atomic */
     RUN(atomic_round_trip);
+    RUN(atomic_replaces_existing);
+    RUN(atomic_target_open);
     RUN(atomic_path_too_long);
 
     /* Edge cases */
