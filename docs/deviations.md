@@ -34755,3 +34755,128 @@ and `func` are still strings after a push is what the contract does not
 state: no form of it that WP proves was found (runs 1 and 1b), and the
 tests check it. Next: `file_write_all_atomic` on Windows (VERIFY-071's
 finding 3).
+
+---
+
+## VERIFY-074: Pre-registration — file_write_all_atomic Replaces the File on Windows: MoveFileExA with MOVEFILE_REPLACE_EXISTING
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-074 |
+| **Date**       | 2026-11-13 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | d74d5c8 (VERIFY-073); `1`, `3`, `4`, `5` and `6` #56 and `2 · Platforms` #75 on d1d4d2e, `8 · Records` #84 on d74d5c8. |
+| **Scope**      | `util/file.h`: `file_write_all_atomic`'s move on Windows and its documentation, and `<windows.h>` there; `test/util/file_test.c`, two tests; `test/integration/impl_defined_test.c`, `rename_existing`; `docs/implementation-defined.md`'s `rename` entry and finding 3. |
+| **Category**   | VERIFY-071's finding 3, fixed. One run. |
+
+### What is decided
+
+The author decided VERIFY-071's finding 3 on 2026-11-12 (VERIFY-072's
+record): on Windows, `file_write_all_atomic` replaces the file with
+`MoveFileExA` and `MOVEFILE_REPLACE_EXISTING`, in a record of its own.
+This is that record.
+
+**The move.** `file_write_all_atomic` writes the content to `path` with
+`.tmp` appended, then moves that file onto `path`. Elsewhere the move
+stays `rename`, which POSIX defines to replace a file that exists,
+atomically. On Windows it becomes `MoveFileExA(tmp, path,
+MOVEFILE_REPLACE_EXISTING)`. The C library's `rename` there refuses a name
+that exists, so until now the function returned `ERR_IO_FAILED` whenever
+`path` existed. Microsoft documents the flag so: "If a file named
+lpNewFileName exists, the function replaces its contents with the
+contents of the lpExistingFileName file, provided that security
+requirements regarding access control lists (ACLs) are met." The page
+says nothing of atomicity, and the header now says that Microsoft does
+not document the move as atomic. Two flags are left out:
+`MOVEFILE_COPY_ALLOWED`, since the temporary file is in `path`'s
+directory and so on its volume; and `MOVEFILE_WRITE_THROUGH`, since
+neither system's path flushes anything to the device, which the header
+now says too.
+
+**A move that fails.** The temporary file is removed and `ERR_IO_FAILED`
+returned, as before, and `path` is as it was. One way it fails on
+Windows: the C library opens a file without delete sharing, so while a
+stream has `path` open, `MoveFileExA` cannot replace it. POSIX's `rename`
+replaces it, and the open stream keeps the old file. A test checks each.
+
+**`<windows.h>`.** `util/file.h` includes it on Windows, for `MoveFileExA`
+and the flag, as `util/time.h` already does for its clock: a program that
+includes `util/file.h` there gets its names with it. `MoveFileExA` reads
+the names in the process's ANSI code page; the tests use ASCII names.
+
+**The tests.**
+
+- `file_test`'s `atomic_replaces_existing`: a file written, then
+  `file_write_all_atomic` onto it. The write returns 3, the file holds the
+  new contents, and nothing is left at the temporary name. On Windows it
+  fails with the header as it is.
+- `file_test`'s `atomic_target_open`: the same while a stream holds the
+  file open. On Windows the write fails with `ERR_IO_FAILED` and the file
+  holds the old contents; elsewhere it is replaced; on each, nothing is
+  left at the temporary name.
+- `impl_defined_test`'s `rename_existing` checks `rename` itself now, the
+  implementation-defined behaviour (7.19.4.2), where it checked it through
+  `file_write_all_atomic`: on POSIX systems `rename` replaces the file,
+  which `file_write_all_atomic` relies on, and on Windows it refuses and
+  leaves both files. Then `file_write_all_atomic` replaces the file on
+  each.
+
+### Measured here
+
+With gcc 13.3.0 and 14, clang 18.1.3, cppcheck 2.13.0 and 2.19.0,
+MinGW-w64's gcc 13 with Wine 9.0, and VERIFY-070's bare-metal toolchains:
+
+- **Windows, as MinGW-w64 builds it.** `file_test`, `impl_defined_test`,
+  `header_combination_test` and `time_test`, built with the project's
+  flags (`-std=c99 -Wall -Wextra -Wpedantic -Werror`), compile without a
+  warning and pass under Wine, `file_test` with 38 checks and
+  `impl_defined_test` with 194. With the header as it is and the new
+  tests, four checks fail there: `atomic_replaces_existing`'s two and the
+  two on `rename_existing`'s replacement. Wine runs MinGW-w64's `msvcrt`,
+  not the UCRT the CI's Windows jobs link, and is not Windows.
+- **Linux.** ctest passes 59 of 59 with gcc 13 and with clang 18 under
+  ASan and UBSan, and with clang 18 in Release. `file_test` and
+  `impl_defined_test` pass with gcc 13 and 14 in Release, gcc 14 under
+  ASan and UBSan, gcc 13 with `CANON_NO_REQUIRE` and `--coverage`, and gcc
+  13 with `CANON_LIFETIME=debug` under ASan and UBSan. No build warns.
+- **The static-analysis job's steps**: clang-tidy, 0 errors; cppcheck
+  2.13.0 (the Linux job's) and 2.19.0 (the macOS and Windows jobs'), with
+  the job's arguments, find nothing in the two tests, with `_WIN32`
+  defined and without.
+- **The misra job's steps**: "real 57; canary 3; total 60", and "as
+  pinned: 57 real finding(s) in 32 file and rule pair(s)": the base's 60
+  findings, file and rule, `util/file.h`'s six among them, lines aside.
+  None is in the new code.
+- **The coverage job's steps**, with gcc 14: "MC/DC 2064 / 2230", with
+  #56's eight rows, as on the base. `util/file.h`'s counts do not change:
+  Linux builds no `_WIN32` branch, and the new tests take the `rename`
+  branch the way the old ones did.
+- **The embedded job's steps**: the compile check, 226 of 226 units at
+  each of the six targets and three levels; the AVR check, "80 headers: 29
+  compile, 49 refused by Tier 1, 2 other"; and the size measure, "as
+  pinned: 57 rows, 798 figures", with #75's size notices and its 418570
+  tokens. The bare-metal targets define no `_WIN32`, so `util/file.h` is
+  the same code there.
+- **`8 · Records`' checks** pass.
+
+Not run here: Windows itself, macOS, i386, AArch64, the big-endian and
+musl jobs, and CompCert.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 6 and 8 run; 7 and 9 to 14 do not.
+`util/` and `test/` change, which 1 to 6 do not ignore.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| V1 | **1 to 6 and 8 run**; the others do not. | another set | H |
+| V2 | **1 is green**: `file_test` and `impl_defined_test` pass in each job that runs ctest, the ten on Windows among them (`build` and `lifetime-debug` with `cl` and with `clang`, each in Debug and Release, and `mingw` in both). 1's notices are #56's, GitHub's own on the macOS runners' capacity aside. | a failure, or another notice | M–H: Windows is not run here, and Wine is not Windows. `atomic_target_open` rests on the Windows C library's opening a file without delete sharing. |
+| V3 | **2 is green**, each job with #75's notices: the embedded job's size notices, its pins' "as pinned: 57 rows, 798 figures" and its build cost's 418570 tokens, up to their times, and the embedded check's and the AVR check's. | a failure, or another notice | H: measured here with the runner's toolchains. |
+| V4 | **3 is green**, with #56's notices: coverage's "MC/DC 2064 / 2230" with its eight rows, misra's, and compcert's "60 / 60 compiled, 60 ran"; static-analysis passes on the three systems. | a failure, or another notice | H for coverage and misra (run here); M–H for static-analysis on macOS and Windows, whose cppcheck 2.19.0 is run here on the two changed tests, not on the whole suite; M for CompCert, not run here. |
+| V5 | **4, 5 and 6 give #56's notices**, every job green. | a failure, or another notice | H: no proved unit reads `util/file.h`. |
+| V6 | **8 is green**; its size pins line reads "size pins: 57 rows; 0 problem(s)". | a failure, or another line | H (run here) |
+
+**What follows.** V1 to V6 scored, and the record closed. Then the
+AUTOSAR adapter, which waits on the author's decision on DET.
