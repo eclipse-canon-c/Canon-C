@@ -35218,6 +35218,7 @@ Item 2's four parts are done. Next: CERT C and CWE.
 | **ID**         | VERIFY-076 |
 | **Date**       | 2026-11-13 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-13 — CLOSED: the push of 3a53d1d and c35260b, with VERIFY-075's scoring, af50b3e, matched six of X1 to X8. All twelve workflows are green, and clang-tidy reads the headers and finds nothing. X6 and X7 missed on counts taken from earlier runs: one probe job's baseline predated a change to its unit, and in three agreement units one prover proved one goal more ("Scored", below). The Status above is the record as committed. |
 | **Baseline**   | bd82618 (VERIFY-075): `1`, `3`, `4`, `5` and `6` #58, `2 · Platforms` #77 and `8 · Records` #86. For the workflows bd82618 did not start: `7 · Proofs: -CC` #29 and `14 · Eva` #9, on d1d4d2e; `9 · Probes` #20, on 453cbcf, the last run of the two probes this change starts; `11 · Proofs: machine models` #12, on 7ecd37c; `13 · Prover agreement` #10, on d1d4d2e, for its 12 units, and #9, on 7ecd37c, for the other 14. VERIFY-075's scoring, which changes the records only, is pushed before this record or with it. |
 | **Scope**      | `.clang-tidy`, a header filter; `data/array.h` and `data/bitset.h`, five macro arguments parenthesized; 16 macro definitions in 14 headers, each between `NOLINTBEGIN` and `NOLINTEND` comments for `bugprone-macro-parentheses`; MISRA-DEV-012, a note. |
 | **Category**   | CERT C and CWE, its first part, decided by the author on 2026-11-13: clang-tidy made to read the headers before its CERT checks are added. One run. |
@@ -35357,3 +35358,50 @@ are skipped. `tools/agreement/agreement.py affected` gives all 26 units.
 **What follows.** X1 to X8 scored, and the record closed. Then the CERT
 checks: clang-tidy's `cert-*` checks for the library's headers,
 `docs/cert-cwe.md`, with ISO/IEC TS 17961 and a map to CWE.
+
+### Scored (2026-11-13)
+
+The push of af50b3e (VERIFY-075's scoring), 3a53d1d and c35260b started
+twelve workflows at 11:07 UTC: `1` #59, `2` #78, `3` #59, `4` #59, `5`
+#59, `6` #59, `7` #30, `8` #87, `9` #22, `11` #13, `13` #11 and `14` #10.
+All twelve are green, each at its first attempt: 322 jobs, with eight of
+`9`'s probes skipped; the last, `6`, finished at 12:35.
+
+| # | scored |
+|---|--------|
+| X1 | **MATCH.** 1 to 9, 11, 13 and 14 ran; 10 and 12 did not. In 9, `changes`, `g13-probe` and `pointer-probe`'s 26 jobs ran, and the other eight probes were skipped; 13 ran all 26 units, 106 jobs. |
+| X2 | **MATCH.** 3's six jobs are green, each with #58's notices. Its clang-tidy step, on Linux, ends "Suppressed 688 warnings (1 in non-user code, 683 NOLINT, 4 with check filters)", as measured here, and reports no finding. |
+| X3 | **MATCH.** 1's 27 jobs are green, each with #58's notices; in each of the ten Windows jobs, ctest passes 61 of 61. |
+| X4 | **MATCH.** 2's 15 jobs are green, each with #77's notices, up to their times. |
+| X5 | **MATCH.** 4's 13 jobs, 5's five and 6's 11 are green, with #58's notices; 7's seven with #29's; 11's 90 with #12's; and 14's 12 with #9's. |
+| X6 | **MISS.** 9 is green, and `g13-probe` and 25 of `pointer-probe`'s 26 jobs give #20's notices. `frama-c-diag`'s reads "pointer_value proved 158 / 158; unproved 0: none", where #20's read 160 / 160. `semantics/diag.h` changed at d1d4d2e (VERIFY-073), after #20, and `pointer-probe`'s filter does not watch it: the probe had not run since on that unit. The baseline was stale, not the probe, and every `pointer_value` goal is still proved. |
+| X7 | **MISS.** 13 is green, and each unit's count of goals no prover proves, and its pins, are its last run's. But in three units, one prover proved one goal more than at that run: `frama-c-diag`'s Z3, 3038 where #10 gave 3037; `frama-c-hashmap`'s CVC5, 4729 where #10 gave 4728 (and #9 gave 4729); `frama-c-vec-range`'s CVC5, 5156 where #10 gave 5155. Each goal moved between the counts of goals one, two or three provers prove, and none is in the pins. The other 23 units' counts are their last run's. |
+| X8 | **MATCH.** 8's two jobs are green; its size pins line reads "size pins: 57 rows; 0 problem(s)". |
+
+**Six of eight.** Both misses are in counts this record took from earlier
+runs, not in anything the change touched: no proof's input changed but by
+comments.
+
+**What the misses show.**
+
+- **A prover's count alone moves.** With its inputs unchanged, a unit's
+  count with one prover alone moved by a goal in three units of 26 here,
+  and in one of 11 between #9 and #10, the case X7's confidence named. A
+  record should predict, for this workflow, each unit's count of goals no
+  prover proves and its pins, which held, and leave the counts with each
+  prover alone unpredicted, as it leaves the slow lines.
+- **A probe's baseline must postdate each unit it reads.** `pointer-probe`
+  runs all 26 units, but its filter, set by VERIFY-062 and its phase B,
+  watches the headers that record changed (`data/vec/`, `data/deque/`,
+  `data/stack.h`, `data/priority_queue.h`, `data/stringbuf.h`,
+  `core/region.h`, `core/primitives/ptr.h`, `semantics/borrow.h` and the
+  drivers), not `semantics/diag.h`, nor most of the other units' headers. A
+  change to one of those leaves the probe's result unrun until something it
+  watches changes. Whether to widen the filter goes to the backlog; until
+  then, a record that takes a `pointer-probe` baseline names the units
+  changed since it.
+
+**Closed.** CI's clang-tidy step reports what its checks find in every
+header the tests include, and finds nothing: five macro arguments are
+parenthesized, and MISRA-DEV-012's 49 positions are marked. Next: the CERT
+checks, for the library's headers.
