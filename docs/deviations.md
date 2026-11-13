@@ -35405,3 +35405,172 @@ comments.
 header the tests include, and finds nothing: five macro arguments are
 parenthesized, and MISRA-DEV-012's 49 positions are marked. Next: the CERT
 checks, for the library's headers.
+
+---
+
+## VERIFY-077: Pre-registration — CERT C on the Library's Code: clang-tidy's 19 CERT Checks in CI, Five Reserved Names Renamed, DIAG_PUSH_FMT's snprintf Checked, and docs/cert-cwe.md
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-077 |
+| **Date**       | 2026-11-13 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | c35260b (VERIFY-076): `1`, `3`, `4`, `5` and `6` #59, `2 · Platforms` #78, `7 · Proofs: -CC` #30, `9 · Probes` #22, `13 · Prover agreement` #11 and `14 · Eva` #10; and `8 · Records` #88, on 3fa80ee (VERIFY-076's scoring). |
+| **Scope**      | New: `tools/cert/cert_check.py`; `docs/cert-cwe.md`. Changed: `.github/workflows/analysis.yml`, a step; `data/hashmap/hashmap_impl.h` and `data/stringbuf.h`, five functions renamed; `semantics/diag.h`, `DIAG_PUSH_FMT`; `util/time.h`, three comments; `test/semantics/diag_test.c`, a test; `tools/eva/pins/*.txt`, one line in each of the ten; MISRA-DEV-011, a note; and the names in `test/data/stringbuf_test.c`, `tools/eva/README.md`, `tools/record_coverage.py`, `docs/verification.md`, `docs/misra-campaign.md`, the README and the workflow map. |
+| **Category**   | CERT C and CWE, its second part, as the author decided on 2026-11-13. One run. |
+
+### What is decided
+
+The author decided on 2026-11-13: CERT C's checks for the library's code
+only, the tests keeping their checks; no Cppcheck CERT step, since
+open-source Cppcheck's CERT addon was removed after 2.7; clang-tidy made to
+read the headers first, which VERIFY-076 did; and CodeQL, Coverity,
+PVS-Studio and SonarQube shown as planned, with CBMC and CPAchecker, as the
+author asked later that day. "Planned" means, in the author's words, that
+the project has planned to run a tool, not that it has talked to its
+makers; the README's legend said it had asked them, and now says this.
+This record does the CERT step, and the badges.
+
+**The step.** The static-analysis job, on Linux, gains a step after its
+clang-tidy step: clang-tidy 18's 19 checks for CERT's C guidelines,
+`--checks='-*,cert-*-c'`, over the same test files, its output given to
+`tools/cert/cert_check.py`. The script fails the step on a finding in the
+library's code: one whose location is in `core/`, `semantics/`, `data/`,
+`algo/`, `util/` or `integrations/`, or one in a test that an "expanded
+from macro" note traces to a macro defined there, counted once at that
+macro's line. It fails on a compiler error too. A finding in the tests' own
+code is counted in the log and does not fail it. The step's notice reads
+"clang-tidy's CERT C checks: N finding(s) in the library's code; the
+tests' own code is not checked".
+
+**What the checks find**, measured at af50b3e (VERIFY-075's scoring) with
+all of clang-tidy's `cert-*` checks and the library's headers shown: six
+in the library's code, and 5339 in the tests' own code, nearly all
+`cert-err33-c` on the test harness's `printf` and `fprintf`. The code
+they read has not changed since but for VERIFY-076's comments and
+parentheses.
+
+- **Four reserved identifiers** (`cert-dcl37-c`, DCL37-C): functions at file
+  scope whose names begin with an underscore, which C reserves there (C99
+  7.1.3): `_hm_home`, `_hm_wrap` and `_hm_normalize_hash` in
+  `data/hashmap/hashmap_impl.h`, `_stringbuf_append_bytes` in
+  `data/stringbuf.h`. Each loses its underscore. A search of the headers
+  for names C reserves found one more, which the step does not build:
+  `_hm_lifetime_next_id_`, under `CANON_LIFETIME_DEBUG`, now
+  `hm_lifetime_next_id_`. MISRA C:2012 rule 21.2 forbids the same, and
+  Cppcheck's addon reported none: its `misra_21_2` flags a function named as
+  one of the standard library's, and a macro named like `__BUILTIN_`.
+  `docs/misra-campaign.md` says so.
+- **`_POSIX_C_SOURCE`** (`cert-dcl37-c`), defined by `util/time.h` as POSIX
+  asks an application that wants `clock_gettime` to do. MISRA-DEV-011
+  argues it for rule 21.1, which forbids the same thing; its argument holds
+  for DCL37-C. Each of the three directives gains
+  `/* NOLINT(cert-dcl37-c): MISRA-DEV-011 */` on its line, and the record a
+  note.
+- **`DIAG_PUSH_FMT` ignored `snprintf`'s result** (`cert-err33-c`, ERR33-C),
+  found in `diag_test`'s three uses of the macro. A failing `snprintf` left
+  in the buffer whatever it had written, which glibc and musl end with a
+  terminator, and C does not promise one. The macro now pushes an empty
+  message when `snprintf` returns a negative value:
+  `if (snprintf(...) < 0) { (buf)[0] = '\0'; }`, on the line the call had.
+  `diag_test` gains a test, on glibc: in the "C" locale, `"ab%lccd"` with
+  U+20AC makes `snprintf` return -1 with "ab" in the buffer; the frame's
+  message is empty. Without the change, the test fails on that check.
+
+**The renames and the proofs.** WP names a function's goals through
+Frama-C's sanitizer, which drops leading, trailing and repeated
+underscores, and a call-site goal with the callee's name as declared, as
+`tools/record_coverage.py` notes: `_hm_home`'s postcondition is already
+`typed_cast_hm_home_ensures`, pinned so in `proofs-data.yml`. The renamed
+functions' own goals keep their names; their call-site goals change, from
+`call__hm_home_...` to `call_hm_home_...`, and no pin, agreement list or
+record names one (searched). Eva names a callee as declared: each of the
+ten pin files has one line with `precondition of _stringbuf_append_bytes`,
+which becomes `precondition of stringbuf_append_bytes`. Lines do not move
+in the four headers: each change is made within its lines, `diag.h`'s
+comment rewritten in its three lines, since Eva's pins name lines of
+`data/stringbuf.h`, `data/hashmap/hashmap_impl.h` and `semantics/diag.h`.
+
+**The documents.** `docs/cert-cwe.md` (new) lists the 19 checks, each with
+its CERT guideline, rule or recommendation, and its ISO/IEC TS 17961 and
+CWE entries, as CERT's pages give them (cmu-sei.github.io), what the
+checks found, and what is not checked: CERT's other guidelines, the tests'
+own code, the library's code no test reaches, and Cppcheck's former addon.
+The README's Guidelines group gains "CERT C / CWE"; its Static Analysis
+group gains four planned badges (CodeQL, Coverity, PVS-Studio, SonarQube),
+and its formal tools group two (CBMC, CPAchecker). Its legend now reads
+"'Planned' badges name tools the project plans to run on Canon-C; none
+has run yet." The workflow map's row for 3 names the step.
+
+### Measured here
+
+With clang-tidy 18.1.3, gcc 13.3.0 and 14, clang 18.1.3, cppcheck 2.13.0
+and 2.19.0, MinGW-w64's gcc 13 with Wine 9.0, Frama-C 25 with Eva, and
+VERIFY-070's bare-metal toolchains, on the change:
+
+- **The static-analysis job's steps.** The clang-tidy step: 0 errors,
+  ending "Suppressed 688 warnings (1 in non-user code, 683 NOLINT, 4 with
+  check filters)", as at #59. The CERT step: "CERT C: 0 finding(s) in the
+  library's code; 5342 in the tests' own code, which this step does not
+  check", its notice as above with 0, exit 0. On the first measurement's
+  output, the script reports the six findings above and fails.
+  With `_hm_home` given its underscore back, `DIAG_PUSH_FMT`'s check taken
+  out and the first directive's `NOLINT` removed, the step reports those
+  three, each at its line, and fails.
+- **Linux.** ctest passes 61 of 61 with gcc 13 and with clang 18 under
+  ASan and UBSan, and with clang 18 in Release; no build warns. `diag_test`
+  passes with its new test, and fails on it against the old
+  `semantics/diag.h`.
+- **Windows, as MinGW-w64 builds it.** `diag_test`, `stringbuf_test` and
+  `hashmap_test` compile without a warning, in Debug and in Release, and
+  pass under Wine; the new test is glibc's only.
+- **The static-analysis job's Cppcheck**: 2.13.0 and 2.19.0, with the job's
+  arguments, find nothing in `test/`.
+- **The misra job's steps**: "real 57; canary 3; total 60", "as pinned: 57
+  real finding(s) in 32 file and rule pair(s)": the same 60 findings, file,
+  line and rule.
+- **The coverage job's steps**, with gcc 14: "MC/DC 2065 / 2232", its eight
+  rows #59's; lines 2976 of 3058, functions 759 of 762, branches 1810 of
+  1964, as at #59.
+- **The embedded job's steps**: the compile check, 227 of 227 units at each
+  of the six targets and three levels; the AVR check, "80 headers: 29
+  compile, 49 refused by Tier 1, 2 other"; the size measure, "as pinned: 57
+  rows, 798 figures", with #78's size notices and its 418570 tokens.
+- **Eva**, Frama-C 25 with `-c11`, on `stringbuf`, `hashmap` and `diag`, at
+  `x86_64`, `msvc_x86_64` and `ppc_32`: each "as pinned", the edited line
+  included. The seven other models need machine-model files Frama-C 25
+  does not read.
+- **`8 · Records`' checks** pass.
+
+Not run here: macOS, Windows itself and MSVC, AArch64, s390x, musl,
+CompCert, and every proof and probe job.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 9, 13 and 14 run; 10, 11 and 12 do not.
+`9 · Probes`' own filter starts `pointer-probe`, for `data/stringbuf.h`;
+the other probes are skipped. `tools/agreement/agreement.py affected`
+gives four units: `frama-c-diag`, `frama-c-hashmap`, `frama-c-stringbuf`
+and `frama-c-vec-fmt`.
+
+### Predictions
+
+VERIFY-076's misses set two of these: for 13, each unit's count of goals
+no prover proves and its pins, not the counts with each prover alone; and
+`pointer-probe`'s baseline is #22, where all 26 units ran.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Y1 | **1 to 9, 13 and 14 run**; 10, 11 and 12 do not. In 9, `changes` and `pointer-probe`'s 26 jobs run, and the other probes are skipped; 13 runs `frama-c-diag`, `frama-c-hashmap`, `frama-c-stringbuf` and `frama-c-vec-fmt`. | another set | H |
+| Y2 | **3 is green, its CERT step's notice reading "clang-tidy's CERT C checks: 0 finding(s) in the library's code; the tests' own code is not checked".** Its other notices are #59's: coverage's "MC/DC 2065 / 2232" with its eight rows, misra's, and compcert's "61 / 61 compiled, 61 ran"; the clang-tidy step ends as at #59. | a failure, or another notice | H for the two clang-tidy steps, coverage and misra, run here with the runner's clang-tidy 18.1.3, gcc 14 and cppcheck 2.13.0; M for CompCert, not run here, which runs `diag_test`'s new test (glibc). |
+| Y3 | **1 is green**, its notices #59's; in each of the ten Windows jobs ctest passes 61 of 61. | a failure, or another notice | H |
+| Y4 | **2 is green**, each job with #78's notices, up to their times. | a failure, or another notice | H |
+| Y5 | **4, 5 and 6 are green, with #59's notices; 7 with #30's.** | a failure, or another notice | M–H: no goal of the renamed functions' own changes name, and comments and `DIAG_PUSH_FMT`, which no proof unit uses, change no goal; WP is not run here. As at any push, a slow runner could lose the two goals of `vec_int_extend_from_range` that only Alt-Ergo proves (VERIFY-065). |
+| Y6 | **9 is green**: each `pointer-probe` job gives #22's notice. | a failure, or another notice | H |
+| Y7 | **13 is green**, and each of its four units' count of goals no prover proves, and its pins, are #11's. | a failure, or another count | M–H: renamed call-site goals are in no pin; this record does not predict the counts with each prover alone. |
+| Y8 | **14 is green**, with #10's notices, each program "as pinned", the pins' new line included. | a failure, or another notice | M–H: run here at the three built-in models with Frama-C 25, not at the seven others, nor with the job's Frama-C. |
+| Y9 | **8 is green**; its size pins line reads "size pins: 57 rows; 0 problem(s)". | a failure, or another line | H (run here) |
+
+**What follows.** Y1 to Y9 scored, and the record closed, which closes
+CERT C and CWE. Next on the list: Frama-C's plug-ins, group 1 (E-ACSL,
+Metrics and MdR).
