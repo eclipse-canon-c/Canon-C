@@ -34920,3 +34920,232 @@ is fixed. Next: the AUTOSAR adapter, whose DET handling the author
 decided on 2026-11-13: the adapter reports a failed contract check with
 `Det_ReportError`, then calls a safe-state function the integrator
 supplies, which does not return.
+
+---
+
+## VERIFY-075: Pre-registration — An AUTOSAR Classic Adapter: the Platform's Types Checked Against Canon-C's, Error and bool Converted, and a Failed Contract Check Reported to DET, Then the Project's Safe State
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-075 |
+| **Date**       | 2026-11-13 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 67a6242 (VERIFY-074): `1`, `3`, `4`, `5` and `6` #57, `2 · Platforms` #76 and `8 · Records` #85, each on 67a6242. VERIFY-074's scoring, which changes documents only and starts only `8`, is pushed before this record or with it. |
+| **Scope**      | New: `integrations/autosar/canon_autosar.h`; its test, `test/integrations/autosar/autosar_test.c`, built twice; three stand-in AUTOSAR headers, in `test/integrations/autosar/stubs/`; `test/integrations/autosar/misra_adapter.h`, the misra job's view of the adapter; `docs/autosar-classic.md`. Changed: `CMakeLists.txt`, the two tests; `.github/workflows/analysis.yml`, the include path of the static-analysis job's Cppcheck and of CompCert, and the misra job's reading of the adapter; `tools/embedded_compile_check.sh`, its include path; `.github/workflows/README.md`, where such a test's include directories go; `README.md`, the Guidelines badges and the documents list; MISRA-DEV-017, ten sites. No library header changes. |
+| **Category**   | The project's item 2 (AUTOSAR Classic), part d: the adapter. One run. |
+
+### What is decided
+
+Item 2 makes Canon-C ready for projects built on AUTOSAR Classic
+(VERIFY-068). Its parts a to c are done: the misra job enforced
+(VERIFY-068), each header compiled alone for bare-metal targets
+(VERIFY-069), and the implementation-defined behaviours Canon-C relies on
+documented (VERIFY-071). Part d, the last, is an adapter: the header such a
+project includes to use Canon-C there. What it does with a failed contract
+check waited on the author, who decided it on 2026-11-13: it reports the
+failure with `Det_ReportError`, AUTOSAR's call for development errors, not
+`Det_ReportRuntimeError`; then it calls a function the project supplies,
+which puts the ECU in its safe state and does not return, and without
+which the program does not link.
+
+**The adapter.** `integrations/autosar/canon_autosar.h`, opt-in: no other
+Canon-C header includes it. It needs on the include path the repository's
+root, its own directory, and the project's AUTOSAR headers: `Std_Types.h`,
+which brings `Platform_Types.h`, and `Det.h`. It gives three things.
+
+- **Checks of the platform's types.** Ten static assertions, with
+  `static_require`: `uint8` to `uint64` and `sint8` to `sint64` against
+  `u8` to `u64` and `i8` to `i64` in size and signedness, and `float32` and
+  `float64` against `f32` and `f64` in size. A difference fails the build.
+  They check values, not types: `uint32` and `u32` can be different C types
+  of one width, so a pointer to one is not a pointer to the other, which
+  the header and the page say. `CANON_AUTOSAR_NO_64BIT_TYPES` skips the two
+  64-bit checks, for a `Platform_Types.h` older than AUTOSAR 4.1.2, which
+  added the 64-bit types.
+- **Conversions.** `canon_autosar_std_return(Error)` gives `E_OK` for
+  `ERR_OK` and `E_NOT_OK` for any other code: `Std_ReturnType` has those
+  two and the codes 0x02 to 0x3F a module defines for itself, onto which
+  Canon-C's codes are not mapped. `canon_autosar_boolean(bool)` gives
+  `TRUE` or `FALSE`; `canon_autosar_bool(boolean)` gives `true` for any
+  value but `FALSE`. Both are right for either form of `boolean`: an
+  unsigned integer, `unsigned char` in the specification's annex, with
+  `TRUE` 1 and `FALSE` 0, before AUTOSAR R22-11; C99's `_Bool`, with `TRUE`
+  `true` and `FALSE` `false`, since R22-11.
+- **The contract handler.** `canon_autosar_init()` installs
+  `canon_autosar_contract_handler` with `contract_set_handler`. It calls
+  `Det_ReportError(CANON_AUTOSAR_MODULE_ID, CANON_AUTOSAR_INSTANCE_ID,
+  CANON_AUTOSAR_API_ID, CANON_AUTOSAR_E_CONTRACT)`, then
+  `canon_autosar_safe_state()`, which the header declares and the project
+  defines; if that returns, it loops forever, since a contract handler must
+  not return.
+
+`CANON_AUTOSAR_MODULE_ID` is required, and the header stops the build with
+an `#error` without it: no default is right for every project. AUTOSAR
+reserves 0 to 254 for its basic software modules; a complex driver takes
+255 or 2048 to 4095. `CANON_AUTOSAR_INSTANCE_ID` and `CANON_AUTOSAR_API_ID`
+default to 0, the ApiId being one for every Canon-C function, since the
+handler is not told which function's check failed; the ErrorId,
+`CANON_AUTOSAR_E_CONTRACT`, defaults to 1.
+
+What it leaves as it is, which `docs/autosar-classic.md` says: Canon-C's
+checks are on unless `CANON_NO_REQUIRE` is defined, whatever the
+project's DevErrorDetect says; the file, line, function and expression
+Canon-C passes are dropped, since `Det_ReportError` has no place for them;
+a check that fails before `canon_autosar_init()` reaches the default
+handler, `fprintf` and `abort`; and AUTOSAR's DET stops execution in
+`Det_ReportError` (SWS_Det_00026), so the safe state is reached only with a
+DET that returns. The library's headers stay plain C99: no `Compiler.h`
+macros, no `MemMap.h`, no module ID or version information of their own.
+
+The sources are AUTOSAR's specifications: the Default Error Tracer's, R24-11
+(`Det_ReportError`'s prototype, SWS_Det_00009; SWS_Det_00026; the ModuleId
+ranges, 8.2.1.1), the Standard Types', R20-11 (`Std_ReturnType`, `E_OK` and
+`E_NOT_OK`, SWS_Std_00005 and 00006), and the Platform Types', R4.3.1 and
+R22-11, the release that made `boolean` a `_Bool` (SWS_Platform_00027).
+MISRA-DEV-025 names the DET by its earlier name, the Development Error
+Tracer.
+
+**`integrations/`.** A new top-level directory, for code that joins Canon-C
+to a framework. The scripts that list the library's headers read `core/`,
+`semantics/`, `data/`, `algo/` and `util/`: the embedded check's header
+list, the AVR check, the size measure and the misra job's list. None takes
+the adapter in as a header: it needs a ModuleId and AUTOSAR's headers,
+which its test gives it. It is checked through its test.
+
+**The stand-ins.** `test/integrations/autosar/stubs/` holds a
+`Platform_Types.h`, a `Std_Types.h` and a `Det.h` with the definitions the
+adapter uses, as the specifications give them, each citing its
+requirement. `Platform_Types.h` gives `boolean` R4.3.1's form, or R22-11's
+with `CANON_AUTOSAR_STUB_BOOLEAN_BOOL`. They are not an AUTOSAR
+implementation. CI has no AUTOSAR stack: a project's own headers, DET and
+ECU are not checked here.
+
+**The tests.** `test/integrations/autosar/autosar_test.c`, built twice
+(`CMakeLists.txt`): `autosar_test`, with R4.3.1's `boolean` and every DET
+ID configured, and `autosar_bool_test`, with R22-11's and the IDs at their
+defaults. Each makes 34 checks:
+
+- `canon_autosar_std_return` for `ERR_OK` and the 19 other codes
+  `semantics/error.h` names; `canon_autosar_boolean` for `true` and
+  `false`; `canon_autosar_bool` for `FALSE`, `TRUE`, and, in one check,
+  every value from 1 to 255; and the two round trips;
+- `canon_autosar_init()` installs the handler, and DET has not been called;
+- then `require(zero == 1)`, `zero` a volatile 0, fails. The test's
+  `Det_ReportError` records its call and returns, as a DET that does not
+  stop would; the test's safe state checks one call, with the configured
+  ModuleId, InstanceId, ApiId and ErrorId, and ends the program with the
+  result. If the handler returned instead, `main` reports it and fails.
+
+Under `CANON_NO_REQUIRE`, the coverage job's, `require()` is empty, and the
+test calls the installed handler itself.
+
+**Where CI reads them.**
+
+- **ctest**: every job that runs the tests runs both.
+- **The embedded job's compile check** compiles the test at each target
+  and level: its include path gains the adapter's directory and the
+  stand-ins'. It compiles 59 tests where it compiled 58, 227 units where it
+  compiled 226.
+- **CompCert** compiles and runs the test, with the same two directories on
+  its include path: 61 tests where it ran 60.
+- **The static-analysis job's Cppcheck** reads the test with the adapter,
+  the same two directories on its include path. Its clang-tidy reads it
+  from CMake's compile commands.
+- **The misra job** reads the adapter through
+  `test/integrations/autosar/misra_adapter.h`, which defines a ModuleId and
+  includes it, with the stand-ins' directory on its include path. Findings
+  in `test/integrations/autosar/`, the stand-ins and the wrapper, which are
+  test scaffolding, are suppressed; the adapter's own count like any
+  header's. Its ten static assertions are the C99 idiom MISRA-DEV-017
+  argues for rule 2.3, each with the record's inline suppression:
+  MISRA-DEV-017 gains ten sites.
+- **The workflow map** (`.github/workflows/README.md`) now says that a
+  test which includes from directories outside the library's needs them on
+  the three include paths above, the embedded check's, CompCert's and
+  Cppcheck's.
+
+**The README.** The author decided on 2026-11-10 a group of badges,
+"Guidelines": MISRA C:2012, AUTOSAR Classic and CERT C / CWE, each linked
+to its document, worded for what it is, and each added when its item
+lands. MISRA C:2012's belonged with VERIFY-068, which enforced the misra
+job, and was missed there; it comes now, with AUTOSAR Classic's. CERT C /
+CWE's comes with its item. The legend says what each badge stands for,
+and that neither is a certification. The documents list gains
+`docs/autosar-classic.md`.
+
+### Measured here
+
+With gcc 13.3.0 and 14, clang 18.1.3, cppcheck 2.13.0 and 2.19.0,
+MinGW-w64's gcc 13 with Wine 9.0, gcc 13.3.0 for s390x and AArch64 with
+qemu-user 8.2.2, musl-gcc, and VERIFY-070's bare-metal toolchains:
+
+- **Linux.** ctest passes 61 of 61 with gcc 13 and with clang 18 under
+  ASan and UBSan, and with clang 18 in Release; no build warns. Each of the
+  two tests makes its 34 checks, none failing. Built alone with the
+  project's flags, the test passes both ways with gcc 14 and clang 18 as
+  C11, C17 and C23 (`-std=c2x`); and at -O0 and -O2 with gcc 13 for i386
+  (`-m32`), for s390x and for AArch64, these two under qemu-user 8.2.2, and
+  with musl (`musl-gcc`).
+- **Windows, as MinGW-w64 builds it.** Both tests compile without a
+  warning, in Debug and in Release, and pass under Wine. Wine runs
+  MinGW-w64's `msvcrt`, not the UCRT the CI's Windows jobs link, and is not
+  Windows; MSVC is not run here.
+- **What the tests catch.** Six changes, each made to a copy, each caught:
+  without `CANON_AUTOSAR_MODULE_ID`, the build stops at the adapter's
+  `#error`; with a stand-in `uint32` of 64 bits, at its check; with a
+  handler that does not call `Det_ReportError`, the safe state's checks
+  fail, five with the IDs configured and three with them at their
+  defaults; with a handler that returns where it should call the safe
+  state, `main` reports that it returned; with `canon_autosar_bool` true
+  only for `TRUE`, the check of 1 to 255 fails where `boolean` is
+  `unsigned char` (where it is `_Bool`, the two are one function); with
+  `canon_autosar_std_return` giving `E_OK` for `ERR_DIVIDE_BY_ZERO`, that
+  code's check fails.
+- **The static-analysis job's steps**: clang-tidy, 0 errors; cppcheck
+  2.13.0 (the Linux job's) and 2.19.0 (the macOS and Windows jobs'), with
+  the job's arguments, find nothing in `test/`. Cppcheck reads the test
+  with both forms of `boolean` and both sets of IDs.
+- **The misra job's steps**: "real 57; canary 3; total 60", and "as
+  pinned: 57 real finding(s) in 32 file and rule pair(s)": the base's 60
+  findings, file, line and rule. None is in the adapter; with one of its
+  ten suppressions taken out, the job reports rule 2.3 at that line.
+- **The coverage job's steps**, with gcc 14: "MC/DC 2065 / 2232", where #57
+  gives "MC/DC 2064 / 2230"; its eight rows are #57's. One file's count
+  changes. The job counts a header at the translation unit that gives it
+  the most condition outcomes, and `contract_set_handler`, which in the
+  coverage job only the new tests call, adds two, of which they take one,
+  a handler that is not NULL: `core/primitives/contract.h` goes from 0 of 2
+  to 1 of 4. gcov counts no condition in the adapter. Lines 2976 of 3058,
+  functions 759 of 762 and branches 1810 of 1964, where the base gives
+  2960 of 3041, 753 of 756 and 1809 of 1962; the notices do not give these.
+- **The embedded job's steps**: the compile check, 227 of 227 units at
+  each of the six targets and three levels; the AVR check, "80 headers: 29
+  compile, 49 refused by Tier 1, 2 other"; and the size measure, "as
+  pinned: 57 rows, 798 figures", with #76's size notices and its 418570
+  tokens.
+- **`8 · Records`' checks** pass.
+
+Not run here: Windows itself and MSVC, macOS, and CompCert; on AArch64,
+s390x and musl, the two tests alone, not the jobs.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 6 and 8 run; 7 and 9 to 14 do not. The
+adapter and its test are code, which 1 to 6 do not ignore; `analysis.yml`,
+the workflow map and `docs/deviations.md` start 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| W1 | **1 to 6 and 8 run**; the others do not. | another set | H |
+| W2 | **1 is green**: in each of the ten Windows jobs, ctest passes 61 of 61, `autosar_test` and `autosar_bool_test` among them. 1's notices are #57's, GitHub's own on the macOS runners' capacity aside. | a failure, or another notice | M–H: MSVC and macOS are not run here. MSVC builds with `/W4 /WX`; the adapter's casts of -1 to an unsigned type are those of `types_test`, which it builds. |
+| W3 | **2 is green**, each job with #76's notices but the embedded check's, which reads "6 targets x 3 levels, 227 units each (84 headers, with and without CANON_NO_GNU_EXTENSIONS, and 59 tests), 0 failed". The size notices, "as pinned: 57 rows, 798 figures" and the 418570 tokens are #76's, up to their times, and the AVR check's is #76's. | a failure, or another notice | H: the embedded job measured here with the runner's toolchains, and the two tests run here for AArch64 and s390x under qemu-user, and with musl. |
+| W4 | **3 is green**, with #57's notices but two: coverage's "MC/DC 2065 / 2232", its eight rows #57's, and compcert's "61 / 61 compiled, 61 ran". misra's are #57's, "real 57; canary 3; total 60" and "as pinned: 57 real finding(s) in 32 file and rule pair(s)"; static-analysis passes on the three systems. | a failure, or another notice | H for coverage and misra (run here); M–H for static-analysis on macOS and Windows, whose cppcheck 2.19.0 is run here on Linux; M for CompCert, not run here. |
+| W5 | **4, 5 and 6 give #57's notices**, every job green. | a failure, or another notice | H: no proved unit reads the adapter or its test. As at any push, a slow runner could lose the two goals of `vec_int_extend_from_range` that only Alt-Ergo proves, at 89 s and 38 s where the timeout is 120 s (VERIFY-065). |
+| W6 | **8 is green**; its size pins line reads "size pins: 57 rows; 0 problem(s)". | a failure, or another line | H (run here) |
+
+**What follows.** W1 to W6 scored, and the record closed: item 2's four
+parts are then done. Next, CERT C and CWE: clang-tidy's `cert-*` checks,
+Cppcheck's CERT addon, and `docs/cert-cwe.md`, with ISO/IEC TS 17961 and a
+map to CWE.
