@@ -250,6 +250,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_GET_OK(_linkage, _t, _e) \
     /*@ requires \valid(out);                                              \
@@ -269,6 +270,7 @@
     _linkage bool \
     MANGLE_RESULT_GET_OK(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r, _t* out) \
         IMPL_RESULT_GET_OK(_t, _e, r, out)
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 /**
  * @brief Define get_err() safe extraction function
@@ -283,6 +285,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_GET_ERR(_linkage, _t, _e) \
     /*@ requires \valid(out);                                              \
@@ -302,6 +305,7 @@
     _linkage bool \
     MANGLE_RESULT_GET_ERR(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r, _e* out) \
         IMPL_RESULT_GET_ERR(_t, _e, r, out)
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 /**
  * @brief Define unwrap_or() with fallback function

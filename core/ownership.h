@@ -324,6 +324,7 @@
  * @note owned_T_unwrap asserts the wrapper has not already been consumed.
  *       Calling it twice on the same wrapper is a contract violation.
  */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OWNED(type)                                                          \
                                                                                     \
@@ -362,6 +363,7 @@ static inline void owned_##type##_drop(                                         
         o->ptr = NULL;                                                              \
     }                                                                               \
 }
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 /**
  * @brief Generates a strongly-typed borrowed wrapper for a const pointer-to-type

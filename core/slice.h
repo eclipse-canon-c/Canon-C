@@ -884,6 +884,7 @@ static inline cbytes_t str_as_bytes(str_t s) {
  *   - Fuzzing through the slice_test fuzz harness
  *   - MC/DC measurement through the i32 instantiation
  * ========================================================================= */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_SLICE(type)                                                          \
                                                                                     \
@@ -1057,5 +1058,6 @@ static inline cbytes_t slice_##type##_as_cbytes(slice_##type s) {               
     if (!s.ptr) { return (cbytes_t){ .ptr = NULL, .len = 0 }; }                    \
     return (cbytes_t){ .ptr = (const u8*)s.ptr, .len = s.len * sizeof(type) };     \
 }
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 #endif /* CANON_CORE_SLICE_H */

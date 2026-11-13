@@ -228,6 +228,7 @@
  *          sizeof(IterType) = sizeof(VecType*) + sizeof(usize)
  *          sizeof(SliceType) = sizeof(type*) + sizeof(usize)
  */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_STRUCTS(VecType, VecTag, IterType, IterTag, SliceType, SliceTag, fn_lt_open, fn_lt_close, type) \
 \
@@ -266,6 +267,7 @@ static inline void fn_lt_close(VecType* v) { \
     VEC_LIFETIME_CLOSE_BODY_(v) \
     (void)v; \
 }
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 /* ════════════════════════════════════════════════════════════════════════════
    IMPL_VEC_INIT — caller-owned buffer constructor
@@ -411,6 +413,7 @@ linkage VecType fn(void) { \
  * - Time:  O(1) amortized (single mem_alloc)
  * - Space: O(capacity * sizeof(type))
  */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_ALLOC(linkage, VecType, fn_alloc, fn_empty, fn_init, type) \
 /*@ allocates \result.items;                                                     \
@@ -435,6 +438,7 @@ linkage VecType fn_alloc(usize capacity) { \
     if (!buf) { return (fn_empty)(); } \
     return (fn_init)(buf, capacity); \
 }
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 /* ════════════════════════════════════════════════════════════════════════════
    IMPL_VEC_FREE — heap deallocation
@@ -522,6 +526,7 @@ linkage void fn(dropped(VecType*) v) { \
  * - Time:  O(1)
  * - Space: O(capacity * sizeof(type)) consumed from arena
  */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_ARENA_ALLOC(linkage, VecType, fn_alloc, fn_empty, fn_init, type) \
 /*@ requires arena == \null || arena_invariant(arena);                           \
@@ -547,6 +552,7 @@ linkage VecType fn_alloc(borrowed(Arena*) arena, usize capacity) { \
     if (!buf) { return (fn_empty)(); } \
     return (fn_init)(buf, capacity); \
 }
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 /* ════════════════════════════════════════════════════════════════════════════
    Query functions

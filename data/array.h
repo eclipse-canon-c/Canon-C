@@ -706,7 +706,7 @@ static inline borrowed(cbytes_t) array_##type##_##N##_as_cbytes( \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define ARRAY_FOR(type, N, arr_ptr, idx_var) \
-    for (usize idx_var = 0; (arr_ptr) != NULL && (idx_var) < (usize)(N); idx_var++)
+    for (usize idx_var = 0; (arr_ptr) != NULL && (idx_var) < (usize)(N); (idx_var)++)
 
 /**
  * @def ARRAY_FOR_PTR(type, N, arr_ptr, elem_ptr)
@@ -729,10 +729,12 @@ static inline borrowed(cbytes_t) array_##type##_##N##_as_cbytes( \
  * }
  * ```
  */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define ARRAY_FOR_PTR(type, N, arr_ptr, elem_ptr) \
     for (type *elem_ptr = ((arr_ptr) ? &(arr_ptr)->items[0] : NULL); \
-         elem_ptr && (usize)((elem_ptr) - &(arr_ptr)->items[0]) < (usize)(N); \
-         elem_ptr++)
+         (elem_ptr) && (usize)((elem_ptr) - &(arr_ptr)->items[0]) < (usize)(N); \
+         (elem_ptr)++)
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 #endif /* CANON_DATA_ARRAY_H */

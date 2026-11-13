@@ -255,6 +255,7 @@
  * frame is true but not provable (run 1 left exactly those seven goals; the
  * convention pool.h and vec_fmt.h already follow).
  */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_STACK(linkage, type) \
 \
@@ -690,6 +691,7 @@ linkage bool stack_##type##_is_full( \
 linkage void stack_##type##_clear(borrowed(stack_##type*) s) { \
     MANGLE_VEC_CLEAR(type)(s); \
 }
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 /* ════════════════════════════════════════════════════════════════════════════
    DECLARE_STACK — forward-declare a typed stack (for separate compilation)

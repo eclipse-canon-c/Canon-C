@@ -1799,7 +1799,7 @@ static inline borrowed_bytes bitset_as_borrowed_bytes(borrowed(const Bitset*) bs
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define BITSET_FOR_EACH(bs_ptr, idx_var) \
     for (usize idx_var = bitset_find_first(bs_ptr); \
-         idx_var != BITSET_NPOS; \
-         idx_var = bitset_find_next((bs_ptr), idx_var))
+         (idx_var) != BITSET_NPOS; \
+         (idx_var) = bitset_find_next((bs_ptr), (idx_var)))
 
 #endif /* CANON_DATA_BITSET_H */

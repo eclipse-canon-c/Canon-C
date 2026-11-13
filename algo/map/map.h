@@ -188,6 +188,7 @@
  * Use DEFINE_ALGO_MAP_CROSS when you have already called DEFINE_ALGO_MAP
  * for the same in_type and need an additional cross-type mapping.
  */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_ALGO_MAP_CROSS(in_type, out_type) \
 \
@@ -205,6 +206,7 @@ static inline void ALGO_MAP_SLICE_FN(in_type, out_type)( \
         fn(&sv_out.ptr[_i], &sv_in.ptr[_i]); \
     } \
 }
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 /* ════════════════════════════════════════════════════════════════════════════
    DEFINE_ALGO_MAP_INPLACE_ONLY — in-place slice variant only

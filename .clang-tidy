@@ -31,5 +31,11 @@ Checks: >
   misc-misplaced-const,
   misc-redundant-expression,
   misc-unused-parameters
+# Report what the checks find in every header the analysed files include,
+# the system's aside. Without a filter clang-tidy reports only the
+# analysed .c files' own code: until VERIFY-076, none of the library's
+# headers. The sites that MISRA-DEV-012 argues carry
+# NOLINTBEGIN/NOLINTEND(bugprone-macro-parentheses).
+HeaderFilterRegex: '.*'
 WarningsAsErrors: '*'
 FormatStyle: none

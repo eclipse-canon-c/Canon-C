@@ -1670,6 +1670,7 @@ static inline cbytes_t pq_as_cbytes(borrowed(const PriorityQueue*) pq) {
  * token-pastes to result__Bool_Error in every standard: _Bool is pasted
  * as written.
  */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_PRIORITY_QUEUE(type)                                                          \
                                                                                              \
@@ -1743,5 +1744,6 @@ static inline bool    pq_##type##_is_empty(borrowed(const pq_##type*) h)  { retu
 static inline bool    pq_##type##_is_full(borrowed(const pq_##type*) h)   { return pq_is_full(&h->_pq); }  \
 static inline bytes_t  pq_##type##_as_bytes(borrowed(pq_##type*) h)        { return pq_as_bytes(&h->_pq); } \
 static inline cbytes_t pq_##type##_as_cbytes(borrowed(const pq_##type*) h) { return pq_as_cbytes(&h->_pq); }
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 #endif /* CANON_DATA_PRIORITY_QUEUE_H */

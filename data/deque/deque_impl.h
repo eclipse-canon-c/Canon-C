@@ -221,6 +221,7 @@
  *                              [+ sizeof(lifetime_t) under CANON_LIFETIME_DEBUG]
  *          Total memory: sizeof(DequeType) + capacity*sizeof(type)
  */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_STRUCT(DequeType, DequeTag, fn_lt_open, type) \
 typedef struct DequeTag { \
@@ -245,6 +246,7 @@ static inline void fn_lt_open(DequeType* d) { \
     DEQUE_LIFETIME_OPEN_BODY_(d) \
     (void)d; \
 }
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 /* ════════════════════════════════════════════════════════════════════════════
    Constructor

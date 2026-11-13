@@ -239,6 +239,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_GET(_linkage, _t) \
     /*@ requires \valid(out);                                              \
@@ -258,6 +259,7 @@
     _linkage bool \
     MANGLE_OPTION_GET(_t)(MANGLE_OPTION_TYPE(_t) o, _t* out) \
         IMPL_OPTION_GET(_t, o, out)
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 /**
  * @brief Define unwrap_or() with fallback function

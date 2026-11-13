@@ -8482,6 +8482,22 @@ added in ptr.h.
 
 **Mitigation**: Each of the 117 definitions carries an individual inline `cppcheck-suppress` citing this record — rule 20.7 stays live for every other macro in the tree and for all future code, so a new expression-position 20.7 finding surfaces in CI rather than being absorbed. The macro-generated code paths are exercised by the instantiation test suite (51 test TUs) and, for the option/result/vec families, verified by the WP driver TUs under pinned proved-goal baselines; a qualified MISRA checker (Polyspace/LDRA/PC-lint, per the project's certification note) performs real type-aware 20.7 analysis and remains the certification path.
 
+**clang-tidy (2026-11-13, VERIFY-076).** clang-tidy's
+`bugprone-macro-parentheses` asks what rule 20.7 asks. Once `.clang-tidy`'s
+header filter let it report what it finds in the headers, it found 54
+occurrences in 18 of these definitions. Five were in expression positions,
+in `ARRAY_FOR`, `ARRAY_FOR_PTR` and `BITSET_FOR_EACH`, and are now
+parenthesized. The sweep above had left them: Cppcheck's addon reports the
+rule at a definition's `#define`, not at each occurrence. The other 49 are
+this record's positions, in 16
+definitions: 38 parameters naming a type, six `linkage` specifiers, four
+typedef names a definition declares and one declared name,
+`ARRAY_FOR_PTR`'s `elem_ptr`. Each of the 16 definitions sits between
+`NOLINTBEGIN(bugprone-macro-parentheses)` and
+`NOLINTEND(bugprone-macro-parentheses)` comments citing this record, the
+begin line above its `cppcheck-suppress` comment. The 119 suppressions
+stand as they were.
+
 ## MISRA-DEV-013: Rule 14.2 — template `_impl.h` loops unanalyzable without the includer's linkage macro
 
 | ID | Date | Scope | Category |

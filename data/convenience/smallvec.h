@@ -289,6 +289,7 @@
  *
  * Generated functions: (see quick start for examples)
  */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_SMALLVEC(type, INLINE_CAP) \
 \
@@ -787,5 +788,6 @@ static inline MANGLE_VEC_TYPE(type) smallvec_##type##_as_vec( \
     w.len = v->len;   /* VERIFY-053 C5: the view holds v's elements */ \
     return w; \
 }
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 #endif /* CANON_DATA_SMALLVEC_H */

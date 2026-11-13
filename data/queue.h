@@ -246,6 +246,7 @@
  *       functions remain usable. DEFINE_QUEUE only adds FIFO-named wrappers
  *       for clarity.
  */
+/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_QUEUE(linkage, type) \
 \
@@ -539,6 +540,7 @@ linkage bool queue_##type##_is_full( \
 linkage void queue_##type##_clear(borrowed(queue_##type*) q) { \
     MANGLE_DEQUE_CLEAR(type)(q); \
 }
+/* NOLINTEND(bugprone-macro-parentheses) */
 
 /* ════════════════════════════════════════════════════════════════════════════
    DECLARE_QUEUE — forward-declare a typed queue (for separate compilation)
