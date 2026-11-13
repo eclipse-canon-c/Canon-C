@@ -35192,3 +35192,152 @@ types against Canon-C's, converts `Error` and `bool`, and reports a failed
 contract check to DET before the project's safe state; CI checks it
 against stand-ins for AUTOSAR's headers, not against an AUTOSAR stack.
 Item 2's four parts are done. Next: CERT C and CWE.
+
+---
+
+## VERIFY-076: Pre-registration — clang-tidy Reads the Library's Headers: a Header Filter, Five Macro Arguments Parenthesized, and MISRA-DEV-012's Sites Marked for bugprone-macro-parentheses
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-076 |
+| **Date**       | 2026-11-13 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | bd82618 (VERIFY-075): `1`, `3`, `4`, `5` and `6` #58, `2 · Platforms` #77 and `8 · Records` #86. For the workflows bd82618 did not start: `7 · Proofs: -CC` #29 and `14 · Eva` #9, on d1d4d2e; `9 · Probes` #20, on 453cbcf, the last run of the two probes this change starts; `11 · Proofs: machine models` #12, on 7ecd37c; `13 · Prover agreement` #10, on d1d4d2e, for its 12 units, and #9, on 7ecd37c, for the other 14. VERIFY-075's scoring, which changes the records only, is pushed before this record or with it. |
+| **Scope**      | `.clang-tidy`, a header filter; `data/array.h` and `data/bitset.h`, five macro arguments parenthesized; 16 macro definitions in 14 headers, each between `NOLINTBEGIN` and `NOLINTEND` comments for `bugprone-macro-parentheses`; MISRA-DEV-012, a note. |
+| **Category**   | CERT C and CWE, its first part, decided by the author on 2026-11-13: clang-tidy made to read the headers before its CERT checks are added. One run. |
+
+### What is decided
+
+On 2026-11-13, measuring what clang-tidy's CERT checks would find, this
+record's author found that CI's clang-tidy step reads none of the
+library's headers. The step runs the checks in `.clang-tidy` over the test
+files, and a header's code is analysed with each test that includes it,
+but clang-tidy reports a finding in a header only when its name matches
+`HeaderFilterRegex`, which `.clang-tidy` did not set. At #58 the step
+ended "Suppressed 695 warnings (691 in non-user code, 4 with check
+filters)": what the checks found in the headers, unreported.
+
+The author decided on 2026-11-13 how to go on: first this record, which
+makes clang-tidy report what it finds in the headers and answers each
+finding, then the CERT checks, for the library's headers only; and,
+since open-source Cppcheck has no CERT addon after 2.7 (its `cert.py`
+went to Cppcheck Premium), no Cppcheck CERT step, which the CERT record
+will say.
+
+**What the headers hold.** With `--header-filter='.*'`, the step's checks
+report 54 findings, all from `bugprone-macro-parentheses`, in 18 macro
+definitions of 14 headers. The check asks what MISRA C:2012 rule 20.7
+asks, that a macro's argument be put in parentheses where it is used, and
+cannot tell an expression from a type. Its 54 findings are of two kinds.
+
+- **Five in expression positions**, in three loop macros that declare the
+  variable they are given: `ARRAY_FOR`'s `idx_var++`, `ARRAY_FOR_PTR`'s
+  `elem_ptr && ...` and `elem_ptr++`, and `BITSET_FOR_EACH`'s
+  `idx_var != BITSET_NPOS` and `idx_var = bitset_find_next(...)`.
+  Parentheses go there, and they are added: `(idx_var)++`, and so on. They
+  change nothing in the compiled code, since the argument must be an
+  identifier for the macro's declaration to compile. MISRA-DEV-012's sweep
+  of 2026-07-22 left them: Cppcheck's addon reports rule 20.7 at a
+  definition's `#define`, not at each occurrence, as a run of it on the
+  three definitions without their suppressions shows. No proof unit and no
+  Eva program uses the three macros: only `array_test` and `bitset_test`
+  do.
+- **49 in positions where C does not take the parentheses, or where they
+  would guard nothing**, in the 16 other definitions: 38 parameters naming
+  a type (`type* ptr`, `_t* out`, `(out_type*, const in_type*)`); six
+  `linkage` declaration specifiers, in `DEFINE_QUEUE` and `DEFINE_STACK`;
+  four typedef names a definition declares (`} VecType;`, in
+  `IMPL_VEC_STRUCTS` and `IMPL_DEQUE_STRUCT`); and one declared name,
+  `ARRAY_FOR_PTR`'s `type *elem_ptr`. C takes no parentheses around a type
+  name or a specifier: `(type)* ptr` is not a declaration. It does take
+  them around a declarator, `} (VecType);` or `type *(elem_ptr)`, but there
+  they protect nothing, since the argument must be an identifier, and they
+  read as a call. These are MISRA-DEV-012's positions, which the record
+  argues for rule 20.7 at each of its 119 definitions.
+
+**The change.**
+
+- `.clang-tidy` gains `HeaderFilterRegex: '.*'`: clang-tidy reports what
+  it finds in any header the analysed files include, the system's aside.
+  CI's step reads `.clang-tidy`, so it changes nothing else in the
+  workflow.
+- The five expression positions are parenthesized.
+- Each of the 16 definitions is put between
+  `/* NOLINTBEGIN(bugprone-macro-parentheses): MISRA-DEV-012 */` and
+  `/* NOLINTEND(bugprone-macro-parentheses) */`. The begin line goes above
+  the definition's `cppcheck-suppress` comment, which stays directly above
+  its `#define`, as Cppcheck requires. The comments name the one check:
+  the definitions stay under every other check. One pair per definition is
+  MISRA-DEV-012's grain, one suppression per definition.
+- MISRA-DEV-012 gains a note saying all this.
+
+Every header then reads clean under the step's checks: 0 errors.
+
+**What it costs.** Comments in 14 headers, and parentheses in two, start
+every workflow that watches them: 1 to 9, 11, 13 and 14. No proof's input
+changes but by comments, and lines move in 14 headers; no pin names a line
+of these 14 (`tools/eva/pins/` name lines of `arena.h`, `pool.h`,
+`ptr.h`, `hashmap_impl.h`, `stringbuf.h`, `diag.h` and
+`vec_fmt_verify.h`). `13 · Prover agreement` reruns all 26 of its units,
+each with each prover alone.
+
+### Measured here
+
+With clang-tidy 18.1.3, gcc 13.3.0 and 14, clang 18.1.3, cppcheck 2.13.0
+and 2.19.0, MinGW-w64's gcc 13 with Wine 9.0, and VERIFY-070's bare-metal
+toolchains, on the change:
+
+- **The static-analysis job's clang-tidy step**, its files and its
+  arguments: 0 errors; it ends "Suppressed 688 warnings (1 in non-user
+  code, 683 NOLINT, 4 with check filters)". Without the five parentheses,
+  the step fails on them; without one of the 16 pairs of comments, on that
+  definition's findings.
+- **Linux.** ctest passes 61 of 61 with gcc 13 and with clang 18 under
+  ASan and UBSan, and with clang 18 in Release; no build warns.
+- **Windows, as MinGW-w64 builds it.** `array_test` and `bitset_test`
+  compile without a warning, in Debug and in Release, and pass under Wine.
+- **The static-analysis job's Cppcheck**: 2.13.0 and 2.19.0, with the
+  job's arguments, find nothing in `test/`.
+- **The misra job's steps**: "real 57; canary 3; total 60", and "as
+  pinned: 57 real finding(s) in 32 file and rule pair(s)": VERIFY-075's 60
+  findings, file, line and rule. Three are in the changed headers, each
+  above the lines this change adds.
+- **The coverage job's steps**, with gcc 14: "MC/DC 2065 / 2232", its eight
+  rows #58's; lines 2976 of 3058, functions 759 of 762 and branches 1810 of
+  1964, as at #58.
+- **The embedded job's steps**: the compile check, 227 of 227 units at
+  each of the six targets and three levels; the AVR check, "80 headers: 29
+  compile, 49 refused by Tier 1, 2 other"; the size measure, "as pinned: 57
+  rows, 798 figures", with VERIFY-075's size notices and its 418570
+  tokens. The parentheses are in macros no header expands, and comments
+  are not tokens.
+- **`8 · Records`' checks** pass.
+
+Not run here: macOS, Windows itself and MSVC, AArch64, s390x, musl,
+CompCert, and every proof, probe and Eva job: this machine has Frama-C 25
+without Alt-Ergo, not the jobs' Frama-C, provers and models.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 9, 11, 13 and 14 run; 10 and 12 do not.
+The headers start 1 to 7, 9, 11, 13 and 14; `docs/deviations.md` starts
+8. `9 · Probes`' own filter starts two of its probes, `g13-probe`, for
+`core/slice.h`, and `pointer-probe`, for the `data/` headers; the others
+are skipped. `tools/agreement/agreement.py affected` gives all 26 units.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| X1 | **1 to 9, 11, 13 and 14 run**; 10 and 12 do not. In 9, `changes`, `g13-probe` and `pointer-probe` run, and the other probes are skipped; 13 runs all 26 units. | another set | H |
+| X2 | **3 is green, its clang-tidy step reporting what it finds in the headers, and finding nothing.** Its notices are #58's: coverage's "MC/DC 2065 / 2232" with its eight rows, misra's, and compcert's "61 / 61 compiled, 61 ran". | a failure, or another notice | H: the step run here, with the runner's clang-tidy 18.1.3. |
+| X3 | **1 is green**, its notices #58's, GitHub's own on the macOS runners' capacity aside; in each of the ten Windows jobs ctest passes 61 of 61. | a failure, or another notice | H |
+| X4 | **2 is green**, each job with #77's notices, up to their times. | a failure, or another notice | H |
+| X5 | **4, 5 and 6 are green, with #58's notices; 7 with #29's; 11 with #12's; 14 with #9's.** | a failure, or another notice | H: no proof unit and no Eva program reads the five parentheses, and comments change no goal. As at any push, a slow runner could lose the two goals of `vec_int_extend_from_range` that only Alt-Ergo proves, at 89 s and 38 s where the timeout is 120 s (VERIFY-065). |
+| X6 | **9 is green**: `g13-probe` and each `pointer-probe` job give #20's notices. | a failure, or another notice | H |
+| X7 | **13 is green**, and each unit's three lines, "proved N / M" with each prover alone, are its last run's. | a failure, or another count | M: the counts held between #9 and #10 for the 11 units both ran but `frama-c-diag`, but for one: `frama-c-hashmap`'s CVC5 proved 4729 at #9 and 4728 at #10. Which goals time out, and the slow lines, change from run to run; this record does not predict them. |
+| X8 | **8 is green**; its size pins line reads "size pins: 57 rows; 0 problem(s)". | a failure, or another line | H (run here) |
+
+**What follows.** X1 to X8 scored, and the record closed. Then the CERT
+checks: clang-tidy's `cert-*` checks for the library's headers,
+`docs/cert-cwe.md`, with ISO/IEC TS 17961 and a map to CWE.
