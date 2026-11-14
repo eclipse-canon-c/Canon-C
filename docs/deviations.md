@@ -35741,7 +35741,7 @@ Frama-C's plug-ins, group 1 (E-ACSL, Metrics and MdR).
 | **ID**         | VERIFY-079 |
 | **Date**       | 2026-11-14 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-14 — Run 1 scored: V1 to V8 MATCH, V9 to V11 MISS. Neither form makes invariant 5's parts 3 and 4 easy: Alt-Ergo alone still proves them alone, and with A and B together part 3 was not proved with the three provers at once. The record's reading of the cost was wrong ("Run 1 scored", below). The author chose to measure again: run 1b, pre-registered below, prints the goals and puts the frame of the earlier slots in goals of its own. Run 1b scored: U1, U2 and U4 to U6 MATCH, U3 and U7 to U9 MISS; D, the assertion `kept` after the store, takes the function's slowest proof with the three provers at once from 96 s to 0.3 s. Run 2, pre-registered below, puts it into the header. Run 2 scored: T1 and T3 to T5 MATCH, T2 MISS: Eva reads the assertion under `-CC`, which the record said it did not, and leaves it open, so 14's pins lacked a line. Run 2b, pre-registered below, pins it. The Status above is the record as committed. |
+| **Status update** | 2026-11-14 — Run 1 scored: V1 to V8 MATCH, V9 to V11 MISS. Neither form makes invariant 5's parts 3 and 4 easy: Alt-Ergo alone still proves them alone, and with A and B together part 3 was not proved with the three provers at once. The record's reading of the cost was wrong ("Run 1 scored", below). The author chose to measure again: run 1b, pre-registered below, prints the goals and puts the frame of the earlier slots in goals of its own. Run 1b scored: U1, U2 and U4 to U6 MATCH, U3 and U7 to U9 MISS; D, the assertion `kept` after the store, takes the function's slowest proof with the three provers at once from 96 s to 0.3 s. Run 2, pre-registered below, puts it into the header. Run 2 scored: T1 and T3 to T5 MATCH, T2 MISS: Eva reads the assertion under `-CC`, which the record said it did not, and leaves it open, so 14's pins lacked a line. Run 2b, pre-registered below, pins it. CLOSED: run 2b matched S1 to S3; with `kept`, `vec_int_extend_from_range`'s slowest proof with the three provers at once is 0.3 s, where it was 96 s, and every workflow is as pinned on the change ("Run 2b scored", below). The Status above is the record as committed. |
 | **Baseline**   | 1753e49 (VERIFY-078's close); `1`, `3`, `4`, `5` and `6` #60 (98cde9c), `2 · Platforms` #80 (0379866) and `8 · Records` #91 (1753e49); `9 · Probes` #20 (453cbcf), #21 (a11ae90), #22 (c35260b) and #23 (98cde9c), each probe's last run. |
 | **Scope**      | Run 1: `tools/probes/verify-079/` (`vecrange_probe.py`, `variants/`, `steps`, `README.md`); `.github/workflows/probes.yml`, the job `vecrange-probe`, its filter and its output, and the header's list of probes; the workflow map's row 9. Run 2: `data/vec/vec_range.h`'s loop annotations, with the pins that read them, if run 1 finds a version that makes the two goals easy. |
 | **Category**   | VERIFY-065's "Left for later": the two single-prover proofs a slow runner could lose. Run 1 measures in CI before the header changes (report-only); run 2 makes the change, pinned from run 1. |
@@ -36214,3 +36214,42 @@ and no unit of 13.
 | S3 | **2 and 8 are green**, each job with the notices of its last run (2 #83, 8 #94), times aside. | a failure, or another notice | H |
 
 **What follows.** S1 to S3 scored. If they hold, VERIFY-079 closes.
+
+### Run 2b scored (2026-11-14)
+
+The push of 3a45782 and 10ab302 started `2 · Platforms` #84, `8 · Records`
+#95 and `14 · Eva` #13, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| S1 | **MATCH.** 2, 8 and 14 ran, and no other. |
+| S2 | **MATCH.** 14 is green: its 260 notices, 26 programs at ten models, all read "as pinned", `vec_range.c` with the one property at each. |
+| S3 | **MATCH.** 2 and 8 are green, each job with the notices of its last run, times aside; 2's names another header as the slowest to compile, a time. |
+
+Three of three.
+
+**Closed.** `IMPL_VEC_EXTEND_FROM_RANGE`'s loop asserts `kept` after each
+store. With it, `frama-c-vec-range` proves 5183 / 5228. With the three
+provers at once, as the proof job runs them, the function's slowest proof
+is 0.3 s, where it was 96 s and up to 97 s of the 120 (runs 1 and 1b):
+CVC5 proves `kept` in 0.2 s, and Alt-Ergo invariant 5's parts 3 and 4
+from it in 0.3 s. Alone, Alt-Ergo still takes 24 to 51 s on `kept`, and
+Z3 and CVC5 still do not prove invariant 5's parts 3 and 4: the pins say
+so. The risk VERIFY-065 left for later, a slower runner losing the two
+goals, is gone with the time.
+
+The record scored 20 of its 28 predictions: run 1 eight of eleven, run 1b
+five of nine, run 2 four of five, run 2b three of three. What it shows:
+
+- **Measuring first paid.** Two readings of the cost were wrong, B's
+  (that the provers had to keep `v->len`) and E's (that the call to
+  `range_next` cost); each was measured in a probe before it could become
+  a change. The one that held was found by splitting the goal, not by
+  reasoning about it.
+- **A change to an annotation reaches every tool that reads it under its
+  own flags.** The survey checked that Eva's pins named no line of the
+  header, but not whether Eva reads the macro body; it does, under
+  `-CC`, for the units preprocessed so.
+- **A probe's job should not name its versions.** Run 1b's needed a change
+  to `probes.yml`, which starts 1 to 6 and every probe; its slots run
+  what `steps` names, so a later round needs none.
