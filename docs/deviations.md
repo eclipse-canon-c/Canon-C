@@ -35641,6 +35641,7 @@ Metrics and MdR).
 | **ID**         | VERIFY-078 |
 | **Date**       | 2026-11-14 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-14 — CLOSED: the push of 212b77f and 0379866 matched Z1 to Z4. `frama-c-hashmap`'s unit job finds no difference from its new pins: the two goals kept the classes #12 found ("Scored", below). The Status above is the record as committed. |
 | **Baseline**   | 98cde9c (VERIFY-077): `13 · Prover agreement` #12, `2 · Platforms` #79 and `8 · Records` #89. VERIFY-077's scoring is pushed with this record. |
 | **Scope**      | `tools/agreement/pins/frama-c-hashmap.txt`: part19's line removed, part23's added, and two lines of its header. |
 | **Category**   | VERIFY-077's Y7, answered. One run. |
@@ -35686,3 +35687,47 @@ a goal joins the slow lines only after a run fails on its time.
 
 **What follows.** Z1 to Z4 scored, and the record closed. Then Frama-C's
 plug-ins, group 1 (E-ACSL, Metrics and MdR).
+
+### Scored (2026-11-14)
+
+The push of 212b77f and 0379866 started three workflows at 03:03 UTC on
+2026-11-14: `2` #80, `8` #90 and `13` #13. All three are green, each at its
+first attempt; their 23 jobs passed, none failed or was skipped. The last,
+`13`, finished at 03:30.
+
+| # | scored |
+|---|--------|
+| Z1 | **MATCH.** 2, 8 and 13 ran; the others did not. 13 ran `frama-c-hashmap` alone: "1 unit(s): ["frama-c-hashmap"]". |
+| Z2 | **MATCH.** 13's six jobs are green. `frama-c-hashmap`'s unit job reads "by none 46", "Unproved: the 46 names its job pins" and "Against its pins: 0 difference(s)". Its classes are #12's: by all three provers alone 456, by two 15 (Alt-Ergo+CVC5 7, CVC5+Z3 8), by one 9 (Alt-Ergo 2, Z3 7); part19 is proved by all three and part23 by Alt-Ergo and CVC5 alone. Each prover alone proves what it did at #12: Alt-Ergo 4723, Z3 4729 and CVC5 4729 of 4784. Seven proofs took over 30 s and were left out, where #12 had nine. |
+| Z3 | **MATCH.** 2's 15 jobs are green, each with #79's notices, up to their times: `embedded`'s code size and build cost ("as pinned: 57 rows, 798 figures"); the other jobs post none. |
+| Z4 | **MATCH.** 8's two jobs are green; `record-coverage`'s log reads "size pins: 57 rows; 0 problem(s)". |
+
+**Four of four.**
+
+**What the run adds.** This push changed only this record and the pin
+file, so 13 read the problems of #12, and the two goals kept the classes
+#12 found: neither flipped back with the runner. That fits VERIFY-077's
+explanation, that the renames changed the problems Z3 reads for
+`hashmap_remove`, and does not confirm it.
+
+It also takes back one point of VERIFY-077's "Why Y7 missed", which read
+Z3's failures at #12, "Failed 17; Timeout 38" where #11's read "Failed 15;
+Timeout 40", as a sign that the problems had changed. At #13, on #12's
+problems, Z3's read "Failed 24; Timeout 31", and Alt-Ergo's "Timeout 39;
+Unknown 22" where #12's read "Timeout 45; Unknown 16". How a prover's
+unproved goals fail moves between runs of the same problems, so that shift
+is no evidence either way. The rest of that argument stands: Z3 proved
+part19 within 30 s, and both goals held their classes for three runs before
+the renames and for this one after.
+
+**What it shows.** A record should not predict how a prover's unproved
+goals divide between Failed, Timeout and Unknown, nor read a change in that
+division as a change in the problems. What 13 compares, the classes and
+the goals no prover proves, held here, and so did each prover's count.
+
+**Closed.** `frama-c-hashmap`'s agreement pins match the run, and every
+workflow is green at master. With VERIFY-076, 077 and 078, the CERT C and
+CWE item is done. Next: VERIFY-079, the two slow goals of
+`vec_int_extend_from_range`'s loop (Alt-Ergo alone, at 89 s and 38 s of
+120), measured by a probe in `9 · Probes` before the header changes; then
+Frama-C's plug-ins, group 1 (E-ACSL, Metrics and MdR).
