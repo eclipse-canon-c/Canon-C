@@ -1,0 +1,12 @@
+--- a/data/vec/vec_range.h
++++ b/data/vec/vec_range.h
+@@ -208,6 +208,9 @@
+             return result__Bool_Error_err(ERR_OUT_OF_RANGE);                   \
+         }                                                                      \
+         v->items[v->len + i] = elem;                                           \
++        /*@ assert kept: \forall integer k; 0 <= k < i                         \
++            ==> v->items[v->len + k]                                           \
++                == \at(v->items[v->len + k], LoopCurrent); */                  \
+     }                                                                          \
+     v->len = total;                                                            \
+     return result__Bool_Error_ok(true);                                        \

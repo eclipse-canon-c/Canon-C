@@ -923,23 +923,27 @@ jobs:
   # QUESTION: frama-c-vec-range proves parts 3 and 4 of the preservation of
   # vec_int_extend_from_range's loop invariant 5 only with Alt-Ergo, which
   # alone took 89 s and 38 s on them (VERIFY-065) where the limit is 120 s,
-  # so a slower runner could fail the job's pin. Which annotations make them
-  # easy: three assertions in the loop's body (A); the invariant stated over
-  # values no store changes, with v->len kept as an invariant of its own
-  # (B); or both (C)? The enforced jobs read data/vec/vec_range.h as it is;
-  # the change VERIFY-079 makes, if it makes one, pins what this probe
-  # measures.
+  # so a slower runner could fail the job's pin. What makes them hard, and
+  # which annotations make them easy? Run 1 measured three assertions in the
+  # loop's body (A), the invariant over values no store changes (B), and
+  # both (C): none did. Run 1b prints the goals, and measures where the
+  # frame of the earlier slots costs: an assertion of it after the store
+  # (D), one after the call to range_next too (E), and WP's by-reference
+  # model (R). The enforced jobs read data/vec/vec_range.h as it is; the
+  # change VERIFY-079 makes, if it makes one, pins what this probe measures.
   #
   # PROBE: tools/probes/verify-079/vecrange_probe.py applies each version to
   # a copy of the checkout, P0 being the header as it is, and runs WP on
   # vec_int_extend_from_range alone, otherwise as frama-c-vec-range runs it:
   # once with Alt-Ergo, Z3 and CVC5 together, as the proof job runs them,
-  # and once with each alone, as 13 · Prover agreement runs them. The file
-  # steps names the steps that run. Report-only: it prints each goal's
-  # prover and time, the goals one or two provers prove alone, and the pin
-  # file's lines for the function that would go and come; it posts notices,
-  # and fails only if a WP run gives no summary or no report, or is stopped
-  # after an hour. Each step's files are the artifact vecrange-probe. Its
+  # and once with each alone, as 13 · Prover agreement runs them. Its step
+  # goals prints P0's invariants as WP gives them to the provers. The file
+  # steps names the steps that run, and the job's slots run them in its
+  # order. Report-only: it prints each goal's prover and time, the goals one
+  # or two provers prove alone, and the pin file's lines for the function
+  # that would go and come; it posts notices, and fails only if WP gives no
+  # summary or no report for P0, the checkout as it is, or is stopped after
+  # an hour. Each step's files are the artifact vecrange-probe. Its
   # predictions and their scores are VERIFY-079's, in docs/deviations.md.
   # -------------------------------------------------------------------------
   vecrange-probe:
@@ -948,41 +952,63 @@ jobs:
     # Pinned, not ubuntu-latest: see the runner note in
     # ci.yml (VERIFY-039, runner pin).
     runs-on: ubuntu-24.04
-    # Sixteen WP runs of one function; setup can take 47 minutes when its
-    # cache misses (VERIFY-060 run 1).
+    # Four WP runs of one function a version, about 9 minutes in run 1;
+    # setup can take 47 minutes when its cache misses (VERIFY-060 run 1).
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
 
-      # Each step runs if tools/probes/verify-079/steps names it, and
-      # otherwise posts that it did not run.
-      - name: "WP: vec_int_extend_from_range as it is (P0)"
+      # Slot N runs the N-th step tools/probes/verify-079/steps names (a
+      # version, goals or report), and nothing past the file's last: the file
+      # alone decides what runs (VERIFY-079 run 1b). One step a slot, since
+      # GitHub keeps ten notices of a step.
+      - name: "Step 1 of tools/probes/verify-079/steps"
         run: |
           eval $(opam env --switch=frama-c)
-          python3 tools/probes/verify-079/vecrange_probe.py P0
+          python3 tools/probes/verify-079/vecrange_probe.py --nth 1
 
-      - name: "WP: with three assertions in the loop (A)"
+      - name: "Step 2 of tools/probes/verify-079/steps"
         if: ${{ !cancelled() }}
         run: |
           eval $(opam env --switch=frama-c)
-          python3 tools/probes/verify-079/vecrange_probe.py A
+          python3 tools/probes/verify-079/vecrange_probe.py --nth 2
 
-      - name: "WP: with invariant 5 over values at Pre, and len_kept (B)"
+      - name: "Step 3 of tools/probes/verify-079/steps"
         if: ${{ !cancelled() }}
         run: |
           eval $(opam env --switch=frama-c)
-          python3 tools/probes/verify-079/vecrange_probe.py B
+          python3 tools/probes/verify-079/vecrange_probe.py --nth 3
 
-      - name: "WP: with both (C)"
+      - name: "Step 4 of tools/probes/verify-079/steps"
         if: ${{ !cancelled() }}
         run: |
           eval $(opam env --switch=frama-c)
-          python3 tools/probes/verify-079/vecrange_probe.py C
+          python3 tools/probes/verify-079/vecrange_probe.py --nth 4
 
-      - name: "The four versions compared"
+      - name: "Step 5 of tools/probes/verify-079/steps"
         if: ${{ !cancelled() }}
-        run: python3 tools/probes/verify-079/vecrange_probe.py report
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-079/vecrange_probe.py --nth 5
+
+      - name: "Step 6 of tools/probes/verify-079/steps"
+        if: ${{ !cancelled() }}
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-079/vecrange_probe.py --nth 6
+
+      - name: "Step 7 of tools/probes/verify-079/steps"
+        if: ${{ !cancelled() }}
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-079/vecrange_probe.py --nth 7
+
+      - name: "Step 8 of tools/probes/verify-079/steps"
+        if: ${{ !cancelled() }}
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-079/vecrange_probe.py --nth 8
 
       - name: Upload each step's output (vec_range probe)
         if: always()

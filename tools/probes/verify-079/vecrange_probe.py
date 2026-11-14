@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 vecrange_probe.py -- VERIFY-079's probe: the two slow goals of
-vec_int_extend_from_range's loop, measured with three changes to its
-annotations before data/vec/vec_range.h changes.
+vec_int_extend_from_range's loop, measured with changes to its annotations
+before data/vec/vec_range.h changes.
 
 frama-c-vec-range proves every goal of vec_int_extend_from_range, but two of
 them only with Alt-Ergo: parts 3 and 4 of the preservation of loop invariant
@@ -14,14 +14,13 @@ Invariant 5 states the values the loop has stored so far:
     \\forall integer k; 0 <= k < i
       ==> v->items[v->len + k] == \\at(r.current, Pre) + k * r.step
 
-Under WP's typed model the items, v->len and the range's fields are all
-integers in one memory, the range being there because its address is taken.
-After the store, each read of v->len and of r.step needs the provers to show
-that the store did not write it, once for every k. The probe measures the
-function with four versions of the header, each applied to a copy of the
+WP splits each goal of the loop's body on the paths through the round-trip
+check (-wp-split): parts 1 and 2 are the two that return, which WP proves
+itself, and parts 3 and 4 the two that reach the store. The probe measures
+the function with versions of the header, each applied to a copy of the
 checkout:
 
-  P0  the header as it is;
+  P0  the header as it is, the control;
   A   three assertions in the loop's body (variants/a_asserts.patch): after
       the round-trip check, that value is the range's i-th value (ith_value)
       and that elem equals it (fits); after the store, that the slot holds it
@@ -29,16 +28,36 @@ checkout:
   B   invariant 5 over values no store changes (variants/b_anchored.patch):
       v->items[\\at(v->len, Pre) + k] == \\at(r.current, Pre) + k * \\at(r.step, Pre),
       and a new invariant after it, len_kept: v->len == \\at(v->len, Pre);
-  C   both (variants/c_both.patch).
+  C   both (variants/c_both.patch);
+  D   after the store, kept: each earlier slot holds what it held at the
+      iteration's start, \\at(v->items[v->len + k], LoopCurrent)
+      (variants/d_kept.patch);
+  E   D, and the same after the call to range_next, kept_call
+      (variants/e_kept_call.patch): the frame across the call and the frame
+      across the store, each its own goal;
+  R   the header as it is, under WP's by-reference model, Typed+Cast+ref, in
+      which the range, passed to range_next by its address, may stay out of
+      memory.
+
+VERIFY-079's run 1 measured P0 and A to C; its run 1b, P0, D, E and R.
 
 Each version's step runs WP on vec_int_extend_from_range alone (-wp-fct),
-with frama-c-vec-range's options as tools/agreement/agreement.py lists them:
-once with Alt-Ergo, Z3 and CVC5 together, as the proof job runs them, and
-once with each alone, as 13 · Prover agreement runs them. It reports the
-goals proved and not, each goal's prover and time, the goals one or two
-provers prove alone as tools/agreement/pins/ lists them, and the pin file's
-lines for the function that would go and come. The step report compares the
-four from what the other steps wrote.
+with frama-c-vec-range's options as tools/agreement/agreement.py lists them
+(R's model aside): once with Alt-Ergo, Z3 and CVC5 together, as the proof
+job runs them, and once with each alone, as 13 · Prover agreement runs them.
+It reports the goals proved and not, each goal's prover and time, the goals
+one or two provers prove alone as tools/agreement/pins/ lists them, and the
+pin file's lines for the function that would go and come. WP names a goal
+after its model, so the probe names each by frama-c-vec-range's, typed_cast.
+The other steps:
+
+  goals   P0's invariants, as WP gives them to the provers: WP with Alt-Ergo,
+          -wp-prop @invariant and -wp-print, its print in the log; and,
+          from -wp-out, the provers' files for invariant 5's preservation,
+          parts 3 and 4, in the log;
+  report  the versions the file steps names, compared from what their steps
+          wrote: counts, the slowest proof, and the watched goals,
+          invariant 5's preservation, kept and kept_call.
 
 The file steps, next to this script, names the steps that run; a step it
 does not name posts that it did not run. Without the file, every step runs.
@@ -46,19 +65,27 @@ does not name posts that it did not run. Without the file, every step runs.
 It writes notices for each step and prints each goal's results in the log.
 GitHub reads a workflow command at the start of a line even behind spaces,
 so the probe prints each line of WP's output that would be one behind "| ".
-It never fails on what it measures: it fails only if a WP run gives no
-summary or no report, or is stopped at LIMIT. A version whose patch neither
-applies nor is found applied is reported and not measured.
+It never fails on what it measures. It fails only if P0's WP gives no
+summary or no report, or is stopped at LIMIT: P0 is the checkout as it is,
+so that is the probe or its setup failing. Another version whose WP does
+so, or whose patch neither applies nor is found applied, is reported and
+not measured; so is the goals step's print.
 
 Each step's files go to vecrange_out/ in the directory it is run from:
 VERSION/all.txt and .json, WP's output and report with the three provers
 together; VERSION/alt-ergo.txt, z3.txt, cvc5.txt and their .json, each
-alone; VERSION/summary.json, what the step report reads.
+alone; VERSION/summary.json, what the step report reads; goals/, the goals
+step's output and WP's -wp-out.
 
-    python3 tools/probes/verify-079/vecrange_probe.py [P0|A|B|C|report]...
+    python3 tools/probes/verify-079/vecrange_probe.py [P0|A|...|R|goals|report]...
+    python3 tools/probes/verify-079/vecrange_probe.py --nth N
 
-With no argument it runs every step the file steps names.
+With no argument it runs every step the file steps names. With --nth N it
+runs the N-th step the file names, or nothing past the file's last: the
+job in probes.yml runs N = 1 to 8, each in a step of its own, so the file
+alone decides what runs.
 """
+import glob
 import importlib.util
 import json
 import os
@@ -76,22 +103,32 @@ STEPS = os.path.join(HERE, 'steps')
 OUT = os.path.abspath('vecrange_out')
 UNIT = 'frama-c-vec-range'
 FN = 'vec_int_extend_from_range'
-PREFIX = f'typed_cast_{FN}_'
+PREFIX = f'typed_cast_{FN}_'   # frama-c-vec-range's model, Typed+Cast, names its goals so
 PROVERS = ['alt-ergo', 'z3', 'cvc5']
+SHOWN_PROVERS = ['Alt-Ergo', 'Z3', 'CVC5']
 RUNS = ['all'] + PROVERS   # all: the three together, as the proof job runs them
 VERSIONS = [
-    ('P0', None, 'the header as it is'),
-    ('A', 'variants/a_asserts.patch', 'three assertions in the loop'),
-    ('B', 'variants/b_anchored.patch', 'invariant 5 over values at Pre, and len_kept'),
-    ('C', 'variants/c_both.patch', 'A and B'),
+    # name, patch, what, WP's model when not frama-c-vec-range's
+    ('P0', None, 'the header as it is', None),
+    ('A', 'variants/a_asserts.patch', 'three assertions in the loop', None),
+    ('B', 'variants/b_anchored.patch', 'invariant 5 over values at Pre, and len_kept', None),
+    ('C', 'variants/c_both.patch', 'A and B', None),
+    ('D', 'variants/d_kept.patch', 'kept, the earlier slots as at the iteration\'s start, '
+                                   'after the store', None),
+    ('E', 'variants/e_kept_call.patch', 'D, and kept_call, the same after the call to '
+                                        'range_next', None),
+    ('R', None, 'the header as it is, under WP\'s by-reference model', 'Typed+Cast+ref'),
 ]
-ALL = [v for v, _, _ in VERSIONS] + ['report']
+CONTROL = 'P0'
+ALL = [v[0] for v in VERSIONS] + ['goals', 'report']
+WATCH = re.compile(r'^(loop_invariant_5_preserved|assert_kept|assert_kept_call)(_part\d+)?$')
 INV5 = 'loop_invariant_5_preserved'
 CUT = 4000        # the runner cuts an annotation at 4096 characters
 STEP = 10         # GitHub keeps ten notices of a step
 SHOWN = 10.0      # seconds: a goal that took a run longer is named in the notices
 SLOW = 30.0       # seconds: 13 · Prover agreement's slow, tools/agreement/agreement.py's SLOW
 LIMIT = 60 * 60   # seconds: a WP run still going after this is stopped, and gives no data
+FILE_LINES = 4000  # lines of a prover's file printed in the log
 
 
 def notice(title, msg):
@@ -106,12 +143,28 @@ def shown(text):
 
 
 def short(goal):
-    return goal[len(PREFIX):] if goal.startswith(PREFIX) else goal
+    """A goal's name without WP's model and the function's name."""
+    i = goal.find(f'_{FN}_')
+    return goal[i + len(FN) + 2:] if i >= 0 else goal
+
+
+def canon(goal):
+    """A goal's name as frama-c-vec-range's model gives it."""
+    return PREFIX + short(goal) if f'_{FN}_' in goal else goal
 
 
 def secs(t):
     """A time in seconds as the notices give it: tenths under 10 s."""
     return f'{t:.1f} s' if t < 10 else f'{t:.0f} s'
+
+
+def shown_result(r):
+    """A run's result for a goal: a prover's time, WP, or - for not proved."""
+    if r is None:
+        return '-'
+    if r == 'WP':
+        return 'WP'
+    return secs(r)
 
 
 def grouped(head, items, room, sep='; '):
@@ -173,12 +226,15 @@ def make_tree(patch):
     return None, 'the patch neither applies nor is in the checkout'
 
 
-def wp_run(tree, agreement, version, run):
-    """WP on FN in tree, as frama-c-vec-range runs it, with the provers of run.
-    Returns WP's summary (proved, total, {category: count}), the report's
-    goals (goal -> (passed, {prover: time})) and the minutes it took."""
-    path, model, cpp = agreement.UNITS[UNIT]
-    d = os.path.join(OUT, version)
+def wp_run(tree, agreement, where, run, model=None, extra=()):
+    """WP on FN in tree, as frama-c-vec-range runs it, with the provers of run
+    and, if given, another model and more options. Returns WP's summary
+    (proved, total, {category: count}), the report's goals by their names
+    under frama-c-vec-range's model (goal -> (passed, {prover: time})) and
+    the minutes it took; or, if WP gave no summary or no report or was
+    stopped, a text saying so."""
+    path, unit_model, cpp = agreement.UNITS[UNIT]
+    d = os.path.join(OUT, where)
     os.makedirs(d, exist_ok=True)
     txt, rep = os.path.join(d, f'{run}.txt'), os.path.join(d, f'{run}.json')
     for f in (txt, rep):
@@ -186,15 +242,16 @@ def wp_run(tree, agreement, version, run):
             os.remove(f)
     provers = ','.join(PROVERS) if run == 'all' else run
     cmd = (['frama-c', '-wp', '-wp-rte',
-            '-wp-model', model,
+            '-wp-model', model or unit_model,
             '-wp-prover', provers,
             '-wp-timeout', '120',
             '-wp-split',
             '-wp-fct', FN,
             '-wp-report-json', rep]
+           + list(extra)
            + agreement.EXTRA.get(UNIT, [])
            + [f'-cpp-extra-args={cpp}', path])
-    print(f'\n=== {version}, {run}: ' + ' '.join(cmd), flush=True)
+    print(f'\n=== {where}, {run}: ' + ' '.join(cmd), flush=True)
     start = time.time()
     with open(txt, 'w') as f:
         # A session of its own, so that a stop takes the provers with it.
@@ -212,13 +269,13 @@ def wp_run(tree, agreement, version, run):
     s = agreement.summary(text)
     if code is None or s is None or not os.path.exists(rep):
         shown('\n'.join(text.splitlines()[-30:]))
-        why = (f'stopped after {LIMIT // 60} minutes' if code is None
-               else f'frama-c exit {code}: no summary or no report')
-        sys.exit(f'::error title=vecrange {version}::{run}: {why}')
+        return (f'{run}: stopped after {LIMIT // 60} minutes' if code is None
+                else f'{run}: frama-c exit {code}, no summary or no report')
     try:
         goals, _ = agreement.load(rep)
     except (OSError, ValueError) as e:
-        sys.exit(f'::error title=vecrange {version}::{run}: the report cannot be read: {e}')
+        return f'{run}: the report cannot be read: {e}'
+    goals = {canon(g): r for g, r in goals.items()}
     cats = '; '.join(f'{k} {v}' for k, v in s[2].items())
     print(f'frama-c exit {code} after {minutes:.1f} minutes: Proved goals {s[0]} / {s[1]} '
           f'({cats}); the report: {len(goals)} goals')
@@ -237,12 +294,18 @@ def pin_lines(agreement):
     return lines
 
 
-def took(goals, g, name):
-    """The time the run's report gives name on goal g, or None."""
-    if g not in goals:
+def timed_result(r):
+    """Whether a run's result for a goal is a prover's time."""
+    return isinstance(r, (int, float)) and not isinstance(r, bool)
+
+
+def alone_result(goals, g, name):
+    """A prover's run alone on goal g: its time, 'WP' if WP proved it itself,
+    or None."""
+    if g not in goals or not goals[g][0]:
         return None
-    ok, succ = goals[g]
-    return succ.get(name) if ok else None
+    t = goals[g][1].get(name)
+    return t if t is not None else 'WP'
 
 
 def best(goals, g):
@@ -250,21 +313,31 @@ def best(goals, g):
     if g not in goals or not goals[g][0]:
         return None
     succ = goals[g][1]
-    smt = {n: t for n, t in succ.items() if n in ('Alt-Ergo', 'Z3', 'CVC5')}
+    smt = {n: t for n, t in succ.items() if n in SHOWN_PROVERS}
     if smt:
         n = min(smt, key=smt.get)
         return n, smt[n]
     return 'WP', 0.0
 
 
-def step_version(version, patch, what):
+def step_version(version, patch, what, model):
     tree, how = make_tree(patch)
+    if model:
+        how += f', WP\'s model {model}'
     print(f'{version}, {what}: {how}' + (f': {tree}' if tree else ''), flush=True)
     if tree is None:
         notice(f'vecrange {version}', f'{version}, {what}: {how}; not measured')
         return
     agreement = load_tool(tree, 'tools', 'agreement', 'agreement.py')
-    res = {run: wp_run(tree, agreement, version, run) for run in RUNS}
+    res = {}
+    for run in RUNS:
+        r = wp_run(tree, agreement, version, run, model=model)
+        if isinstance(r, str):
+            if version == CONTROL:
+                sys.exit(f'::error title=vecrange {version}::{r}')
+            notice(f'vecrange {version}', f'{version}, {what} ({how}): not measured; {r}')
+            return
+        res[run] = r
     s_all, g_all, m_all = res['all']
     have = {p: (res[p][1], res[p][0], None) for p in PROVERS}
     o = agreement.sort_goals(have)
@@ -278,20 +351,17 @@ def step_version(version, patch, what):
         together = f'{b[0]} {b[1]:.1f} s' if b and b[0] != 'WP' else ('WP' if b else 'NOT PROVED')
         alone = []
         for p in PROVERS:
-            t = took(res[p][1], g, names[p])
-            if t is not None:
-                alone.append(f'{names[p]} {t:.1f} s')
-            elif g in res[p][1] and res[p][1][g][0]:
-                alone.append(f'{names[p]} WP')
-            else:
-                alone.append(f'{names[p]} -')
+            r = alone_result(res[p][1], g, names[p])
+            alone.append(f'{names[p]} ' + (f'{r:.1f} s' if timed_result(r) else
+                                           shown_result(r)))
         rows.append(f'{short(g)} | together {together} | alone {", ".join(alone)} | '
                     f'{agreement.state(o, g)}')
-        longest = max([b[1] if b else 0.0] + [took(res[p][1], g, names[p]) or 0.0
-                                               for p in PROVERS])
-        if longest > SHOWN:
-            timed.append((longest, f'{short(g)}: together {together}; alone '
-                                   + ', '.join(alone)))
+        times = [b[1] if b else 0.0] + [r for p in PROVERS
+                                        for r in [alone_result(res[p][1], g, names[p])]
+                                        if timed_result(r)]
+        if max(times) > SHOWN:
+            timed.append((max(times), f'{short(g)}: together {together}; alone '
+                                      + ', '.join(alone)))
     print(f'\n--- {version}: each goal of {FN} ({len(ids)}), with the three provers '
           'together and each alone ---')
     print('\n'.join(rows))
@@ -318,7 +388,6 @@ def step_version(version, patch, what):
           f'out ({len(diffs)}) ---')
     print('\n'.join(diffs) or '(none)')
 
-    inv5 = [g for g in ids if short(g).startswith(INV5)]
     summary = {
         'version': version, 'what': what, 'how': how,
         'together': {'proved': s_all[0], 'total': s_all[1], 'cats': s_all[2],
@@ -333,9 +402,9 @@ def step_version(version, patch, what):
         'slow_alone': {short(g): ts for g, ts in o['slow'].items()},
         'pins': {'gone': gone, 'came': came, 'diffs': diffs},
         'goals': {short(g): {'together': list(best(g_all, g)) if best(g_all, g) else None,
-                             'alone': {names[p]: took(res[p][1], g, names[p]) for p in PROVERS}}
+                             'alone': {names[p]: alone_result(res[p][1], g, names[p])
+                                       for p in PROVERS}}
                   for g in ids},
-        'inv5': [short(g) for g in inv5],
     }
     with open(os.path.join(OUT, version, 'summary.json'), 'w') as f:
         json.dump(summary, f, indent=1, sort_keys=True)
@@ -346,8 +415,8 @@ def step_version(version, patch, what):
     notice(f'vecrange {version}',
            f'{version}, {what} ({how}). Alt-Ergo, Z3 and CVC5 together, as frama-c-vec-range '
            f'runs them: {FN} {s_all[0]} / {s_all[1]} ({cats}); not proved {len(unproved)}; '
-           f'{low}; proofs over {SLOW:.0f} s {over}; {m_all:.0f} minutes')
-    alone = ', '.join(f'{names[p]} {res[p][0][0]} / {res[p][0][1]} ({res[p][2]:.0f} minutes)'
+           f'{low}; proofs over {SLOW:.0f} s {over}; {m_all:.0f} min')
+    alone = ', '.join(f'{names[p]} {res[p][0][0]} / {res[p][0][1]} ({res[p][2]:.0f} min)'
                       for p in PROVERS)
     two = ', '.join(f'{k} {len(v)}' for k, v in sorted(o['two'].items())) or 'none'
     one = ', '.join(f'{k} {len(v)}' for k, v in o['one'].items() if v) or 'none'
@@ -373,9 +442,63 @@ def step_version(version, patch, what):
         notice(f'vecrange {version} times', text)
 
 
+def step_goals():
+    """P0's invariants as WP gives them to the provers, in the log."""
+    tree, how = make_tree(None)
+    agreement = load_tool(tree, 'tools', 'agreement', 'agreement.py')
+    d = os.path.join(OUT, 'goals')
+    wp_out = os.path.join(d, 'wp')
+    shutil.rmtree(wp_out, ignore_errors=True)
+    os.makedirs(wp_out, exist_ok=True)
+    picked = '-wp-prop @invariant'
+    r = wp_run(tree, agreement, 'goals', 'alt-ergo',
+               extra=['-wp-prop', '@invariant', '-wp-print', '-wp-out', wp_out])
+    if not isinstance(r, str) and r[0][1] == 0:
+        print('goals: -wp-prop @invariant selected no goal; again with every goal', flush=True)
+        picked = 'every goal, -wp-prop @invariant having selected none'
+        shutil.rmtree(wp_out, ignore_errors=True)
+        os.makedirs(wp_out, exist_ok=True)
+        r = wp_run(tree, agreement, 'goals', 'alt-ergo', extra=['-wp-print', '-wp-out', wp_out])
+    if isinstance(r, str):
+        notice('vecrange goals', f'goals: not printed; {r}')
+        return
+    s, goals, minutes = r
+    with open(os.path.join(d, 'alt-ergo.txt'), errors='replace') as f:
+        text = f.read()
+    print(f'\n=== goals: WP\'s print, P0, Alt-Ergo, {picked}: begin ===')
+    shown(text)
+    print('=== goals: WP\'s print: end ===')
+    files = sorted(p for p in glob.glob(os.path.join(wp_out, '**', '*'), recursive=True)
+                   if os.path.isfile(p))
+    mine = [p for p in files if INV5 in os.path.basename(p)]
+    printed = [p for p in mine if re.search(r'part[34]\b|part[34][^0-9]', os.path.basename(p))]
+    print(f'\n=== goals: -wp-out holds {len(files)} file(s); invariant 5\'s preservation\'s: '
+          f'{len(mine)} ===')
+    for p in files[:200]:
+        print(os.path.relpath(p, wp_out))
+    for p in printed:
+        with open(p, errors='replace') as f:
+            lines = f.read().splitlines()
+        print(f'\n=== goals: {os.path.relpath(p, wp_out)} ({len(lines)} lines): begin ===')
+        shown('\n'.join(lines[:FILE_LINES]))
+        if len(lines) > FILE_LINES:
+            print(f'... {len(lines) - FILE_LINES} more lines, in vecrange_out/goals/wp/')
+        print('=== goals: file: end ===')
+    inv5 = sorted(short(g) for g in goals if short(g).startswith(INV5))
+    notice('vecrange goals',
+           f'goals: WP\'s print of P0 with Alt-Ergo, {picked}: {s[0]} / {s[1]}, '
+           f'{len(text.splitlines())} lines, in the log between "=== goals: WP\'s print" lines; '
+           f'invariant 5\'s preservation in the report: {" ".join(inv5) or "no goal"}. '
+           f'-wp-out: {len(files)} file(s), {len(mine)} of invariant 5\'s preservation, '
+           f'{len(printed)} printed in the log (parts 3 and 4): '
+           + (' '.join(os.path.relpath(p, wp_out) for p in printed) or 'none'))
+
+
 def step_report():
+    on = enabled()
+    wanted = [v for v in VERSIONS if v[0] in on]
     done, missing = [], []
-    for version, _, what in VERSIONS:
+    for version, _, _, _ in wanted:
         path = os.path.join(OUT, version, 'summary.json')
         if os.path.exists(path):
             with open(path) as f:
@@ -383,43 +506,51 @@ def step_report():
         else:
             missing.append(version)
     if not done:
-        notice('vecrange report', f'no version measured: {" ".join(missing)} have no summary')
+        notice('vecrange report',
+               f'no version measured: {" ".join(missing) or "none named"} have no summary')
         return
-    base = next((s for s in done if s['version'] == 'P0'), None)
+    base = next((s for s in done if s['version'] == CONTROL), None)
     for s in done:
         t, c = s['together'], s['classes']
         low = (f'slowest {secs(t["slowest"][0])} ({t["slowest"][1]}, {t["slowest"][2]})'
                if t['slowest'] else 'no proof by a prover')
-        inv = []
-        for g in s['inv5']:
+        watched = []
+        for g in sorted(s['goals']):
+            if not WATCH.match(g):
+                continue
             r = s['goals'][g]
-            tg = (f'{r["together"][0]} {secs(r["together"][1])}' if r['together']
-                  else 'not proved')
-            al = ', '.join(f'{n} {secs(r["alone"][n])}' if r['alone'].get(n) is not None
-                           else f'{n} -' for n in ('Alt-Ergo', 'Z3', 'CVC5'))
-            inv.append(f'{g[len(INV5) + 1:] or "whole"}: together {tg}, alone {al}')
+            tg = r['together']
+            tg = ('not proved' if tg is None else 'WP' if tg[0] == 'WP'
+                  else f'{tg[0]} {secs(tg[1])}')
+            al = ', '.join(f'{n} {shown_result(r["alone"].get(n))}' for n in SHOWN_PROVERS)
+            watched.append(f'{g}: together {tg}, alone {al}')
         new = ''
         if base is not None and s is not base:
             added = sorted(set(s['goals']) - set(base['goals']))
             gone = sorted(set(base['goals']) - set(s['goals']))
-            new = f'; goals new against P0 {len(added)}, gone {len(gone)}'
-            if added:
-                worst = max(added, key=lambda g: (s['goals'][g]['together'] or ['', 999])[1])
-                w = s['goals'][worst]['together']
-                new += (f', the new goals\' slowest proof together {secs(w[1])} ({worst})'
-                        if w else f', not proved together: {worst}')
+            new = f'; goals new against {CONTROL} {len(added)}, gone {len(gone)}'
         notice(f'vecrange report {s["version"]}',
                f'{s["version"]}, {s["what"]}: together {t["proved"]} / {t["total"]}, not proved '
                f'{len(t["unproved"])}, {low}, over {SLOW:.0f} s {t["over"]}; alone: none '
                f'{c["none"]}, one {c["one"]}, two {c["two"]}, over {SLOW:.0f} s '
                f'{len(s["slow_alone"])}; the pin file\'s lines for {FN}: {len(s["pins"]["gone"])} '
-               f'would go, {len(s["pins"]["came"])} come{new}. Invariant 5 preserved '
-               f'({len(s["inv5"])} part(s)): ' + ('; '.join(inv) or 'no goal'))
+               f'would go, {len(s["pins"]["came"])} come{new}. Watched: '
+               + ('; '.join(watched) or 'no goal'))
     if missing:
         notice('vecrange report', f'not measured: {" ".join(missing)}')
 
 
 def main(argv):
+    if len(argv) == 3 and argv[1] == '--nth':
+        # probes.yml's slots: the n-th step the file steps names, each in a
+        # step of its own, since GitHub keeps ten notices of a step.
+        on, n = enabled(), int(argv[2])
+        if n > len(on):
+            print(f'vecrange: {os.path.relpath(STEPS, ROOT)} names {len(on)} step(s); '
+                  f'no step {n}', flush=True)
+            return 0
+        argv = [argv[0], on[n - 1]]
+        print(f'vecrange: step {n} of {os.path.relpath(STEPS, ROOT)}: {on[n - 1]}', flush=True)
     steps = argv[1:] or enabled()
     bad = [s for s in steps if s not in ALL]
     if bad:
@@ -434,9 +565,11 @@ def main(argv):
             continue
         if s == 'report':
             step_report()
-            continue
-        _, patch, what = next(v for v in VERSIONS if v[0] == s)
-        step_version(s, patch, what)
+        elif s == 'goals':
+            step_goals()
+        else:
+            _, patch, what, model = next(v for v in VERSIONS if v[0] == s)
+            step_version(s, patch, what, model)
     return 0
 
 

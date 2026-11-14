@@ -1,0 +1,20 @@
+--- a/data/vec/vec_range.h
++++ b/data/vec/vec_range.h
+@@ -203,11 +203,17 @@
+         loop variant count - i; */                                             \
+     for (usize i = 0; i < count; i++) {                                        \
+         const isize value = range_next(&r);                                    \
++        /*@ assert kept_call: \forall integer k; 0 <= k < i                    \
++            ==> v->items[v->len + k]                                           \
++                == \at(v->items[v->len + k], LoopCurrent); */                  \
+         const type elem = (type)value;                                         \
+         if (((isize)elem != value) || ((value < 0) && !(elem < (type)1))) {    \
+             return result__Bool_Error_err(ERR_OUT_OF_RANGE);                   \
+         }                                                                      \
+         v->items[v->len + i] = elem;                                           \
++        /*@ assert kept: \forall integer k; 0 <= k < i                         \
++            ==> v->items[v->len + k]                                           \
++                == \at(v->items[v->len + k], LoopCurrent); */                  \
+     }                                                                          \
+     v->len = total;                                                            \
+     return result__Bool_Error_ok(true);                                        \
