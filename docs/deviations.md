@@ -35741,7 +35741,7 @@ Frama-C's plug-ins, group 1 (E-ACSL, Metrics and MdR).
 | **ID**         | VERIFY-079 |
 | **Date**       | 2026-11-14 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-14 — Run 1 scored: V1 to V8 MATCH, V9 to V11 MISS. Neither form makes invariant 5's parts 3 and 4 easy: Alt-Ergo alone still proves them alone, and with A and B together part 3 was not proved with the three provers at once. The record's reading of the cost was wrong ("Run 1 scored", below). The author chose to measure again: run 1b, pre-registered below, prints the goals and puts the frame of the earlier slots in goals of its own. Run 1b scored: U1, U2 and U4 to U6 MATCH, U3 and U7 to U9 MISS; D, the assertion `kept` after the store, takes the function's slowest proof with the three provers at once from 96 s to 0.3 s. Run 2, pre-registered below, puts it into the header. The Status above is the record as committed. |
+| **Status update** | 2026-11-14 — Run 1 scored: V1 to V8 MATCH, V9 to V11 MISS. Neither form makes invariant 5's parts 3 and 4 easy: Alt-Ergo alone still proves them alone, and with A and B together part 3 was not proved with the three provers at once. The record's reading of the cost was wrong ("Run 1 scored", below). The author chose to measure again: run 1b, pre-registered below, prints the goals and puts the frame of the earlier slots in goals of its own. Run 1b scored: U1, U2 and U4 to U6 MATCH, U3 and U7 to U9 MISS; D, the assertion `kept` after the store, takes the function's slowest proof with the three provers at once from 96 s to 0.3 s. Run 2, pre-registered below, puts it into the header. Run 2 scored: T1 and T3 to T5 MATCH, T2 MISS: Eva reads the assertion under `-CC`, which the record said it did not, and leaves it open, so 14's pins lacked a line. Run 2b, pre-registered below, pins it. The Status above is the record as committed. |
 | **Baseline**   | 1753e49 (VERIFY-078's close); `1`, `3`, `4`, `5` and `6` #60 (98cde9c), `2 · Platforms` #80 (0379866) and `8 · Records` #91 (1753e49); `9 · Probes` #20 (453cbcf), #21 (a11ae90), #22 (c35260b) and #23 (98cde9c), each probe's last run. |
 | **Scope**      | Run 1: `tools/probes/verify-079/` (`vecrange_probe.py`, `variants/`, `steps`, `README.md`); `.github/workflows/probes.yml`, the job `vecrange-probe`, its filter and its output, and the header's list of probes; the workflow map's row 9. Run 2: `data/vec/vec_range.h`'s loop annotations, with the pins that read them, if run 1 finds a version that makes the two goals easy. |
 | **Category**   | VERIFY-065's "Left for later": the two single-prover proofs a slow runner could lose. Run 1 measures in CI before the header changes (report-only); run 2 makes the change, pinned from run 1. |
@@ -36156,3 +36156,61 @@ to 12 do not. In 9 the pointer probe and the vec_range probe run.
 **What follows.** T1 to T5 scored. If they hold, VERIFY-079 closes: the
 two goals are proved in under a second, and the proof job's slowest proof
 of the function is CVC5's of `kept`.
+
+### Run 2 scored (2026-11-14)
+
+The push of 5c7029b and 14782ad started 1 to 9, 13 and 14: `1` #63, `2`
+#83, `3` #63, `4`, `5` and `6` #63, `7` #32, `8` #94, `9` #26, `13` #14
+and `14` #12. Every job was green at its first attempt but 14's ten Eva
+jobs, which failed.
+
+| # | scored |
+|---|--------|
+| T1 | **MATCH.** 1 to 9, 13 and 14 ran; 10 to 12 did not. In 9 the pointer probe and the vec_range probe ran, the others skipped; in 13, `frama-c-vec-range` alone. |
+| T2 | **MISS.** 14 failed: at each of the ten models, `vec_range.c` is "not as pinned", its block one line longer than its pin, "alarm: Unknown: vmacros/vdrivers/vec_range_verify.h:68 vec_int_extend_from_range: user assertion: ∀ ℤ k; 0 ≤ k < i ⇒ *(v->items + (v->len + k)) ≡ \at(*(v->items + (v->len + k)),LoopCurrent)". Eva reads `kept` and does not confirm it. The other 25 programs are as pinned at each model. The record said "Eva drops `-CC`, so only WP under `-CC` reads it", which is wrong: `tools/eva/eva.py` drops `-CC` only for a program's native build (`cpp_of(program, native=True)`), and runs Eva with the unit's own flags, `-CC` among them for the units preprocessed so. 1, 2, 3, 4, 5, 7 and 8 posted their last runs' notices, times aside; 2's names another header as the slowest to compile, a time. |
+| T3 | **MATCH.** 6 is green: `frama-c-vec-range` reads "wp_vec_range_output.txt: proved 5183 / 5228; unproved 45; failed/invalid/stepout 0", and the other jobs give #62's notices. |
+| T4 | **MATCH.** 13 is green: `frama-c-vec-range`'s unit job reads "pins: 0 difference(s)" and by none 45. Invariant 5's parts 3 and 4 are among the "one Alt-Ergo", neither over 30 s. `kept`'s parts 3 and 4 took Alt-Ergo alone 33 and 51 s, left out of the comparison as slow in the run, as T4's note foresaw for part 3. |
+| T5 | **MATCH.** 9 is green: the pointer probe's 26 jobs give #25's notices, and the vec_range probe's slots ran nothing and posted no notice. |
+
+Four of the five match; T2 misses.
+
+**Found while scoring.**
+
+1. **Eva reads the macro-body annotations** of the units preprocessed
+   with `-CC`, `vec_range`, `vec_fmt`, `stack`, `array` and `hashmap`: an
+   annotation added to their macros changes Eva's pins too. The survey
+   before run 1 read `eva.py`'s line 166 without its condition. Run 2b
+   pins the line.
+2. **Alt-Ergo alone took `kept` longer here than in the probe**: 33 and
+   51 s for parts 3 and 4, where the probe's D and E gave 24 and 36 to
+   37 s. The proof job does not wait for it: CVC5 proves `kept` in 0.2 s.
+   The pin file names part 4 slow; part 3 is left out by the run's own
+   rule whenever it is over 30 s.
+
+**What follows.** Run 2b, below. With it, every workflow is as pinned on
+the change.
+
+### Run 2b: pre-registration (2026-11-14)
+
+**The change.** Each of `tools/eva/pins/`'s ten files gains, in
+`vec_range.c`'s block, the line 14 #12 gave at its model, the same at all
+ten, and a note naming this record. `tools/eva/README.md`, "Pins", gains
+the assertion among what Eva leaves open, and why it holds: WP proves it,
+and Eva's domains do not confirm a property of every element of an
+array. Nothing else changes.
+
+**Measured here.** Each line is copied from the job's log at its model.
+`eva.py`'s own `read_pins` reads each new block as that log printed it:
+the program's line, unchanged, then the one property. `eva.py check`: 26
+programs, 10 models, 0 problems.
+
+**The workflows.** `tools/which_workflows.py`: 2, 8 and 14 run; no probe,
+and no unit of 13.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| S1 | **2, 8 and 14 run**, and no other. | another set | H |
+| S2 | **14 is green: each of the 26 programs is as pinned at each of the ten models**, `vec_range.c` with the one property. | a failure, or a program not as pinned | H: the same files that 14 #12 analysed, and its blocks copied. |
+| S3 | **2 and 8 are green**, each job with the notices of its last run (2 #83, 8 #94), times aside. | a failure, or another notice | H |
+
+**What follows.** S1 to S3 scored. If they hold, VERIFY-079 closes.
