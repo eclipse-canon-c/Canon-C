@@ -35741,7 +35741,7 @@ Frama-C's plug-ins, group 1 (E-ACSL, Metrics and MdR).
 | **ID**         | VERIFY-079 |
 | **Date**       | 2026-11-14 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-14 — Run 1 scored: V1 to V8 MATCH, V9 to V11 MISS. Neither form makes invariant 5's parts 3 and 4 easy: Alt-Ergo alone still proves them alone, and with A and B together part 3 was not proved with the three provers at once. The record's reading of the cost was wrong ("Run 1 scored", below). The author chose to measure again: run 1b, pre-registered below, prints the goals and puts the frame of the earlier slots in goals of its own. The Status above is the record as committed. |
+| **Status update** | 2026-11-14 — Run 1 scored: V1 to V8 MATCH, V9 to V11 MISS. Neither form makes invariant 5's parts 3 and 4 easy: Alt-Ergo alone still proves them alone, and with A and B together part 3 was not proved with the three provers at once. The record's reading of the cost was wrong ("Run 1 scored", below). The author chose to measure again: run 1b, pre-registered below, prints the goals and puts the frame of the earlier slots in goals of its own. Run 1b scored: U1, U2 and U4 to U6 MATCH, U3 and U7 to U9 MISS; D, the assertion `kept` after the store, takes the function's slowest proof with the three provers at once from 96 s to 0.3 s. Run 2, pre-registered below, puts it into the header. The Status above is the record as committed. |
 | **Baseline**   | 1753e49 (VERIFY-078's close); `1`, `3`, `4`, `5` and `6` #60 (98cde9c), `2 · Platforms` #80 (0379866) and `8 · Records` #91 (1753e49); `9 · Probes` #20 (453cbcf), #21 (a11ae90), #22 (c35260b) and #23 (98cde9c), each probe's last run. |
 | **Scope**      | Run 1: `tools/probes/verify-079/` (`vecrange_probe.py`, `variants/`, `steps`, `README.md`); `.github/workflows/probes.yml`, the job `vecrange-probe`, its filter and its output, and the header's list of probes; the workflow map's row 9. Run 2: `data/vec/vec_range.h`'s loop annotations, with the pins that read them, if run 1 finds a version that makes the two goals easy. |
 | **Category**   | VERIFY-065's "Left for later": the two single-prover proofs a slow runner could lose. Run 1 measures in CI before the header changes (report-only); run 2 makes the change, pinned from run 1. |
@@ -36047,3 +36047,112 @@ function easy, run 2 is pre-registered from it: D or E as a change to
 `data/vec/vec_range.h`; R as a change of `frama-c-vec-range`'s model,
 measured first on the whole unit, since it renames and may change every
 goal of it. If none does, the next form starts from what the print shows.
+
+### Run 1b scored (2026-11-14)
+
+The push of dcba4e9, 068eca3 and dabfa93 started `1 · Build & test` #62,
+`2 · Platforms` #82, `3 · Static analysis & coverage` #62, `4`, `5` and
+`6` #62, `8 · Records` #93 and `9 · Probes` #25: every job green at its
+first attempt. The vec_range probe took 35 minutes.
+
+| # | scored |
+|---|--------|
+| U1 | **MATCH.** 1 to 6, 8 and 9 ran; the others did not. In 9, every probe ran. |
+| U2 | **MATCH.** 1 to 6 and 8 are green, each job with the notices of its last run, times aside. |
+| U3 | **MISS.** The ten older probes are green, and 35 of their 36 jobs posted #24's notices. The diag_push probe's WP step reads "Proved goals: 3073 / 3074; not proved 1 (Timeout 1)", where #24's read "(Unknown 1)": the same goal, `diag_init`'s `memset`, failing another way. Its agreement step: none 1, as predicted, its other counts moving as allowed. The prediction quoted #24's notices whole, the WP step's included, and how a prover's unproved goal fails is what VERIFY-078's scoring said not to predict; #21's read Timeout too. |
+| U4 | **MATCH.** The vec_range probe is green. Slots 1 to 6 ran P0, goals, D, E, R and report, and slots 7 and 8 nothing. D and E were each "the patch applied to a copy of the checkout", and WP took `Typed+Cast+ref`: R is measured. |
+| U5 | **MATCH.** P0: 479 / 479 with the three together; parts 3 and 4 by Alt-Ergo alone, 66 and 44 s (96 and 59 s together); no difference from the pins, and no line of the pin file would go or come. |
+| U6 | **MATCH.** `-wp-prop @invariant` selected the invariants' 30 goals, and WP's print, 1125 lines, is in the log. Invariant 5's part 3 holds "(* Then *) Have: x_9 < 0" and part 4 "(* Else *) Have: 0 <= x_9", `x_9` being the value stored: the two paths through the check that reach the store. `-wp-out`'s files for them, 1364 lines each, are printed too. |
+| U7 | **MISS.** D: with `kept`, invariant 5's parts 3 and 4 take Alt-Ergo 0.3 s, but only Alt-Ergo proves them, as before. `kept`'s parts 3 and 4 are proved by all three provers alone: CVC5 in 0.2 s, Z3 in 0.5 s, Alt-Ergo in 24 and 37 s. The frame costs Alt-Ergo, as predicted, but not Z3 and CVC5, which prove it at once, and which still cannot prove invariant 5 with it. |
+| U8 | **MISS.** E: WP itself proves `kept_call`, both of its parts: the frame across the call costs nothing. `kept`, after it, as in D. |
+| U9 | **MISS.** R: as P0, 479 / 479, parts 3 and 4 by Alt-Ergo alone, 65 and 44 s (98 and 57 s together). |
+
+Five of the nine match; U3, U7, U8 and U9 miss.
+
+**What the run shows.**
+
+- **D makes the function easy for the proof job.** With the three provers
+  together, D's slowest proof is 0.3 s, where P0's in the same run is
+  96 s: CVC5 proves `kept` in 0.2 s and Alt-Ergo then proves invariant
+  5's parts 3 and 4 in 0.3 s. Each prover does the part it is quick at.
+  With each alone, Alt-Ergo still takes 24 and 37 s on `kept`, and Z3 and
+  CVC5 still do not prove invariant 5's parts 3 and 4.
+- **The cost is the frame across the store, for Alt-Ergo.** WP's print
+  shows why there is one. The store's address is
+  `shift_sint32(a_5, to_uint64(x_6 + x_1 - 1 - x))`: C computes
+  `v->len + i` in `usize`, so WP wraps it in `to_uint64`, and its
+  simplifier writes `i` from the range's counts. For each earlier slot,
+  `shift_sint32(a_5, i + x_6)`, the provers must show it is not that
+  address, through `to_uint64`. That is a reading of the print; what the
+  run measures is that this frame takes Alt-Ergo 24 to 37 s and Z3 and
+  CVC5 under a second.
+- **The call costs nothing, and the by-reference model changes nothing.**
+  WP itself proves `kept_call`; R's goals, classes and times are P0's.
+- **Every goal of the loop's body splits on the check's paths**: parts 1
+  and 2 return, and WP proves them itself; parts 3 and 4 reach the store,
+  with the value below 0 and at least 0.
+
+**What follows.** As run 1b's "What follows" said: D makes every goal of
+the function easy for the proof job, so run 2, pre-registered below, makes
+it the change.
+
+### Run 2: pre-registration (2026-11-14)
+
+**The change.** D, as run 1b measured it: in `IMPL_VEC_EXTEND_FROM_RANGE`,
+after the store,
+
+    /*@ assert kept: \forall integer k; 0 <= k < i
+        ==> v->items[v->len + k]
+            == \at(v->items[v->len + k], LoopCurrent); */
+
+three lines of the macro body, and a comment above the macro saying why.
+It is a comment to every compiler, to Cppcheck and to clang-tidy, and Eva
+drops `-CC`, so only WP under `-CC` reads it: `frama-c-vec-range`, `13`'s
+unit of the same name, and the pointer probe's. With it:
+
+- `frama-c-vec-range`'s pinned count goes from 5179 / 5224 to
+  5183 / 5228: `kept`'s four parts, WP itself proving parts 1 and 2 and
+  CVC5 parts 3 and 4 in 0.2 s (`.github/workflows/proofs-data.yml`, in
+  VERIFY-059's form);
+- its agreement pins lose the slow lines of invariant 5's parts 3 and 4,
+  which Alt-Ergo alone now proves in 0.3 s, and gain one for `kept`'s
+  part 4, which took Alt-Ergo alone 37 s. Invariant 5's two parts stay
+  "one Alt-Ergo", Z3 and CVC5 alone still not proving them
+  (`tools/agreement/pins/frama-c-vec-range.txt`);
+- the probe's `steps` names no step, its question answered;
+- `docs/verification.md`'s sentence on the two goals says what changed.
+
+**Measured here**, with Frama-C 25.0, gcc 13.3.0, clang 18.1.3 and
+Cppcheck 2.13:
+
+- Frama-C 25 parses and types the header under `-CC`, with no warning but
+  the driver's own.
+- All 61 tests pass, built with gcc and with clang (Debug), with no
+  warning.
+- The misra job's replica gives "as pinned: 57 real finding(s) in 32 file
+  and rule pair(s)" on this tree and on master, and the same output line
+  for line.
+- `tools/size/size.py`'s count of `vec_range.h`'s tokens after
+  preprocessing is 15496 on both, its pin.
+- No notice or pin names a line of `vec_range.h`: the coverage job's row
+  for it is `vec_range_cover.c` 38/42, and Eva's pins name lines of other
+  headers.
+- `tools/agreement/agreement.py affected`, on this push's files:
+  `frama-c-vec-range` alone.
+
+Not run here: WP.
+
+**The workflows.** `tools/which_workflows.py`: 1 to 9, 13 and 14 run; 10
+to 12 do not. In 9 the pointer probe and the vec_range probe run.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| T1 | **1 to 9, 13 and 14 run**, and no other. In 9, the pointer probe and the vec_range probe; in 13, `frama-c-vec-range` alone. | another set | H |
+| T2 | **1, 2, 3, 4, 5, 7, 8 and 14 are green**, each job with the notices of its last run (1, 3, 4 and 5 #62; 2 #82; 7 #31; 8 #93; 14 #11), times and GitHub's own on the macOS runners' capacity aside. | a failure, or another notice | H: to all of them the change is a comment. |
+| T3 | **6 is green: `frama-c-vec-range` reads "wp_vec_range_output.txt: proved 5183 / 5228; unproved 45; failed/invalid/stepout 0"**, its 45 the pinned names, and the other jobs of 6 give #62's notices. | a failure, another count, or another name | M–H: the probe proved `kept`'s four parts in both its runs of D and E, and its 45 are other functions'. |
+| T4 | **13 is green: `frama-c-vec-range`'s unit job finds no difference from its pins, by none 45**, and neither of invariant 5's parts 3 and 4 takes a prover over 30 s. | a difference, another count by none, or either part over 30 s | M: the probe measured the function, not the unit, and once; `kept`'s part 3, 24 s for Alt-Ergo alone, could pass 30 s, which leaves it out of the comparison, not a difference. |
+| T5 | **9 is green: the pointer probe's 26 jobs give #25's notices**, `frama-c-vec-range`'s "pointer_value proved 34 / 36" among them; **the vec_range probe's slots run nothing** and post no notice. | a failure, or another notice | M–H: RTE makes no goal of an annotation. |
+
+**What follows.** T1 to T5 scored. If they hold, VERIFY-079 closes: the
+two goals are proved in under a second, and the proof job's slowest proof
+of the function is CVC5's of `kept`.
