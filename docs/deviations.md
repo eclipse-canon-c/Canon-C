@@ -36253,3 +36253,73 @@ five of nine, run 2 four of five, run 2b three of three. What it shows:
 - **A probe's job should not name its versions.** Run 1b's needed a change
   to `probes.yml`, which starts 1 to 6 and every probe; its slots run
   what `steps` names, so a later round needs none.
+
+---
+
+## VERIFY-080: Pre-registration — What a Push Starts: the Pointer Probe Watches Every Unit's Headers, 1 to 6 Ignore probes.yml, and which_workflows.py Names the Eva Programs That Read Macro Bodies
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-080 |
+| **Date**       | 2026-11-14 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | f24c857 (VERIFY-079's close): `1`, `3`, `4`, `5` and `6` #63, `2 · Platforms` #84, `8 · Records` #96, and `9 · Probes` #25 and #26, each probe's last run. |
+| **Scope**      | `.github/workflows/` `ci.yml`, `platforms.yml`, `analysis.yml`, `proofs-core.yml`, `proofs-semantics.yml` and `proofs-data.yml` (their push and pull-request ignores); `probes.yml` (the pointer probe's filter, the workflow's push paths, the job's comment); `tools/which_workflows.py`; the workflow map. |
+| **Category**   | Three gaps found while VERIFY-076 to 079 ran, which the author asked, on 2026-11-14, to close before item 5. |
+
+### What is wrong
+
+1. **The pointer probe misses changes to headers it proves.** It runs all
+   26 units, but its filter named ten paths: `diag.h` was not among them,
+   nor `memory.h`, `arena.h`, `option`, `result`, `bitset`, `array`,
+   `hashmap` and others. VERIFY-073's run 2 changed `diag.h` and the probe
+   did not run, so VERIFY-076's X6 predicted from a notice made before that
+   change, and missed.
+2. **Editing `probes.yml` starts 1 to 6.** Their `paths-ignore` does not
+   name it, though none of them reads it: `proofs-semantics.yml` mentions
+   it only in a comment. VERIFY-079's run 1b paid about 1.5 hours of CI
+   for a change to the probe alone.
+3. **Nothing names the Eva programs that read macro bodies.** VERIFY-079's
+   run 2 added an annotation inside a macro of `vec_range.h` and predicted
+   that Eva would not see it; `eva.py` keeps `-CC` for the units
+   preprocessed so, Eva left the annotation open, and 14 failed at all ten
+   models.
+
+### The change
+
+1. The pointer probe's filter watches `core/**`, `semantics/**` and
+   `data/**`, with `vmacros/vdrivers/**` and its own files, and
+   `probes.yml`'s push paths gain the three directories. It runs on any
+   change to the library's proved code, as its 26 jobs need.
+2. 1 to 6 ignore `.github/workflows/probes.yml`, on push and on pull
+   request.
+3. `tools/which_workflows.py`, which every pre-registration runs, lists
+   after the workflows: 13's units (`agreement.py affected`), 9's probes
+   (the `changes` job's filters, matched as it matches them, with
+   `fnmatch`), and 14's programs that include a changed file. It marks
+   those whose unit runs `-CC` as reading macro bodies, whose Eva pins an
+   annotation inside a macro can change.
+
+The workflow map says the three.
+
+**Measured here.** `which_workflows.py` on `data/vec/vec_range.h` names
+`frama-c-vec-range`, the pointer probe and the program `vec_range`, marked
+`-CC`: the warning run 2 lacked. On `semantics/diag.h`: `frama-c-diag`,
+the pointer probe and `diag`, unmarked. On `probes.yml` alone: 8 and 9,
+every probe, and no workflow of 1 to 6. The six workflow files parse.
+`8 · Records`' checks pass.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 6, 8 and 9 run, since their own files
+change; 7 and 10 to 14 do not. In 9 every probe runs.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| R1 | **1 to 6, 8 and 9 run**, and no other; in 9, every probe. | another set | H |
+| R2 | **1 to 6 and 8 are green**, each job with the notices of its last run (1, 3, 4, 5 and 6 #63; 2 #84; 8 #96), times aside, 2's slowest header among them. | a failure, or another notice | H: no file they build or read changes. |
+| R3 | **9 is green.** Each older probe gives its last run's notices, times aside: #25 for G4, G11, G13, G19, Count, Round 3, the char and Eva error probes and diag_push, #26 for the pointer probe. Of diag_push's, its WP step's one unproved goal and its agreement step are predicted only as proved 3073 / 3074 and by none 1. The vec_range probe's slots run nothing and post no notice. | a failure, or another notice | M–H: nothing they read changes; how a prover's unproved goal fails moved between #21, #24 and #25 (VERIFY-078, VERIFY-079). |
+
+**What follows.** R1 to R3 scored. The change itself shows at the next
+push that changes `probes.yml` alone, which should start 8 and 9 only, and
+the next that changes `diag.h`, which should start the pointer probe.
