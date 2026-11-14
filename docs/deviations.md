@@ -35741,7 +35741,7 @@ Frama-C's plug-ins, group 1 (E-ACSL, Metrics and MdR).
 | **ID**         | VERIFY-079 |
 | **Date**       | 2026-11-14 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-14 — Run 1 scored: V1 to V8 MATCH, V9 to V11 MISS. Neither form makes invariant 5's parts 3 and 4 easy: Alt-Ergo alone still proves them alone, and with A and B together part 3 was not proved with the three provers at once. The record's reading of the cost was wrong ("Run 1 scored", below). Open: the author decides what follows. The Status above is the record as committed. |
+| **Status update** | 2026-11-14 — Run 1 scored: V1 to V8 MATCH, V9 to V11 MISS. Neither form makes invariant 5's parts 3 and 4 easy: Alt-Ergo alone still proves them alone, and with A and B together part 3 was not proved with the three provers at once. The record's reading of the cost was wrong ("Run 1 scored", below). The author chose to measure again: run 1b, pre-registered below, prints the goals and puts the frame of the earlier slots in goals of its own. The Status above is the record as committed. |
 | **Baseline**   | 1753e49 (VERIFY-078's close); `1`, `3`, `4`, `5` and `6` #60 (98cde9c), `2 · Platforms` #80 (0379866) and `8 · Records` #91 (1753e49); `9 · Probes` #20 (453cbcf), #21 (a11ae90), #22 (c35260b) and #23 (98cde9c), each probe's last run. |
 | **Scope**      | Run 1: `tools/probes/verify-079/` (`vecrange_probe.py`, `variants/`, `steps`, `README.md`); `.github/workflows/probes.yml`, the job `vecrange-probe`, its filter and its output, and the header's list of probes; the workflow map's row 9. Run 2: `data/vec/vec_range.h`'s loop annotations, with the pins that read them, if run 1 finds a version that makes the two goals easy. |
 | **Category**   | VERIFY-065's "Left for later": the two single-prover proofs a slow runner could lose. Run 1 measures in CI before the header changes (report-only); run 2 makes the change, pinned from run 1. |
@@ -35954,3 +35954,96 @@ or the two goals stay as they are, the risk named. This run makes the
 risk concrete: the proof job's way of proving took part 3 97 s of its 120
 here. A next form would start from what parts 3 and 4 hold, which WP can
 print (`-wp-print`) and the probe does not yet show.
+
+### Run 1b: pre-registration (2026-11-14)
+
+The author chose, on 2026-11-14, to measure again before run 2. Run 1
+left two questions: what parts 3 and 4 hold, and where in them the cost
+is. Run 1b asks both.
+
+**What parts 3 and 4 are.** WP's manual: `-wp-split` "splits conditional
+statements into separated goals". Frama-C's print of the loop shows the
+round-trip check as four paths: two return through `_LOR_0`, and two reach
+the store, one with `value` at least 0 and one with `value` below 0 and
+`elem < 1`. Every goal of the loop's body has four parts, and WP itself
+proves parts 1 and 2 of each, so parts 1 and 2 are read here as the paths
+that return, and parts 3 and 4 as those that reach the store. That is
+read, not measured; the print below measures it.
+
+**What run 1b measures.** The probe's step `goals` runs WP on P0 with
+Alt-Ergo, `-wp-prop @invariant` and `-wp-print`, and prints the
+invariants' goals as WP gives them to the provers into the log, with the
+provers' files for invariant 5's parts 3 and 4 from `-wp-out`. And three
+versions put the frame of the earlier slots, which run 1 left as the
+likeliest cost, in goals of its own:
+
+- **D** (`variants/d_kept.patch`): after the store, `kept`, `\forall
+  integer k; 0 <= k < i ==> v->items[v->len + k] ==
+  \at(v->items[v->len + k], LoopCurrent)`: each earlier slot holds what it
+  held at the iteration's start. Invariant 5's preservation then follows
+  from `kept`, invariant 5 at the iteration's start, and the new slot.
+- **E** (`variants/e_kept_call.patch`): D, and the same assertion after
+  the call to `range_next`, `kept_call`. The frame across the call and the
+  frame across the store become two goals, so their times say which
+  costs.
+- **R**: P0 under WP's model `Typed+Cast+ref`. WP's manual: `ref`
+  "activates the detection of pointer variables used for reference
+  passing style". `range_next` only reads and writes `*r`, so under it the
+  range may stay out of memory, and the call then writes nothing the items
+  are in.
+
+P0 runs again as the control, on the same runner as the others. A, B and C
+do not run.
+
+**The probe's changes.** The job's steps in `probes.yml` named run 1's
+versions, so a version of run 1b needs a change there, which starts 1 to
+6 and every probe again. The job now has eight slots, slot N running the
+N-th step `steps` names (`vecrange_probe.py --nth N`), so later runs need
+no change to the workflow. The probe also:
+
+- names R's goals by `frama-c-vec-range`'s model, since WP names a goal
+  after its model;
+- reports a version whose WP gives no summary or no report as not
+  measured, and fails only if P0's does, P0 being the checkout as it is;
+- gives "WP" in the report for a part WP proves itself, as "Found while
+  scoring", 1, foresaw;
+- has the step `goals`.
+
+**Measured here**, with Frama-C 25.0, gcc 13.3.0 and clang 18.1.3:
+
+- Frama-C 25 parses and types D and E under `frama-c-vec-range`'s
+  preprocessing, `\at(…, LoopCurrent)` in an assertion of the loop's body
+  and `kept_call` between two declarations among them, with no warning
+  but the driver's own. A small program of its own shows the same for
+  `LoopCurrent`.
+- `vec_test` passes with E applied, built with gcc and with clang (Debug),
+  with no warning.
+- The probe, against a stand-in for `frama-c`: the eight slots, running
+  `steps`'s six steps and nothing in slots 7 and 8; the step `goals`,
+  and its run with every goal when `-wp-prop @invariant` selects none; R's
+  goals named as P0's; a version whose WP fails reported, and P0's failing
+  its step; and a line of WP's print that starts with `::` printed behind
+  "| ".
+
+Not run here: WP.
+
+**The workflows.** `tools/which_workflows.py`: 1 to 6, 8 and 9 run; 7 and
+10 to 14 do not. In 9 every probe runs, since each watches `probes.yml`.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| U1 | **1 to 6, 8 and 9 run**, and no other; in 9, every probe. | another set | H |
+| U2 | **1 to 6 and 8 are green**, each job with the notices of its last run (1, 3, 4, 5 and 6 #61; 2 #81; 8 its last before this push), times and GitHub's own on the macOS runners' capacity aside. | a failure, or another notice | H: nothing they build or read changes; as at any push, a slow runner could lose `frama-c-vec-range`'s two goals. |
+| U3 | **The ten older probes are green**, each with #24's notices, times aside, except that of the diag_push probe's agreement step only its count by none, 1, is predicted. | a failure, or another notice | M–H: nothing they read changes, and they matched at #24; the counts of goals one or two provers prove move by a goal between runs (VERIFY-076). |
+| U4 | **The vec_range probe is green; slots 1 to 6 run P0, goals, D, E, R and report, and slots 7 and 8 nothing.** D and E are each "the patch applied to a copy of the checkout", and WP accepts R's model, so R is measured. | a failure, a step in another slot, or a version not measured | M: WP's manual allows `ref` with other selectors but gives no example with `cast`. |
+| U5 | **P0 as in run 1**: 479 / 479 with the three together; parts 3 and 4 proved by Alt-Ergo alone; no difference from the pins. | another count, or another prover on part 3 or 4 | M–H |
+| U6 | **The step goals prints the invariants' goals**, `-wp-prop @invariant` selecting them, and the print shows parts 3 and 4 of invariant 5 as the two paths that reach the store, with `-wp-out`'s files for them printed too. | the run with every goal, a print that shows other paths, or no file printed | M: the paths are read from Frama-C's print, and the file's name from none. |
+| U7 | **D: the frame is the cost.** `kept`'s parts 3 and 4 are proved by Alt-Ergo alone, one of them over 30 s; and with `kept`, invariant 5's parts 3 and 4 are proved by all three provers alone, each under 30 s. | `kept` proved by two provers or more alone each under 30 s, or invariant 5's parts 3 and 4 by fewer than three or over 30 s | L: run 1 ruled out A's and B's readings; that the frame is the cost is what is left, and it is not measured. |
+| U8 | **E: the call costs, not the store.** `kept_call` is proved by Alt-Ergo alone, over 30 s, and `kept`, after it, by all three provers alone, each under 30 s. | the other way round, or both alike | L: the store writes the items at another index than `k`'s, a difference of offsets; the call writes the range, a local, and the provers must show the items are not in it, a difference of bases. |
+| U9 | **R: invariant 5's parts 3 and 4 are proved by all three provers alone, each under 30 s.** | either part proved by fewer than three alone, or over 30 s | L: as U8. |
+
+**What follows.** U1 to U9 scored. If a version makes every goal of the
+function easy, run 2 is pre-registered from it: D or E as a change to
+`data/vec/vec_range.h`; R as a change of `frama-c-vec-range`'s model,
+measured first on the whole unit, since it renames and may change every
+goal of it. If none does, the next form starts from what the print shows.
