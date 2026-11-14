@@ -36263,6 +36263,7 @@ five of nine, run 2 four of five, run 2b three of three. What it shows:
 | **ID**         | VERIFY-080 |
 | **Date**       | 2026-11-14 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-14 — CLOSED: the push of b04fe8a and bb3a456 matched R1 to R3 ("Scored", below). The change's own effect shows at the next push that changes `probes.yml` alone, or `diag.h`; that push's record checks it. The Status above is the record as committed. |
 | **Baseline**   | f24c857 (VERIFY-079's close): `1`, `3`, `4`, `5` and `6` #63, `2 · Platforms` #84, `8 · Records` #96, and `9 · Probes` #25 and #26, each probe's last run. |
 | **Scope**      | `.github/workflows/` `ci.yml`, `platforms.yml`, `analysis.yml`, `proofs-core.yml`, `proofs-semantics.yml` and `proofs-data.yml` (their push and pull-request ignores); `probes.yml` (the pointer probe's filter, the workflow's push paths, the job's comment); `tools/which_workflows.py`; the workflow map. |
 | **Category**   | Three gaps found while VERIFY-076 to 079 ran, which the author asked, on 2026-11-14, to close before item 5. |
@@ -36323,3 +36324,25 @@ change; 7 and 10 to 14 do not. In 9 every probe runs.
 **What follows.** R1 to R3 scored. The change itself shows at the next
 push that changes `probes.yml` alone, which should start 8 and 9 only, and
 the next that changes `diag.h`, which should start the pointer probe.
+
+### Scored (2026-11-14)
+
+The push of b04fe8a and bb3a456 started `1 · Build & test` #64,
+`2 · Platforms` #85, `3 · Static analysis & coverage` #64, `4`, `5` and
+`6` #64, `8 · Records` #97 and `9 · Probes` #27, each green at its first
+attempt.
+
+| # | scored |
+|---|--------|
+| R1 | **MATCH.** 1 to 6, 8 and 9 ran, and no other; in 9, every probe. |
+| R2 | **MATCH.** 1 to 6 and 8 are green, each job with the notices of its last run, times aside; 2's names the same slowest header as #84's. |
+| R3 | **MATCH.** 9 is green. The older probes' 35 jobs, the pointer probe's 26 among them, give their last runs' notices. diag_push's WP step reads "Proved goals: 3073 / 3074", its one unproved goal Unknown again where #25's was a Timeout, and its agreement step none 1, its other counts moving as allowed. The vec_range probe posted no notice. |
+
+Three of three.
+
+**Closed.** The pointer probe watches the library's proved code, 1 to 6
+ignore `probes.yml`, and `tools/which_workflows.py` names the units,
+probes and Eva programs a change reaches, marking those that read macro
+bodies. This push started 1 to 6 because it changed their files; the next
+that changes `probes.yml` alone should start 8 and 9 only, and the next
+that changes `diag.h` the pointer probe. Their records predict it.
