@@ -35631,3 +35631,58 @@ are unchanged; whether its pins hold is for the run to show.
 which has no finding; `docs/cert-cwe.md` says what they cover. VERIFY-078
 re-pins the two hashmap goals. Next: Frama-C's plug-ins, group 1 (E-ACSL,
 Metrics and MdR).
+
+---
+
+## VERIFY-078: Pre-registration — frama-c-hashmap's Agreement Pins After VERIFY-077's Renames: hashmap_remove_valid_ensures Parts 19 and 23
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-078 |
+| **Date**       | 2026-11-14 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 98cde9c (VERIFY-077): `13 · Prover agreement` #12, `2 · Platforms` #79 and `8 · Records` #89. VERIFY-077's scoring is pushed with this record. |
+| **Scope**      | `tools/agreement/pins/frama-c-hashmap.txt`: part19's line removed, part23's added, and two lines of its header. |
+| **Category**   | VERIFY-077's Y7, answered. One run. |
+
+### What is decided
+
+At VERIFY-077's push, `13 · Prover agreement` #12 failed on
+`frama-c-hashmap`'s pins. Two postconditions of `hashmap_remove`, which
+calls two of the functions VERIFY-077 renamed, changed class with Z3:
+
+- `typed_cast_hashmap_remove_valid_ensures_part19`, pinned as proved by
+  Alt-Ergo and CVC5 alone, is now proved by Z3 too: by three provers,
+  which a pin file does not list;
+- `typed_cast_hashmap_remove_valid_ensures_part23`, proved by all three
+  before, is now proved by Alt-Ergo and CVC5 alone.
+
+VERIFY-077's scoring argues that the problems Z3 reads for
+`hashmap_remove` changed with the renames, and says what it could not
+confirm. The pins follow the run: part19's line goes, and part23 is
+listed `two Alt-Ergo+CVC5`. The file's header says when and why. Run #12's
+classes, read back from its unit job's log and compared with the new pins
+by `tools/agreement/agreement.py`'s own comparison, give no difference,
+where the old pins give the two above.
+
+If the change came with the renames, the new classes should hold as the
+old ones did, three runs. If it came with the runner, one of them could
+flip back at this run, and Z2 would miss. Then VERIFY-065's rule applies:
+a goal joins the slow lines only after a run fails on its time.
+
+### The workflows
+
+`tools/which_workflows.py`: 2, 8 and 13 run; the others do not.
+`tools/agreement/agreement.py affected` gives one unit, `frama-c-hashmap`.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Z1 | **2, 8 and 13 run**; the others do not. 13 runs `frama-c-hashmap` alone. | another set | H |
+| Z2 | **13 is green**: `frama-c-hashmap`'s unit job finds no difference from its pins, and its goals no prover proves are its pinned 46. | a failure, or another count | M: if the change came with the runner, not the problems, a goal can flip back. |
+| Z3 | **2 is green**, each job with #79's notices, up to their times. | a failure, or another notice | H |
+| Z4 | **8 is green**; its size pins line reads "size pins: 57 rows; 0 problem(s)". | a failure, or another line | H |
+
+**What follows.** Z1 to Z4 scored, and the record closed. Then Frama-C's
+plug-ins, group 1 (E-ACSL, Metrics and MdR).
