@@ -1,8 +1,9 @@
 name: "9 · Probes (closed experiments)"
 # The probes of VERIFY-039 and VERIFY-040, merged into one workflow by
 # VERIFY-050: G4, G11, G13, G19, Count and Round 3; and VERIFY-057's pointer
-# probe, VERIFY-060's char probe and VERIFY-066's Eva error probe, added
-# since. Each is an experiment, not a gate; its result is scored in
+# probe, VERIFY-060's char probe, VERIFY-066's Eva error probe, VERIFY-073's
+# diag_push probe and VERIFY-079's vec_range probe, added since. Each is an
+# experiment, not a gate; its result is scored in
 # docs/deviations.md. Each job still runs only when its own paths change, as
 # its workflow did: the `changes` job compares the push with the commit it
 # moved master from and sets one output per probe. A manual run runs them
@@ -48,6 +49,7 @@ on:
       - 'tools/agreement/agreement.py'
       - 'tools/probes/verify-073/**'
       - 'tools/eva/programs/diag.c'
+      - 'tools/probes/verify-079/**'
   workflow_dispatch:
 
 concurrency:
@@ -73,6 +75,7 @@ jobs:
       char: ${{ steps.f.outputs.char }}
       evaerror: ${{ steps.f.outputs.evaerror }}
       diagpush: ${{ steps.f.outputs.diagpush }}
+      vecrange: ${{ steps.f.outputs.vecrange }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -81,7 +84,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
-          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/ptr.h", "data/vec/**", "data/deque/**", "data/stack.h", "vmacros/vdrivers/**", "data/priority_queue.h", "data/stringbuf.h", "core/region.h", "semantics/borrow.h"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"], "diagpush": ["tools/probes/verify-073/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/diag.c", "tools/eva/programs/eva_program.h"]}'
+          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/ptr.h", "data/vec/**", "data/deque/**", "data/stack.h", "vmacros/vdrivers/**", "data/priority_queue.h", "data/stringbuf.h", "core/region.h", "semantics/borrow.h"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"], "diagpush": ["tools/probes/verify-073/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/diag.c", "tools/eva/programs/eva_program.h"], "vecrange": ["tools/probes/verify-079/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py"]}'
         run: |
           python3 - <<'PY'
           import json, os, subprocess, fnmatch
@@ -908,4 +911,83 @@ jobs:
         with:
           name: diagpush-probe
           path: diagpush_out
+          retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # vec_range probe (VERIFY-079, vec_int_extend_from_range's two slow goals)
+  #
+  # VERIFY-079: an experiment, not a gate. It runs when the probe, this file,
+  # the toolchain pins, or what the probe reads of 13 · Prover agreement
+  # (tools/agreement/agreement.py) change, and on demand.
+  #
+  # QUESTION: frama-c-vec-range proves parts 3 and 4 of the preservation of
+  # vec_int_extend_from_range's loop invariant 5 only with Alt-Ergo, which
+  # alone took 89 s and 38 s on them (VERIFY-065) where the limit is 120 s,
+  # so a slower runner could fail the job's pin. Which annotations make them
+  # easy: three assertions in the loop's body (A); the invariant stated over
+  # values no store changes, with v->len kept as an invariant of its own
+  # (B); or both (C)? The enforced jobs read data/vec/vec_range.h as it is;
+  # the change VERIFY-079 makes, if it makes one, pins what this probe
+  # measures.
+  #
+  # PROBE: tools/probes/verify-079/vecrange_probe.py applies each version to
+  # a copy of the checkout, P0 being the header as it is, and runs WP on
+  # vec_int_extend_from_range alone, otherwise as frama-c-vec-range runs it:
+  # once with Alt-Ergo, Z3 and CVC5 together, as the proof job runs them,
+  # and once with each alone, as 13 · Prover agreement runs them. The file
+  # steps names the steps that run. Report-only: it prints each goal's
+  # prover and time, the goals one or two provers prove alone, and the pin
+  # file's lines for the function that would go and come; it posts notices,
+  # and fails only if a WP run gives no summary or no report, or is stopped
+  # after an hour. Each step's files are the artifact vecrange-probe. Its
+  # predictions and their scores are VERIFY-079's, in docs/deviations.md.
+  # -------------------------------------------------------------------------
+  vecrange-probe:
+    needs: changes
+    if: needs.changes.outputs.vecrange == 'true'
+    # Pinned, not ubuntu-latest: see the runner note in
+    # ci.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    # Sixteen WP runs of one function; setup can take 47 minutes when its
+    # cache misses (VERIFY-060 run 1).
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+
+      # Each step runs if tools/probes/verify-079/steps names it, and
+      # otherwise posts that it did not run.
+      - name: "WP: vec_int_extend_from_range as it is (P0)"
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-079/vecrange_probe.py P0
+
+      - name: "WP: with three assertions in the loop (A)"
+        if: ${{ !cancelled() }}
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-079/vecrange_probe.py A
+
+      - name: "WP: with invariant 5 over values at Pre, and len_kept (B)"
+        if: ${{ !cancelled() }}
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-079/vecrange_probe.py B
+
+      - name: "WP: with both (C)"
+        if: ${{ !cancelled() }}
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-079/vecrange_probe.py C
+
+      - name: "The four versions compared"
+        if: ${{ !cancelled() }}
+        run: python3 tools/probes/verify-079/vecrange_probe.py report
+
+      - name: Upload each step's output (vec_range probe)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: vecrange-probe
+          path: vecrange_out
           retention-days: 90

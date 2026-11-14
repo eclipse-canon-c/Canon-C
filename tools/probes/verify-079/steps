@@ -1,0 +1,4 @@
+# The steps of vecrange_probe.py that run; the others post that they did not.
+# VERIFY-079 run 1: the four versions, each with the three provers together
+# and with each alone, then the four compared.
+P0 A B C report

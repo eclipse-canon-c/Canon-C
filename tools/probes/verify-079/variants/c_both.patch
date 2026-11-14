@@ -1,0 +1,25 @@
+--- a/data/vec/vec_range.h
++++ b/data/vec/vec_range.h
+@@ -198,7 +198,9 @@
+         loop invariant i < count ==> range_wf(r)                               \
+         && r.current == \at(r.current, Pre) + i * r.step;                      \
+         loop invariant \forall integer k; 0 <= k < i                           \
+-        ==> v->items[v->len + k] == \at(r.current, Pre) + k * r.step;          \
++        ==> v->items[\at(v->len, Pre) + k]                                     \
++        == \at(r.current, Pre) + k * \at(r.step, Pre);                         \
++        loop invariant len_kept: v->len == \at(v->len, Pre);                   \
+         loop assigns i, r.current, v->items[v->len .. v->len + count - 1];     \
+         loop variant count - i; */                                             \
+     for (usize i = 0; i < count; i++) {                                        \
+@@ -207,7 +209,11 @@
+         if (((isize)elem != value) || ((value < 0) && !(elem < (type)1))) {    \
+             return result__Bool_Error_err(ERR_OUT_OF_RANGE);                   \
+         }                                                                      \
++        /*@ assert ith_value: value == \at(r.current, Pre) + i * r.step; */    \
++        /*@ assert fits: elem == value; */                                     \
+         v->items[v->len + i] = elem;                                           \
++        /*@ assert ith_stored:                                                 \
++            v->items[v->len + i] == \at(r.current, Pre) + i * r.step; */       \
+     }                                                                          \
+     v->len = total;                                                            \
+     return result__Bool_Error_ok(true);                                        \
