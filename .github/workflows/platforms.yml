@@ -225,3 +225,32 @@ jobs:
           name: code-size
           path: size_out/
           retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # 1h. Metrics — each function's complexity, header by header (VERIFY-081)
+  #
+  #    Frama-C's Metrics plug-in on the units tools/size/size.py measures:
+  #    each public header alone, a generic module instantiated for u32, a
+  #    function counted for the header whose module defines it, the code
+  #    as shipped (NDEBUG). Each function's cyclomatic complexity is pinned
+  #    (tools/metrics/pins.txt) and compared; its other counts (statements,
+  #    decisions, loops, calls, ...) go to metrics.csv. Nothing is proved:
+  #    the counts are syntactic. Report-only in VERIFY-081's run 1.
+  # -------------------------------------------------------------------------
+  metrics:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: Each function's complexity, header by header (VERIFY-081)
+        run: |
+          eval $(opam env --switch=frama-c)
+          frama-c -version
+          python3 tools/metrics/metrics.py run metrics_out
+      - name: Upload the metrics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: metrics
+          path: metrics_out/
+          retention-days: 90
