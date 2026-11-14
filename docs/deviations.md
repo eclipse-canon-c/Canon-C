@@ -35731,3 +35731,160 @@ CWE item is done. Next: VERIFY-079, the two slow goals of
 `vec_int_extend_from_range`'s loop (Alt-Ergo alone, at 89 s and 38 s of
 120), measured by a probe in `9 · Probes` before the header changes; then
 Frama-C's plug-ins, group 1 (E-ACSL, Metrics and MdR).
+
+---
+
+## VERIFY-079: Pre-registration — vec_int_extend_from_range's Two Slow Goals: Three Assertions, or Invariant 5 Over Values No Store Changes; Run 1, a Probe
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-079 |
+| **Date**       | 2026-11-14 |
+| **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 1753e49 (VERIFY-078's close); `1`, `3`, `4`, `5` and `6` #60 (98cde9c), `2 · Platforms` #80 (0379866) and `8 · Records` #91 (1753e49); `9 · Probes` #20 (453cbcf), #21 (a11ae90), #22 (c35260b) and #23 (98cde9c), each probe's last run. |
+| **Scope**      | Run 1: `tools/probes/verify-079/` (`vecrange_probe.py`, `variants/`, `steps`, `README.md`); `.github/workflows/probes.yml`, the job `vecrange-probe`, its filter and its output, and the header's list of probes; the workflow map's row 9. Run 2: `data/vec/vec_range.h`'s loop annotations, with the pins that read them, if run 1 finds a version that makes the two goals easy. |
+| **Category**   | VERIFY-065's "Left for later": the two single-prover proofs a slow runner could lose. Run 1 measures in CI before the header changes (report-only); run 2 makes the change, pinned from run 1. |
+
+### What is wrong
+
+`frama-c-vec-range` proves every goal of `vec_int_extend_from_range`, but
+two only with Alt-Ergo: parts 3 and 4 of the preservation of the loop's
+invariant 5, the values the loop has stored so far:
+
+    loop invariant \forall integer k; 0 <= k < i
+      ==> v->items[v->len + k] == \at(r.current, Pre) + k * r.step;
+
+Alt-Ergo alone took them 89 s and 38 s in VERIFY-065's runs, where WP's
+limit is 120 s. In `13 · Prover agreement`'s six runs of the unit since
+(#6 to #11) it took part 3 up to 76 s, over 30 s in five of them, and
+part 4 from 30 s to 38 s. Z3 and CVC5 alone prove neither. The proof job
+gives the three provers each goal at once. A slower runner could push
+either goal past the limit, and the job would fail its pin: VERIFY-075,
+076 and 077 named that risk in their predictions for `6`. VERIFY-065 left
+it for later: "A helper assertion or lemma that makes them
+easier would remove that risk."
+
+### What is decided
+
+The author chose, on 2026-11-14, to make the two goals easy rather than
+leave them near the limit, and to measure that in CI before the header
+changes.
+
+Under WP's typed model, the items, `v->len` and the range's fields are all
+integers in one memory: `r` is there because the loop passes `&r` to
+`range_next`. After the store `v->items[v->len + i] = elem`, each read of
+`v->len` and of `r.step` in the invariant needs the provers to show that
+the store did not write it, and the invariant asks it for every `k`. This
+record reads that as what makes the two goals hard, for Z3 and CVC5, which
+fail on them, and for Alt-Ergo, which is slow. The reading is not
+measured; run 1 measures it. Three versions of
+`data/vec/vec_range.h`, each a patch under
+`tools/probes/verify-079/variants/`:
+
+- **A** (`a_asserts.patch`), three assertions in the loop's body: after
+  the round-trip check, `ith_value`, `value == \at(r.current, Pre) + i *
+  r.step`, and `fits`, `elem == value`; after the store, `ith_stored`,
+  `v->items[v->len + i] == \at(r.current, Pre) + i * r.step`. They state
+  the new slot's value: VERIFY-065's suggestion, helper assertions.
+- **B** (`b_anchored.patch`), invariant 5 over values no store changes,
+  `v->items[\at(v->len, Pre) + k] == \at(r.current, Pre) + k *
+  \at(r.step, Pre)`, and after it a new invariant, `len_kept`: `v->len ==
+  \at(v->len, Pre)`. Of what the invariant then reads, only the items
+  themselves are integers a store can write, and `len_kept` shows once per
+  iteration, with no `k`, that `v->len` is kept. Placed after invariant 5, it leaves the five their numbers and
+  their goals' names. The postcondition `room_ensures_2` already reads the
+  items at `\old(v->len)`, as B's invariant does.
+- **C** (`c_both.patch`), A and B.
+
+Each adds 2 to 6 lines of annotations to the macro body, and none changes
+the code.
+
+### Run 1, a probe
+
+WP runs only in CI (VERIFY-060), and `frama-c-vec-range` and its agreement
+pins are enforced, so a change whose results are not known would fail them,
+and their pins would be written blind.
+`tools/probes/verify-079/vecrange_probe.py`, in `9 · Probes`
+(`vecrange-probe`, report-only), applies each version to a copy of the
+checkout, P0 being the header as it is, and runs WP on
+`vec_int_extend_from_range` alone (`-wp-fct`), otherwise as
+`frama-c-vec-range` runs it (`tools/agreement/agreement.py`'s `UNITS`):
+
+- once with Alt-Ergo, Z3 and CVC5 together, as the proof job runs them:
+  the goals proved and not, and each goal's prover and time;
+- once with each alone, as `13 · Prover agreement` runs them: the goals
+  one or two provers prove, sorted by `agreement.py`'s own code; the pin
+  file's lines for the function that would go and come; and the
+  differences as 13 reads them, slow goals left out.
+
+A last step, `report`, compares the four. The probe prints each goal's
+results in its log and posts notices. It fails only if a WP run gives no
+summary or no report, or is stopped after an hour; a version whose patch
+neither applies nor is found applied is reported and not measured. Each
+step's files are the job's artifact, `vecrange-probe`.
+
+### Measured here
+
+With Frama-C 25.0 (no WP), gcc 13.3.0 and clang 18.1.3:
+
+- **Frama-C 25 parses and types each version**, with `-c11` and
+  `frama-c-vec-range`'s preprocessing (`-CC`), with no warning but the
+  driver's own "found two contracts ... Merging them", which P0 gives too.
+  Its print of C shows the loop as the patch means it: the two assertions
+  between the check and the store, `ith_stored` after the store, and
+  invariant 5 reading only values at `Pre`.
+- **`vec_test` passes** with C applied, built with gcc and with clang
+  (Debug), with no warning.
+- **The probe**, run through every step against a stand-in for `frama-c`
+  that writes WP-shaped summaries and reports: its notices, the pin
+  file's lines that would go and come, and the report. A version whose
+  patch neither applies nor is found applied is reported and the step
+  passes; a run with no summary fails its step.
+- **The `changes` job's filter**, run on this push's files: every probe
+  runs, since each watches `probes.yml`.
+- **Since each probe's last run**, what the nine older probes other than
+  diag_push's read changed only in comments and in `BITSET_FOR_EACH`'s
+  parentheses (VERIFY-076), which leave the parsed program the same. The
+  diag_push probe finds its patch in the checkout, where VERIFY-073's run
+  2 put it; `patch` applies it in reverse, as the probe tests.
+- **From CI's notices**: `frama-c-vec-range` proved 5179 / 5224 at
+  98cde9c, its 45 unproved goals none of the function's; and the unit's
+  agreement runs #6 to #11 give the times above, by none 45 and no
+  difference from the pins in each.
+
+Not run here: WP, at all.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 6, 8 and 9 run; 7 and 10 to 14 do not.
+`.github/workflows/probes.yml` changes, which 1 to 6 do not ignore, and in
+9 every probe runs, since each watches `probes.yml`.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| V1 | **1 to 6, 8 and 9 run**, and no other; in 9, every probe. | another set | H |
+| V2 | **1 to 6 and 8 are green**, each job with the notices of its last run (1, 3, 4, 5 and 6 #60; 2 #80; 8 #91), times and GitHub's own on the macOS runners' capacity aside. | a failure, or another notice | H: nothing they build or read changes. As at any push, a slow runner could lose `frama-c-vec-range`'s two goals this record is about. |
+| V3 | **The nine older probes other than diag_push's are green**, each with the notices of its last run, times aside: #20 for G4, G11, G19, Count, Round 3, the char probe and the Eva error probe; #22 for G13; #23 for the pointer probe. | a failure, or another notice | M–H: what they read changed only in comments and in three parentheses; a WP goal near its prover's limit could fall either way. |
+| V4 | **The diag_push probe is green and finds its patch in the checkout**: each step's first notice reads "the patch already in the checkout". Its WP step gives `frama-c-diag`'s pinned "Proved goals: 3073 / 3074", the one not proved `diag_init`'s `memset` goal; its agreement step, none 1; its Eva step, `diag.c` as pinned at each of the ten models, "preconditions 74/4/0". | a failure, another count, or a model not as pinned | M–H: it last ran at #21, on a copy with its patch; the enforced jobs have read this `diag.h` since (5 #60, 13 #12, 14 #11), each as pinned. |
+| V5 | **The vec_range probe is green**, each of its five steps posts its notices, A, B and C are each "the patch applied to a copy of the checkout", and the report compares the four. | a failure, a version not measured, or a step without its notices | H |
+| V6 | **P0, the three provers together: every goal of `vec_int_extend_from_range` is proved**, and its slowest proof is Alt-Ergo's of invariant 5's preservation, part 3 or part 4, over 30 s. | a goal not proved, another slowest proof, or none over 30 s | M: the proof job has proved all of them in every run since VERIFY-041; under the three provers at once a proof takes longer than alone, and alone part 3 took over 30 s in five of six runs. |
+| V7 | **P0, each prover alone: the function's goals are as its pin lines say**: no difference as 13 reads them, no goal proved by no prover, and invariant 5's parts 3 and 4 proved by Alt-Ergo alone. | a difference, a goal no prover proves, or another prover on part 3 or 4 | M–H: the lines held in #6 to #11. |
+| V8 | **A: the three assertions are proved, and invariant 5 is not made easy**: with each prover alone, a part of its preservation is still proved by Alt-Ergo alone, or takes over 30 s. | an assertion not proved by the three together, or every part of invariant 5's preservation proved by two provers or more alone, each under 30 s | L–M: the assertions state the new slot's value, which the check already gives; what is hard, if this record reads it right, is that the slots before it are kept. |
+| V9 | **B: invariant 5 is made easy**: each part of its preservation is proved by all three provers alone, each under 30 s; `len_kept` is proved, established and preserved; and with the three together every goal of the function is proved. | a part of invariant 5's preservation proved by fewer than three provers alone, or over 30 s; `len_kept` or another goal not proved | L–M: this is the record's reading, which this run is the first to measure. |
+| V10 | **C as B**, and A's three assertions proved. | as V8 and V9 | L–M, as V9 |
+| V11 | **With B and C the function's slowest proof, the three provers together, is under 30 s**, a quarter of the limit. | a proof of 30 s or more | L–M: V9's reading, and no other goal of the function has been slow in 13's runs. |
+
+**What follows.** V1 to V11 scored. Then run 2, pre-registered from the
+probe's results:
+
+- If B or C makes invariant 5 easy and leaves every goal proved, the
+  author chooses which goes into `data/vec/vec_range.h`, B if A's
+  assertions add nothing. Run 2 makes the change, and with it
+  `frama-c-vec-range`'s count, its agreement pins (the probe's would-be
+  lines: the four of parts 3 and 4 go), and the probe's `steps`, which
+  then names no step. The pointer probe reads `data/vec/`, so it runs too,
+  report-only.
+- If neither does, the probe measures another form before run 2, or the
+  author keeps the two goals as they are, the risk named.
