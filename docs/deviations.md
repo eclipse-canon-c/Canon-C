@@ -36346,3 +36346,82 @@ probes and Eva programs a change reaches, marking those that read macro
 bodies. This push started 1 to 6 because it changed their files; the next
 that changes `probes.yml` alone should start 8 and 9 only, and the next
 that changes `diag.h` the pointer probe. Their records predict it.
+
+---
+
+## VERIFY-081: Pre-registration — Frama-C's Metrics: Each Function's Complexity, Header by Header, Pinned; Run 1, Report-Only
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-081 |
+| **Date**       | 2026-11-14 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | bb3a456 and VERIFY-080's close: `1`, `3`, `4`, `5` and `6` #64, `2 · Platforms` #85, `8 · Records` #97. |
+| **Scope**      | `tools/metrics/` (`metrics.py`, `pins.txt`, `README.md`); `.github/workflows/platforms.yml`, the job `metrics`; `.github/workflows/records.yml`, its pin check and push path; the workflow map. |
+| **Category**   | The to-do list's item 5, Frama-C's plug-ins, group 1, its first part. The author decided on 2026-11-14: Metrics first, then MdR, then E-ACSL, each a record; Metrics reported and pinned, failing on a function's complexity changing without a record, as the size pins do. |
+
+### What it is
+
+Frama-C's Metrics plug-in counts, for each function, on the code as
+Frama-C normalizes it: statements, decision points, ifs, loops, gotos,
+assignments, exit points, calls, pointer dereferences, and cyclomatic
+complexity. The counts are syntactic; nothing is proved.
+
+`tools/metrics/metrics.py` measures the units `tools/size/size.py`
+measures, so that the two tools count the same functions:
+
+- each public header alone, a generic module instantiated for `u32`;
+- a function counted for the header whose module defines it, and an
+  instantiation's functions found as the difference from its unit without
+  it;
+- `Result<_Bool, Error>`'s functions in a row of their own.
+
+The code is as shipped (NDEBUG), at Frama-C's default machine model, with
+`-no-annot`: Metrics reads no annotation, and `priority_queue.h`'s
+annotations name functions only its verification driver defines. `tools/metrics/pins.txt`
+pins each function's cyclomatic complexity; the other counts go to the
+run's `metrics.csv`. A complexity changed, a function measured and not
+pinned, or pinned and not measured, is a difference; from run 3 a
+difference fails the job, as VERIFY-070's run 3 made the size pins'.
+
+The job `metrics` in `2 · Platforms` runs it after Frama-C's setup, beside
+the size measurement, and `8 · Records` checks the pin file's form.
+
+### Measured here
+
+With Frama-C 25.0, which has Metrics:
+
+- 56 headers measured, 858 functions in 51 rows: five headers define no
+  function. Cyclomatic complexity 1: 220; 2 to 5: 520; 6 to 10: 106; 11 to
+  20: 11; over 20: 1. Statements 9035 in all. The highest:
+  `error_message` (`semantics/error.h`), 22, a `switch` over the error
+  codes; then `checked_mul_isize`, 19, and `hashmap_remove`, 14.
+- Two faults of the script's first version, found by the measurement:
+  Frama-C wraps a long function label onto the next line, and prints the
+  unit's totals after the last function in the same form. The first
+  version gave `stack_u32_clear` the totals, 593; the script now joins a
+  wrapped label and closes each function's block at its last field.
+- `pins.txt` is written from that run, by `metrics.py pin`. `metrics.py
+  check` reads it: 858 functions in 51 rows, 0 problems. The run takes
+  about 20 s here, on 2 cores.
+
+Not run here: Frama-C 29, CI's.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 6 and 8 run; 7 and 9 to 14 do not. 1, 3,
+4, 5 and 6 run because two workflow files change that their ignores do not
+name (VERIFY-080 named `probes.yml` alone).
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| M1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| M2 | **1 to 6 and 8 are green**, each job they had with the notices of its last run (1, 3, 4, 5 and 6 #64; 2 #85; 8 #97), times aside. | a failure, or another notice | H |
+| M3 | **2's `metrics` job is green and measures every header**: "858 functions of 56 of 56 headers". | a failure, or another count | M–H |
+| M4 | **CI's Frama-C 29 gives every function the complexity Frama-C 25 gave it**: "metrics pins: as pinned, 858 functions". | a difference | M: cyclomatic complexity counts decision points in the CIL AST, which these versions normalize alike as far as this record knows; it is not measured. |
+| M5 | **The rest of its first notice is as here**: the bands 220, 520, 106, 11 and 1, and 9035 statements; and the ten most complex as here, `error_message` first. | another figure | L–M: a statement count moves with any change to Frama-C's normalization, more than a complexity. |
+| M6 | **8's new step reads "metrics pins: 858 functions in 51 rows; 0 problem(s)"**. | another line | H |
+
+**What follows.** M1 to M6 scored. If M4 holds, run 2 sets ENFORCE and
+the README's badge; if it misses, run 2 pins CI's figures first, and
+enforces at run 3.
