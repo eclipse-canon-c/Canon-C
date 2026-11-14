@@ -56,6 +56,12 @@ The file `steps` names the steps that run, in order. The job in
 workflow. Each step posts notices and prints each goal's results in the
 log; its files are in `vecrange_out/` (the artifact `vecrange-probe`).
 
+Run 1b found D the answer: with `kept`, the proof job's slowest proof of
+the function is 0.3 s, where P0's is 96 s. CVC5 proves `kept` in 0.2 s,
+and Alt-Ergo then proves invariant 5's parts 3 and 4 in 0.3 s. Run 2 put
+`kept` into `data/vec/vec_range.h`, and `steps` names no step since; the
+patches under `variants/` were written against the header before it.
+
 It runs in `9 · Probes` (`probes.yml`, `vecrange-probe`), report-only: it
 fails only if WP gives no summary or no report for P0, the checkout as it
 is, or is stopped after an hour. Another version whose WP does so, or whose

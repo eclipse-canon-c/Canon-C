@@ -3,6 +3,9 @@
 # proved by WP itself, by all three provers, or by none (the names its proof job pins).
 # slow: a proof seen to take over 60 s in run 1 or #3, or over 30 s in #4 or #5. A slow goal
 # is left out of the comparison, as is any proof over 30 s in the run being compared.
+# VERIFY-079: vec_int_extend_from_range's assertion kept, after the store, as its probe
+# measured it (9 · Probes #25): Alt-Ergo alone now proves invariant 5's parts 3 and 4 in
+# under a second, so they are not slow; kept is proved by all three, Alt-Ergo alone in 37 s.
 one Alt-Ergo typed_cast_vec_int_extend_from_range_ensures_fits_ok_part10
 one Alt-Ergo typed_cast_vec_int_extend_from_range_loop_invariant_5_preserved_part3
 one Alt-Ergo typed_cast_vec_int_extend_from_range_loop_invariant_5_preserved_part4
@@ -40,8 +43,7 @@ two CVC5+Z3 typed_cast_checked_mul_overflow_ensures_part3
 two CVC5+Z3 typed_cast_checked_mul_u64_no_overflow_ensures_part3
 two CVC5+Z3 typed_cast_checked_mul_u64_overflow_ensures_part3
 two CVC5+Z3 typed_cast_lemma_range_mul_le
-slow Alt-Ergo typed_cast_vec_int_extend_from_range_loop_invariant_5_preserved_part3
-slow Alt-Ergo typed_cast_vec_int_extend_from_range_loop_invariant_5_preserved_part4
+slow Alt-Ergo typed_cast_vec_int_extend_from_range_assert_kept_part4
 slow CVC5 typed_cast_range_skip_advance_ensures_skip_inside_part04
 slow CVC5 typed_cast_range_skip_advance_ensures_skip_inside_part12
 slow CVC5 typed_cast_range_skip_assert_rte_signed_overflow_2_part1

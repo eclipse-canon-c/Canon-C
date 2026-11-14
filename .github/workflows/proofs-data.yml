@@ -2374,7 +2374,7 @@ jobs:
             # A pinned name that starts proving is a RATCHET; a new name is a
             # finding. Neither is ever absorbed silently.
             # ===============================================================
-            EXPECTED_PROVED="5179 / 5224"   # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (5167 / 5212 before), held at runs 1 and 2 (afabc7d, db4509d), enforced from run 3; VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (5159 / 5204 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3; VERIFY-041 runs 2 and 3 (run 1: 4869 / 4916, 47)
+            EXPECTED_PROVED="5183 / 5228"   # VERIFY-079 predicted: +4 goals, the assertion kept's four parts in vec_int_extend_from_range, all proved (5179 / 5224 before), as its probe measured them (9 · Probes #25); VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (5167 / 5212 before), held at runs 1 and 2 (afabc7d, db4509d), enforced from run 3; VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (5159 / 5204 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3; VERIFY-041 runs 2 and 3 (run 1: 4869 / 4916, 47)
             EXPECTED_UNPROVED=45
             PIN_NAMES=(
             "typed_cast_align_down_ensures"

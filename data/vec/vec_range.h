@@ -146,6 +146,11 @@
  * name the element type is on a prototype in vmacros/vdrivers/
  * vec_range_verify.h, at int. VERIFY-041's run 1 verified this contract on
  * the code before F1's and F2's fixes; run 2 on the code below. */
+/* VERIFY-079: the assertion kept, after the store, states that each slot
+ * before it holds what it held when the iteration began. Invariant 5's
+ * preservation needs that frame; without kept, only Alt-Ergo proved it, in
+ * up to 89 s of WP's 120. As a goal of its own, CVC5 proves the frame in
+ * under a second, and Alt-Ergo the invariant from it. */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_EXTEND_FROM_RANGE(linkage, VecType, fn, type)                 \
 /*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null <==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
@@ -208,6 +213,9 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, range r) {                 \
             return result__Bool_Error_err(ERR_OUT_OF_RANGE);                   \
         }                                                                      \
         v->items[v->len + i] = elem;                                           \
+        /*@ assert kept: \forall integer k; 0 <= k < i                         \
+            ==> v->items[v->len + k]                                           \
+                == \at(v->items[v->len + k], LoopCurrent); */                  \
     }                                                                          \
     v->len = total;                                                            \
     return result__Bool_Error_ok(true);                                        \

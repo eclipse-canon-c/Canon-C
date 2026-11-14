@@ -471,9 +471,12 @@ to a `__FRAMAC__` branch or to the toolchain pins changes it.
   names, or when the goals one or two provers prove differ from its pins
   (`tools/agreement/`). A proof that takes a prover over 30 s is left out
   of that comparison: such proofs can time out on the next run, and some
-  took over 100 s. Two of them are the only proof of their goal, Alt-Ergo's
-  of `vec_int_extend_from_range`'s loop invariant 5, parts 3 and 4, at up to
-  89 s and 38 s.
+  took over 100 s. Two of them were the only proof of their goal,
+  Alt-Ergo's of `vec_int_extend_from_range`'s loop invariant 5, parts 3 and
+  4, at up to 89 s and 38 s, and up to 97 s of WP's 120 with the three
+  provers at once. VERIFY-079 gave the loop an assertion, `kept`, that the
+  earlier slots keep their values across the store: CVC5 proves it in under
+  a second, and Alt-Ergo the two parts from it.
 - **Twelve of bits.h's goals are proved in Coq** (VERIFY-061): Coq 8.18.0
   with Why3's Coq library, why3-coq 1.7.2. `12 · Coq: bits.h` compiles each
   committed proof script and has WP accept it for its goal at x86_64 and the

@@ -1,4 +1,4 @@
 # The steps of vecrange_probe.py that run; the others post that they did not.
-# VERIFY-079 run 1b: P0 again as the control, its invariants printed, and
-# D, E and R; then the four versions compared.
-P0 goals D E R report
+# VERIFY-079 run 2 put D, the assertion kept, into data/vec/vec_range.h:
+# the probe's question is answered, and it names no step. Its versions'
+# patches were written against the header before kept.
