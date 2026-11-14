@@ -50,6 +50,9 @@ on:
       - 'tools/probes/verify-073/**'
       - 'tools/eva/programs/diag.c'
       - 'tools/probes/verify-079/**'
+      - 'core/**'
+      - 'semantics/**'
+      - 'data/**'
   workflow_dispatch:
 
 concurrency:
@@ -84,7 +87,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
-          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/ptr.h", "data/vec/**", "data/deque/**", "data/stack.h", "vmacros/vdrivers/**", "data/priority_queue.h", "data/stringbuf.h", "core/region.h", "semantics/borrow.h"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"], "diagpush": ["tools/probes/verify-073/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/diag.c", "tools/eva/programs/eva_program.h"], "vecrange": ["tools/probes/verify-079/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py"]}'
+          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/**", "semantics/**", "data/**", "vmacros/vdrivers/**"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"], "diagpush": ["tools/probes/verify-073/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/diag.c", "tools/eva/programs/eva_program.h"], "vecrange": ["tools/probes/verify-079/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py"]}'
         run: |
           python3 - <<'PY'
           import json, os, subprocess, fnmatch
@@ -599,7 +602,10 @@ jobs:
   # Since VERIFY-062, also when data/vec/, data/deque/, data/stack.h, the
   # drivers in vmacros/vdrivers/, data/priority_queue.h, data/stringbuf.h or
   # core/region.h change: VERIFY-062's containers and queries are measured
-  # by it. Since VERIFY-063, also when semantics/borrow.h changes.
+  # by it. Since VERIFY-063, also when semantics/borrow.h changes. Since
+  # VERIFY-080, when anything in core/, semantics/ or data/ changes: it runs
+  # all 26 units, and a header one of them includes, diag.h among them, was
+  # missing from the list, so its notices could go stale unseen.
   #
   # QUESTION: -wp-rte does not check the pointers a unit computes or reads;
   # C leaves one outside its object (or past one-past-the-end) undefined.

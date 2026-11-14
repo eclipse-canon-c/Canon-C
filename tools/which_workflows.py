@@ -11,8 +11,21 @@ every push. In a pattern, `*` matches within a path segment, `**` across
 segments and `?` one character. A record's pre-registration names the
 workflows its push will start from this script (VERIFY-061, phase C's run 2,
 C7). Needs PyYAML.
+
+After the workflows it lists what reads the changed files inside them
+(VERIFY-080): the units 13 · Prover agreement proves
+(tools/agreement/agreement.py affected), the probes 9 · Probes starts (its
+changes job's filters), and the Eva programs, 14 · Eva's, that include a
+changed file. A program whose unit is preprocessed with -CC reads the
+annotations inside macro bodies, so an annotation added to a macro of a
+changed header can change its Eva pins too, as VERIFY-079's run 2 found:
+the list marks those programs, and a record pre-registering such a change
+predicts their pins.
 """
+import fnmatch
 import glob
+import importlib.util
+import json
 import os
 import re
 import subprocess
@@ -71,7 +84,42 @@ def main(argv):
         else:
             runs = True
         print(('runs   ' if runs else 'skips  ') + d.get('name', wf))
+    readers(files)
     return 0
+
+
+def load(path):
+    sys.dont_write_bytecode = True
+    spec = importlib.util.spec_from_file_location(os.path.basename(path)[:-3], path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def readers(files):
+    """What reads the changed files inside the workflows: 13's units, 9's
+    probes, and 14's programs, those reading macro bodies marked."""
+    agreement = load(os.path.join('tools', 'agreement', 'agreement.py'))
+    print('13 units: ' + (' '.join(agreement.affected(files)) or 'none'))
+    with open(os.path.join('.github', 'workflows', 'probes.yml')) as f:
+        d = yaml.safe_load(f)
+    step = next(s for s in d['jobs']['changes']['steps'] if s.get('id') == 'f')
+    filters = json.loads(step['env']['FILTERS'])
+    hit = [k for k, pats in filters.items()
+           if any(fnmatch.fnmatch(c, p) for c in files for p in pats)]
+    print('9 probes: ' + (' '.join(hit) or 'none'))
+    eva = load(os.path.join('tools', 'eva', 'eva.py'))
+    changed = {os.path.normpath(f) for f in files}
+    macro, plain = [], []
+    for program in eva.PROGRAMS:
+        if eva.includes(program) & changed or eva.source(program) in changed:
+            cc = '-CC' in eva.unit_of(program)[2].split()
+            (macro if cc else plain).append(program)
+    print('14 programs including a changed file: ' + (' '.join(plain + macro) or 'none'))
+    if macro:
+        print('  of them, reading the annotations inside macro bodies (-CC): '
+              + ' '.join(macro) + '; an annotation added to a macro of a changed file '
+              'can change their Eva pins')
 
 
 if __name__ == '__main__':

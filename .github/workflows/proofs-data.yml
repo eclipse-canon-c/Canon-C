@@ -10,6 +10,7 @@ on:
       - '**.md'
       - 'LICENSE*'
       - '.gitignore'
+      - '.github/workflows/probes.yml'   # 9 · Probes only: nothing here reads it (VERIFY-080)
       - 'tools/**'
   pull_request:
     branches: [ "master" ]
@@ -18,6 +19,7 @@ on:
       - '**.md'
       - 'LICENSE*'
       - '.gitignore'
+      - '.github/workflows/probes.yml'   # 9 · Probes only: nothing here reads it (VERIFY-080)
       - 'tools/**'
 
 concurrency:
