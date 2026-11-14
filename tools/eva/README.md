@@ -72,9 +72,9 @@ with its block and says "as pinned", "not as pinned" (with the difference)
 or "no pin". A pin changes only with a record that says why; `eva.py pin
 DIR` writes the files from a run's summaries.
 
-Open at x86_64: 3 alarms; 64 calls the programs make, and 13 the library
-makes, whose precondition Eva cannot decide; 40 checks it cannot confirm.
-None is invalid. The other nine models leave the same open, but for
+Open at x86_64: 3 alarms; one of Canon-C's own assertions; 64 calls the
+programs make, and 13 the library makes, whose precondition Eva cannot
+decide; 40 checks it cannot confirm. None is invalid. The other nine models leave the same open, but for
 `borrow.c`'s four calls, open at x86_64 only, and `ptr.c`'s two
 preconditions, whose text names the model's largest `usize`. Each holds,
 for the reason given below.
@@ -127,6 +127,12 @@ condition.
 |---------|-------|------------------------------|
 | `ptr.c` | 2, at line 38: `\pointer_comparable` of `up`, then of `down`, with `NULL` | `ptr_align_up` and `ptr_align_down` convert an integer to a pointer (`(void *)(uintptr_t)...`), which C leaves implementation-defined (C11 6.3.2.3, paragraph 5). On the flat address spaces Canon-C supports, the address of a byte of an object, converted back, points at that byte, and compares with `NULL` as any pointer does. Eva does not take a pointer made from an integer to point into an object. |
 | `vec_fmt.c` | 1, at line 29: `\dangling` of the byte `stringbuf_str(&sb)[0]` | The byte is one `vsnprintf` wrote. Frama-C's specification of `vsnprintf` makes the bytes it writes depend on its `va_list`, which holds addresses of locals that end with the call, so Eva cannot rule out that a byte is such an address. A character written for `%d` is not an address; the program reads `'7'`. |
+
+### Assertions
+
+| program | assertion | why it holds |
+|---------|-----------|--------------|
+| `vec_range.c` | `kept`, in `vec_int_extend_from_range`'s loop (`data/vec/vec_range.h`, VERIFY-079): each slot before the one just stored holds what it held when the iteration began | WP proves it, every part (`frama-c-vec-range`). It is a property of every element of an array, which Eva's domains do not confirm (above). `eva.py` prints it among the alarms; the program's line does not count it, as Eva does not. |
 
 ### Checks Eva cannot confirm
 

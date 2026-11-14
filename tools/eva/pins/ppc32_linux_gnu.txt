@@ -6,6 +6,8 @@
 # measured here with Frama-C 25 at x86_64, msvc_x86_64 and ppc_32, and the same at the
 # other seven models (docs/deviations.md, VERIFY-066, run 2).
 # diag.c's block is VERIFY-073's, as its probe measured it at the ten models (9 · Probes #21, run 1c), with semantics/diag.h as VERIFY-073 made it.
+# vec_range.c's block is VERIFY-079's: Eva leaves open the assertion kept that run 2 put into
+# data/vec/vec_range.h, which WP proves; as 14 · Eva #12 gave it at the ten models (run 2b).
 
 checked @ ppc32_linux_gnu: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 62/0/0; functions 31/31
 
@@ -88,6 +90,7 @@ priority_queue @ ppc32_linux_gnu: end reached, fails {0}; alarms 0; program call
 range @ ppc32_linux_gnu: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 38/0/0; functions 16/64
 
 vec_range @ ppc32_linux_gnu: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 15/0/0; functions 15/180
+  alarm: Unknown: vmacros/vdrivers/vec_range_verify.h:68 vec_int_extend_from_range: user assertion: ∀ ℤ k; 0 ≤ k < i ⇒ *(v->items + (v->len + k)) ≡ \at(*(v->items + (v->len + k)),LoopCurrent)
 
 vec_fmt @ ppc32_linux_gnu: end reached, fails {0; 1; 2; 3; 4; 5}; alarms 1; program calls: 0 invalid, 3 unknown; library calls: 0 invalid, 3 unknown; checks not confirmed at lines 28,29,31,32,34; preconditions 37/6/0; functions 14/204
   alarm: Unknown: tools/eva/programs/vec_fmt.c:29 main: dangling_pointer: ¬\dangling(tmp_1 + 0)
