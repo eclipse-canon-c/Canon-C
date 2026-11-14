@@ -35423,6 +35423,7 @@ checks, for the library's headers.
 | **ID**         | VERIFY-077 |
 | **Date**       | 2026-11-13 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-14 — CLOSED: the push of 79f9ba9 and 98cde9c matched eight of Y1 to Y9. The CERT step reads the library's code and finds nothing in it. Y7 missed: `13 · Prover agreement` #12 failed, since in `frama-c-hashmap` Z3 proved one goal of `hashmap_remove` it had not proved, and not one it had, against the unit's pins ("Scored", below). VERIFY-078 re-pins the two. The Status above is the record as committed. |
 | **Baseline**   | c35260b (VERIFY-076): `1`, `3`, `4`, `5` and `6` #59, `2 · Platforms` #78, `7 · Proofs: -CC` #30, `9 · Probes` #22, `13 · Prover agreement` #11 and `14 · Eva` #10; and `8 · Records` #88, on 3fa80ee (VERIFY-076's scoring). |
 | **Scope**      | New: `tools/cert/cert_check.py`; `docs/cert-cwe.md`. Changed: `.github/workflows/analysis.yml`, a step; `data/hashmap/hashmap_impl.h` and `data/stringbuf.h`, five functions renamed; `semantics/diag.h`, `DIAG_PUSH_FMT`; `util/time.h`, three comments; `test/semantics/diag_test.c`, a test; `tools/eva/pins/*.txt`, one line in each of the ten; MISRA-DEV-011, a note; and the names in `test/data/stringbuf_test.c`, `tools/eva/README.md`, `tools/record_coverage.py`, `docs/verification.md`, `docs/misra-campaign.md`, the README and the workflow map. |
 | **Category**   | CERT C and CWE, its second part, as the author decided on 2026-11-13. One run. |
@@ -35581,4 +35582,52 @@ no prover proves and its pins, not the counts with each prover alone; and
 
 **What follows.** Y1 to Y9 scored, and the record closed, which closes
 CERT C and CWE. Next on the list: Frama-C's plug-ins, group 1 (E-ACSL,
+Metrics and MdR).
+
+### Scored (2026-11-14)
+
+The push of 79f9ba9 and 98cde9c started eleven workflows at 14:19 UTC on
+2026-11-13: `1` #60, `2` #79, `3` #60, `4` #60, `5` #60, `6` #60, `7` #31,
+`8` #89, `9` #23, `13` #12 and `14` #11. Ten are green, each at its first
+attempt; `13` failed, on one job of 18. Of 152 jobs, 142 passed, 1 failed
+and 9 were skipped, all of `9`'s; the last, `6`, finished at 15:42.
+
+| # | scored |
+|---|--------|
+| Y1 | **MATCH.** 1 to 9, 13 and 14 ran; 10, 11 and 12 did not. In 9, `changes` and `pointer-probe`'s 26 jobs ran, and the other nine probes were skipped; 13 ran `frama-c-diag`, `frama-c-hashmap`, `frama-c-stringbuf` and `frama-c-vec-fmt`. |
+| Y2 | **MATCH.** 3's six jobs are green. The CERT step's notice reads "clang-tidy's CERT C checks: 0 finding(s) in the library's code; the tests' own code is not checked", and its log "CERT C: 0 finding(s) in the library's code; 5342 in the tests' own code, which this step does not check", as measured here. The other notices are #59's: coverage's "MC/DC 2065 / 2232" with its eight rows, misra's, and compcert's "61 / 61 compiled, 61 ran"; the clang-tidy step ends "Suppressed 688 warnings (1 in non-user code, 683 NOLINT, 4 with check filters)". |
+| Y3 | **MATCH.** 1's 27 jobs are green, each with #59's notices; in each of the ten Windows jobs, ctest passes 61 of 61. |
+| Y4 | **MATCH.** 2's 15 jobs are green, each with #78's notices, up to their times. |
+| Y5 | **MATCH.** 4's 13 jobs, 5's five and 6's 11 are green, with #59's notices; 7's seven with #30's. |
+| Y6 | **MATCH.** 9 is green; each of `pointer-probe`'s 26 jobs gives #22's notice. |
+| Y7 | **MISS.** 13 failed. Each of the four units' count of goals no prover proves is #11's (1, 46, 37 and 47), and three units match their pins, with the counts of each prover alone unchanged too. `frama-c-hashmap`'s unit job does not: "typed_cast_hashmap_remove_valid_ensures_part19: pinned two Alt-Ergo+CVC5, now three provers; typed_cast_hashmap_remove_valid_ensures_part23: pinned not listed, now two Alt-Ergo+CVC5". Z3 proved the first, which it had not, and not the second, which it had: its count stays 4729 of 4784, and its failures read "Failed 17; Timeout 38" where #11's read "Failed 15; Timeout 40". |
+| Y8 | **MATCH.** 14's 12 jobs are green, with #10's notices, each program "as pinned", the pins' new line included. |
+| Y9 | **MATCH.** 8's two jobs are green; its size pins line reads "size pins: 57 rows; 0 problem(s)". |
+
+**Eight of nine.**
+
+**Why Y7 missed.** The two goals are postconditions of `hashmap_remove`,
+which calls two of the renamed functions, `hm_home` and `hm_wrap`. Both
+goals held their classes at #9, #10 and #11, three runs. Timing alone does
+not fit this run. Z3 proved part19 within 30 s, since a longer proof would
+have been listed slow and left out. Z3 does not answer an identical problem
+in under 30 s after timing out on it, or after failing on it quickly, in
+three runs. Two of its unproved goals also changed how they failed. The
+likeliest explanation is that the problems Z3 reads for `hashmap_remove`
+changed with the rename. The record's own reasoning held for the names of
+the goals, but not for what is in them. That is not confirmed: this
+workspace has neither WP nor the run's JSON reports, which name each
+goal's Z3 status, since the proxy does not reach the storage GitHub keeps
+artifacts in. No goal is lost: both are proved by Alt-Ergo and CVC5, and
+the unit's unproved goals are its pinned 46.
+
+**What it shows.** A rename moves no goal's name and changes no unit's
+counts here, but can change what an SMT solver does with the goals that
+mention the renamed function. A record that renames a function a proved
+unit calls should predict, for 13, only that the goals no prover proves
+are unchanged; whether its pins hold is for the run to show.
+
+**Closed.** CI runs clang-tidy's CERT C checks on the library's code,
+which has no finding; `docs/cert-cwe.md` says what they cover. VERIFY-078
+re-pins the two hashmap goals. Next: Frama-C's plug-ins, group 1 (E-ACSL,
 Metrics and MdR).
