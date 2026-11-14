@@ -35741,6 +35741,7 @@ Frama-C's plug-ins, group 1 (E-ACSL, Metrics and MdR).
 | **ID**         | VERIFY-079 |
 | **Date**       | 2026-11-14 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-14 — Run 1 scored: V1 to V8 MATCH, V9 to V11 MISS. Neither form makes invariant 5's parts 3 and 4 easy: Alt-Ergo alone still proves them alone, and with A and B together part 3 was not proved with the three provers at once. The record's reading of the cost was wrong ("Run 1 scored", below). Open: the author decides what follows. The Status above is the record as committed. |
 | **Baseline**   | 1753e49 (VERIFY-078's close); `1`, `3`, `4`, `5` and `6` #60 (98cde9c), `2 · Platforms` #80 (0379866) and `8 · Records` #91 (1753e49); `9 · Probes` #20 (453cbcf), #21 (a11ae90), #22 (c35260b) and #23 (98cde9c), each probe's last run. |
 | **Scope**      | Run 1: `tools/probes/verify-079/` (`vecrange_probe.py`, `variants/`, `steps`, `README.md`); `.github/workflows/probes.yml`, the job `vecrange-probe`, its filter and its output, and the header's list of probes; the workflow map's row 9. Run 2: `data/vec/vec_range.h`'s loop annotations, with the pins that read them, if run 1 finds a version that makes the two goals easy. |
 | **Category**   | VERIFY-065's "Left for later": the two single-prover proofs a slow runner could lose. Run 1 measures in CI before the header changes (report-only); run 2 makes the change, pinned from run 1. |
@@ -35888,3 +35889,68 @@ probe's results:
   report-only.
 - If neither does, the probe measures another form before run 2, or the
   author keeps the two goals as they are, the risk named.
+
+### Run 1 scored (2026-11-14)
+
+The push of ae9349f and 7ec24a2 started `1 · Build & test` #61,
+`2 · Platforms` #81, `3 · Static analysis & coverage` #61, `4`, `5` and
+`6` #61, `8 · Records` #92 and `9 · Probes` #24: 117 jobs, every one green
+at its first attempt. The vec_range probe took 37 minutes, nearly all of
+them its sixteen WP runs (36.7 minutes, about 9 for each version).
+
+| # | scored |
+|---|--------|
+| V1 | **MATCH.** 1 to 6, 8 and 9 ran; the others did not. In 9, every probe ran. |
+| V2 | **MATCH.** 1 to 6 and 8 are green, each job with the notices of its last run, times aside. |
+| V3 | **MATCH.** The nine older probes other than diag_push's are green, each of their 35 jobs with the notices of its last run (#20, #22, #23), times aside. |
+| V4 | **MATCH.** The diag_push probe is green, and each of its three steps reads "the patch already in the checkout". WP: "Proved goals: 3073 / 3074", the one not proved `diag_init`'s `memset` goal (Unknown, where #21's was a Timeout). Agreement: none 1. Eva: `diag.c` "as pinned, preconditions 74/4/0" at each of the ten models. |
+| V5 | **MATCH.** The vec_range probe is green. Its steps posted 4, 4, 4, 5 and 4 notices, A, B and C were each "the patch applied to a copy of the checkout", and the report compares the four. But see "Found while scoring", 1. |
+| V6 | **MATCH.** P0, the three together: 479 / 479. The slowest proof is Alt-Ergo's of invariant 5's part 3, 97 s; part 4's, 68 s, is the next. |
+| V7 | **MATCH.** P0, each alone: no difference from the pins as 13 reads them, and no line of the pin file for the function would go or come. None 0. Parts 3 and 4 by Alt-Ergo alone, 66 and 44 s. |
+| V8 | **MATCH.** A: the assertions' twelve goals, four parts of each, are proved by WP itself or by all three provers in 0.5 s or less. Invariant 5's parts 3 and 4 are still proved by Alt-Ergo alone, 82 and 39 s. |
+| V9 | **MISS.** B: invariant 5's parts 3 and 4 are still proved by Alt-Ergo alone, 64 and 47 s. `len_kept` is proved, every part by WP itself, and with the three together every goal is proved, 485 / 485. |
+| V10 | **MISS.** C: parts 3 and 4 by Alt-Ergo alone, 82 and 37 s, and the assertions proved as in A. With the three together part 3 is not proved (Timeout): 496 / 497. |
+| V11 | **MISS.** The slowest proof with the three together: B's, 96 s; C's, 53 s, with part 3 past the 120 s limit. |
+
+Eight of the eleven match; V9 to V11 miss.
+
+**What the run shows.**
+
+- **Neither form makes the two goals easy, and the record's reading of
+  them was wrong.** WP's own simplifier proves `len_kept` preserved, in
+  every part, with no prover: keeping `v->len` across the store was never
+  the provers' work. The assertions about the new slot are proved by WP
+  itself or in under a second. What is left in parts 3 and 4 is that the
+  earlier slots, `k < i`, keep their values across the store and the call
+  to `range_next`, or something in the hypotheses the provers are given;
+  this run does not tell the two apart. Every goal of the loop's body
+  comes in four parts, and WP itself proves parts 1 and 2 of each,
+  invariant 5's among them. WP's output does not name the paths they are.
+- **The three provers at once are slower than one.** On the same goal in
+  the same run, the proof with the three together took 1.3 to 1.5 times
+  Alt-Ergo's alone: for parts 3 and 4, 97 against 66 s and 68 against 44
+  (P0), 110 against 82 and 56 against 39 (A), 96 against 64 and 66
+  against 47 (B), and 53 against 37 for C's part 4. C's part 3, 82 s
+  alone, passed 120 s together. On this runner, then, a goal that takes
+  Alt-Ergo alone 80 to 90 s is at the proof job's limit, and P0's part 3
+  took 97 s of the 120.
+- **The assertions cost Alt-Ergo time on part 3**: 82 s alone with A and
+  with C, against 66 and 64 s with P0 and B. One runner, one run each.
+- **The pins hold in all four versions**: no line of the pin file for the
+  function would go or come, and no difference as 13 reads them.
+
+**Found while scoring.**
+
+1. **The report gives "-" for a part WP proves itself.** Its line for
+   invariant 5 reads "part1: together WP 0.0 s, alone Alt-Ergo -, Z3 -,
+   CVC5 -", where each version's table in the log reads "alone Alt-Ergo
+   WP, Z3 WP, CVC5 WP": the report reads only the provers' times. The
+   version steps and the tables are right; the probe's next change fixes
+   the report.
+
+**What follows.** As "What follows" above foresaw, neither form being
+easy, the author decides: the probe measures another form before run 2,
+or the two goals stay as they are, the risk named. This run makes the
+risk concrete: the proof job's way of proving took part 3 97 s of its 120
+here. A next form would start from what parts 3 and 4 hold, which WP can
+print (`-wp-print`) and the probe does not yet show.
