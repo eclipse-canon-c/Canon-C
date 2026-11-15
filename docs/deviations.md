@@ -36887,7 +36887,7 @@ eight of nine, run 3 nine of nine. What it shows:
 | **ID**         | VERIFY-083 |
 | **Date**       | 2026-11-15 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-15 — Run 1 scored: D1 to D4 MATCH, D5 MISS, D6 to D9 not scored. E-ACSL instrumented no program: `e-acsl-gcc.sh` reads its arguments word by word, and the "-I" in each program's one `-E` took its file away ("no input files"). Run 1b, pre-registered below, gives each flag a `-E` of its own. The Status above is the record as committed. |
+| **Status update** | 2026-11-15 — Run 1 scored: D1 to D4 MATCH, D5 MISS, D6 to D9 not scored. E-ACSL instrumented no program: `e-acsl-gcc.sh` reads its arguments word by word, and the "-I" in each program's one `-E` took its file away ("no input files"). Run 1b, pre-registered below, gives each flag a `-E` of its own. Run 1b scored: E1 to E9 MATCH. 6 programs instrument, compile and run clean; 16 stop on an annotation error, the script reading the system's C headers, where `valid_read_string`, which Canon-C's contracts name, is not; 4 on E-ACSL's stack overflow. Run 1c, pre-registered below, reads Frama-C's C library (`-L`), as Eva does. The Status above is the record as committed. |
 | **Baseline**   | 73d8d04 and VERIFY-082's close: `1`, `3`, `4`, `5` and `6` #66 (8946d5a), `2 · Platforms` #90 and `14 · Eva` #16 (511cb19), `8 · Records` #103 (73d8d04). |
 | **Scope**      | `tools/eva/eacsl.py` and `tools/eva/eacsl_markers.c` (new); `tools/eva/README.md`; `.github/workflows/eva.yml`, the job `e-acsl`, and its header, whose sentence on MdR VERIFY-082 left for this file's next change; the workflow map. |
 | **Category**   | The to-do list's item 5, Frama-C's plug-ins, group 1, its third part. The author decided on 2026-11-14: E-ACSL, on the 26 programs Eva analyses. |
@@ -37047,4 +37047,75 @@ Measured, not predicted, as for run 1: how many instrument, the checks
 inserted, the annotations not translated, and why the others stop.
 
 **What follows.** E1 to E9 scored. Run 2 pins what Frama-C 29 gives,
+program by program, and enforces it.
+
+### Run 1b scored (2026-11-15)
+
+The push of 348be82 and 4bd1638 started `2 · Platforms` #92, `8 · Records`
+#105 and `14 · Eva` #18, each green at its first attempt. The E-ACSL step
+took 178 s.
+
+| # | scored |
+|---|--------|
+| E1 | **MATCH.** 2, 8 and 14 ran, and no other. |
+| E2 | **MATCH.** 2's 16 jobs and 8's two gave #91's and #104's notices, times aside. |
+| E3 | **MATCH.** 14's native job, ten Eva jobs and total job gave #17's notices, times aside. |
+| E4 | **MATCH.** No "no input files": each program's instrumentation ran Frama-C, and E-ACSL's warnings or Frama-C's error came back. |
+| E5 | **MATCH.** "instrumented 6": the 4 instrumented here, `bits`, `checked`, `error` and `lifetime`, and `compare` and `ptr`. |
+| E6 | **MATCH.** "compiled 6, run to their end 6". |
+| E7 | **MATCH.** "annotations failed 0 ... CHECKs failed 0". |
+| E8 | **MATCH.** "verdicts unsound 0". |
+| E9 | **MATCH.** The job took 3 min 36 s. |
+
+Nine of nine. D6 to D9, carried from run 1, are E6 to E9.
+
+**Measured.** "e-acsl checks: 574 inserted in the 6 instrumented
+programs", `ptr` 247 and `checked` 163 among them; 386 annotations not
+translated in the programs E-ACSL reached, most of them assigns clauses in
+behaviours, 173, and datacons, 165. The 20 others stop:
+
+- 16 on "User Error: warning annot-error treated as fatal error", in
+  0.4 to 0.7 s: `arena`, `array`, `bitset`, `borrow`, `diag`, `hashmap`,
+  `memory`, `pool`, `priority_queue`, `region`, `slice`, `stack`,
+  `stringbuf`, `vec`, `vec_fmt`, `vec_range`;
+- 4 on "Unexpected error (Stack overflow)", after 168 to 174 s: `deque`,
+  `option`, `range`, `result`.
+
+**Why the 16.** `e-acsl-gcc.sh` passes Frama-C `-no-frama-c-stdlib` unless
+it is given `-L`: Frama-C then reads the system's C headers, not its own
+library, whose ACSL defines predicates Canon-C's contracts name. Here,
+Frama-C 25 parses `arena.c` with E-ACSL's preprocessing: with
+`-no-frama-c-stdlib`, "core/slice.h:584: unbound logic function
+valid_read_string. Ignoring logic specification of function
+str_from_cstr", then the fatal annot-error; with `-frama-c-stdlib`, exit
+0. Eva reads Frama-C's library.
+
+### Run 1c: pre-registration (2026-11-15)
+
+**The change.** `tools/eva/eacsl.py` gives `e-acsl-gcc.sh` `-L`: Frama-C's
+C library, as Eva reads it. The README says so.
+
+**Measured here.** The 26 commands, through the script's argument loop as
+its source reads (now with its `-L`): each keeps its file. Through the
+stand-in, which reads Frama-C's library as Frama-C 25 does by default:
+`bits`, `checked`, `error` and `lifetime` as before.
+
+**The workflows.** `tools/which_workflows.py`: 2, 8 and 14 run.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| F1 | **2, 8 and 14 run**, and no other. | another set | H |
+| F2 | **2 and 8 are green, each job with #92's and #105's notices**, times aside, 2's slowest header among them. | a failure, or another notice | H |
+| F3 | **14's native job, ten Eva jobs and total job are green with #18's notices**, times aside. | a failure, or another notice | H |
+| F4 | **No program stops on an annotation error.** | an annot-error | M–H: Eva reads the 26 with Frama-C 29's library; E-ACSL's preprocessing adds `-D_DEFAULT_SOURCE`, `-D__NO_CTYPE` and the machine's macro. |
+| F5 | **The 6 instrumented in run 1b still instrument**, and more do: "instrumented N", N above 6. | fewer, or 6 | M: the 16 reach E-ACSL now; how many it instruments is measured. |
+| F6 | **Every program compiled runs to its END.** | an END missing | M |
+| F7 | **No annotation fails and no CHECK fails.** | a failure | M: as D7, over more programs. |
+| F8 | **No verdict is unsound.** | one or more | M–L |
+| F9 | **The job takes less than an hour.** | an hour or more | M–H: run 1b's four stack overflows took about 170 s each. |
+
+Measured, not predicted: how many instrument, the checks inserted, the
+annotations not translated, and why the others stop.
+
+**What follows.** F1 to F9 scored. Run 2 pins what Frama-C 29 gives,
 program by program, and enforces it.
