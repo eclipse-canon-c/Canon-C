@@ -20,5 +20,6 @@ a figure pins it again, with `metrics.py pin` from its run's
     python3 tools/metrics/metrics.py pin DIR     pins.txt from DIR/metrics.csv
     python3 tools/metrics/metrics.py check       pins.txt is well formed
 
-VERIFY-081 (`docs/deviations.md`) set it up: report-only in its run 1, its
-pins measured with Frama-C 25 before CI's Frama-C 29 measured them.
+VERIFY-081 (`docs/deviations.md`) set it up. Its pins were measured with
+Frama-C 25; in its run 1, report-only, CI's Frama-C 29 gave every function
+the same complexity, and since its run 2 a difference fails the job.

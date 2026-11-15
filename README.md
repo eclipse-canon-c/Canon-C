@@ -56,6 +56,7 @@
 ### Tools for Formal Verification & Timing Analysis
 [![Frama-C WP](https://img.shields.io/badge/Frama--C%20WP-CI-green)](.github/workflows/README.md)
 [![Eva](https://img.shields.io/badge/Eva-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/eva.yml)
+[![Frama-C Metrics](https://img.shields.io/badge/Frama--C%20Metrics-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/platforms.yml)
 [![Why3](https://img.shields.io/badge/Why3-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/prover-agreement.yml)
 [![Alt-Ergo](https://img.shields.io/badge/Alt--Ergo-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/prover-agreement.yml)
 [![Z3](https://img.shields.io/badge/Z3-CI-green)](https://github.com/eclipse-canon-c/Canon-C/actions/workflows/prover-agreement.yml)

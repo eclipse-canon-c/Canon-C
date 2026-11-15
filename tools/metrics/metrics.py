@@ -20,8 +20,9 @@ ensure() off, at Frama-C's default machine model (x86_64).
 tools/metrics/pins.txt holds each function's cyclomatic complexity. run
 compares what it measures with them: a function whose complexity changed,
 or one measured and not pinned, or pinned and not measured, is a
-difference. A difference fails the job once ENFORCE is set; VERIFY-081's
-run 1 only reports. The other counts are printed and written to the CSV
+difference, and fails the job since VERIFY-081's run 2 (ENFORCE); its
+run 1 only reported, and CI's Frama-C 29 gave every function the
+complexity its pins, Frama-C 25's, held. The other counts are printed and written to the CSV
 file, not pinned. A complexity changes only with the change that moves
 it, pinned again with `pin` from that change's run.
 
@@ -46,7 +47,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 PINS = os.path.join(HERE, 'pins.txt')
-ENFORCE = False   # VERIFY-081 run 1: report-only
+ENFORCE = True    # since VERIFY-081's run 2: a difference fails the job; run 1 only reported
 CUT = 4000        # the runner cuts an annotation at 4096 characters
 
 # Metrics' labels, and the CSV's columns for them.
