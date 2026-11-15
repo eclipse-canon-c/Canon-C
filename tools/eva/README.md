@@ -172,21 +172,30 @@ uploads one SARIF run to GitHub's code scanning, category `eva`, each time
 the workflow runs.
 
 What it uploads is what the pins hold open: the alarms, the assertion, and
-the calls whose precondition Eva cannot decide, each matched to MdR's open
-result at its file and line. A property open at several models, or reached
-from several programs, is one result, which names them. Each is a warning
-for Unknown, an error for Invalid; none is invalid. MdR gives an Unknown
-status the level none, which code scanning does not show. Each result has
-its own fingerprint, from its rule, file, line's text and property, so that
-two properties on one line are two alerts. The reasons above are why each
-holds.
+the calls whose precondition Eva cannot decide.
 
-MdR's other open results are counted and not uploaded: properties of the
-library's own contracts, postconditions for the most part, that Eva does
-not establish where the programs call the functions, and WP proves.
+- An alarm comes from MdR's SARIF: its open result at the alarm's file and
+  line, under the alarm's name, so MdR and Report's table must agree on it.
+- The assertion and the preconditions come from Report's table, which the
+  pins are made from. Frama-C 29's MdR gives every ACSL property the kind
+  pass, whatever its status, and the level none unless it is invalid: in
+  VERIFY-082's run 1, of its 293540 results, the 30 alarms were open and
+  all the others passing, none open at a place the pins hold.
+
+A property open at several models, or reached from several programs, is
+one result, which names them. Each is a warning for Unknown, an error for
+Invalid; none is invalid. Code scanning does not show a result of level
+none. Each result has its own fingerprint, from its rule, file, line's text
+and property, so that two properties on one line are two alerts; the
+upload warns, for each, that its own fingerprint, from the line alone,
+differs, and keeps ours. The reasons above are why each holds.
+
+MdR's other open results are counted and not uploaded: none so far, as it
+leaves only alarms open.
 
     python3 tools/eva/mdr.py merge [DIR] [OUT]
 
 `eva.sarif` is written, and uploaded, only when every program has its SARIF
-at every model. A pinned property with no result in MdR's SARIF is a
-problem: reported in VERIFY-082's run 1, as `mdr.py`'s `ENFORCE` says.
+at every model. A pinned alarm with no open result in MdR's SARIF is a
+problem: reported in VERIFY-082's runs 1 and 2, as `mdr.py`'s `ENFORCE`
+says.
