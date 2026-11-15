@@ -36526,6 +36526,7 @@ of three. What it shows:
 | **ID**         | VERIFY-082 |
 | **Date**       | 2026-11-15 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-15 — Run 1 scored: A1 to A5, A8 and A9 MATCH; A6 and A7 MISS. Frama-C 29's MdR gives every ACSL property the kind pass, whatever its status: only the 3 alarms reached code scanning. Run 2, pre-registered below, takes the assertion and the preconditions from Report's table. The Status above is the record as committed. |
 | **Baseline**   | 7915e88 and VERIFY-081's close: `1`, `3`, `4`, `5` and `6` #65 (9281c73), `2 · Platforms` #87 and `8 · Records` #99 (7915e88), `9 · Probes` #27 (bb3a456), `14 · Eva` #13 (10ab302). |
 | **Scope**      | `tools/eva/eva.py` (MdR in Eva's command); `tools/eva/mdr.py` (new); `tools/eva/README.md`; `.github/workflows/eva.yml`, its total job; the workflow map; and `.github/workflows/platforms.yml`, the `metrics` job's comment, which VERIFY-081 left for that file's next change. |
 | **Category**   | The to-do list's item 5, Frama-C's plug-ins, group 1, its second part. The author decided on 2026-11-14: MdR's SARIF, uploaded to GitHub's code scanning. |
@@ -36655,3 +36656,89 @@ the author can read the count.
 **What follows.** A1 to A9 scored. If A6 holds, run 2 sets `ENFORCE` in
 `mdr.py`, and the README's badge; if it misses, run 2 fixes the match
 first.
+
+### Run 1 scored (2026-11-15)
+
+The push of 5584e77, 5af6f9b and 8946d5a started `1`, `3`, `4`, `5` and
+`6` #66, `2 · Platforms` #88, `8 · Records` #100, `9 · Probes` #28 and
+`14 · Eva` #14, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| A1 | **MATCH.** 1 to 6, 8, 9 and 14 ran, and no other; in 9, the probes evaerror and diagpush, the others skipped. |
+| A2 | **MATCH.** The 62 jobs of 1, 3, 4, 5 and 6 and the 18 of 2 and 8 gave their last runs' notices, times aside. |
+| A3 | **MATCH.** The Eva error probe gave #27's notices. diag_push's read "Proved goals: 3073 / 3074" and none 1, its one unproved goal a Timeout where #27's was Unknown, its agreement step's other counts moving as allowed; its Eva step, with MdR now, as pinned at the ten models. |
+| A4 | **MATCH.** 14's native job and ten Eva jobs gave #13's notices, times aside: 260 of 260 as pinned. The Eva jobs took 53 s on average, #13's 52. |
+| A5 | **MATCH.** "mdr: MdR's SARIF for 260 of 260 runs (26 programs at 10 machine models): 293540 results, open 30, pass 293510". |
+| A6 | **MISS.** "mdr pins: 30 of 774": the 30 alarms, and none of the 744 assertions and preconditions. MdR's only open results are the alarms'; the other 293510 are all of the kind pass. |
+| A7 | **MISS.** "mdr upload: 3 results for code scanning, 3 warning(s), 0 error(s); rules dangling_pointer 1, ptr_comparison 2". |
+| A8 | **MATCH.** The upload step is green: "Successfully uploaded results", "Analysis upload status is complete." |
+| A9 | **MATCH.** 14 is green, its total job among them, with all ten of #13's notices and MdR's beside them. |
+
+Seven of nine.
+
+**Why A6 missed.** In MdR's source for Frama-C 30, `gen_status`, which
+builds the result of a property that is not an alarm, gives it a rule, a
+level, a place and a message, and no kind; CI's 29 gave every such result
+the kind pass. `kind_of_status`, which maps Unknown to open, gives the
+alarms theirs. The level is error for Invalid and none for every other
+status. So in MdR's SARIF an
+Unknown ACSL property and a Valid one read alike. The record read MdR's
+source through summaries of its pages, which gave the mapping and not
+where it is used; the next reading of a tool's source, for a prediction,
+reads the function that builds the output.
+
+**Measured.** MdR's open results no pin holds: 0. The author read the
+Security tab: 3 open alerts of `frama-c`, one per result. Two of them are
+the two alarms of `ptr.c`'s line 38, so code scanning keeps the results'
+own fingerprints. The action computes its own from the line, and warns for
+each result that it differs: "Calculated fingerprint of
+c6a30f06d2c02f0c:1 for file tools/eva/programs/ptr.c line 38, but found
+existing inconsistent fingerprint value bd361ae74ac8c335:1", the same
+c6a30f06d2c02f0c:1 for the other alarm of that line.
+
+### Run 2: pre-registration (2026-11-15)
+
+**The change.** The author decided on 2026-11-15: the alarms from MdR,
+the rest from Report's table. `mdr.py`:
+
+- an alarm, as in run 1: MdR's open result at its file and line, under its
+  name, which Report's table must agree with;
+- an open assertion, or a call's precondition Eva leaves open, as Report's
+  table holds it: its file, line and status. Measured besides, not used:
+  whether MdR has a result of rule `user-spec` at its place;
+- the notices give MdR's results by level, and "mdr pins" the alarms
+  matched and the rest's count;
+- each result's fingerprint is as in run 1. The three alarms' are run 1's,
+  computed here from the pins: bd361ae74ac8c335:1, 8a3d8d25339200d0:1,
+  25ad972da210cce4:1. Their alerts stay open, and 81 new ones join them.
+
+`ENFORCE` stays off: run 1's "What follows" has run 2 fix the match
+first. `eva.yml`'s comment, that the total job keeps MdR's results for
+the properties the pins hold open, is brought up to date with that file's
+next change, since a change to it starts 1 to 6.
+
+**Measured here.** On stand-in files that behave as MdR 29 did in run 1
+(an alarm open, every other property pass, at level none unless invalid),
+from the local runs copied to the ten models: "the alarms, 30 of 30";
+780 assertions and preconditions from Report's table, MdR placing each
+(as the stand-in does by construction); 80 results, 80 fingerprints; the
+SARIF schema, 0 errors.
+
+**The workflows.** `tools/which_workflows.py`: 2, 8 and 14 run; no unit,
+probe or program reads the changed files.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| B1 | **2, 8 and 14 run**, and no other. | another set | H |
+| B2 | **2 and 8 are green, each job with #88's and #100's notices**, times aside, 2's slowest header among them. | a failure, or another notice | H |
+| B3 | **14's native job and ten Eva jobs are green with #14's notices**, times aside. | a failure, or another notice | H: `eva.py` does not change. |
+| B4 | **MdR's SARIF is as in run 1**: "260 of 260 runs ...: 293540 results, open 30, pass 293510"; its levels are measured. | another count | H: the same runs. |
+| B5 | **"mdr pins: the alarms, 30 of 30, have MdR's open result ...; the assertions and preconditions, 744, are as Report's table holds them"**; how many of those MdR places is measured. | another count | H |
+| B6 | **"mdr upload: 84 results for code scanning, 84 warning(s), 0 error(s); rules dangling_pointer 1, ptr_comparison 2, user-spec 81"**. | another figure | H: the 84 distinct properties the pins hold. |
+| B7 | **The upload is green, with one warning of an inconsistent fingerprint per result: 84.** | a failure, or another count | M–H: run 1 warned for each of its 3. |
+| B8 | **The Security tab shows 84 open alerts of `frama-c`**: run 1's 3, and 81 new. Scored from the author's reading. | another count | M: code scanning kept run 1's fingerprints; 69 would mean it took the line's. |
+| B9 | **No "mdr problems" notice, and "mdr others" 0.** | a problem, or another count | H |
+
+**What follows.** B1 to B9 scored. If they hold, run 3 sets `ENFORCE`
+and the README's badge, and the record closes.
