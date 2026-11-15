@@ -36526,7 +36526,7 @@ of three. What it shows:
 | **ID**         | VERIFY-082 |
 | **Date**       | 2026-11-15 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-15 — Run 1 scored: A1 to A5, A8 and A9 MATCH; A6 and A7 MISS. Frama-C 29's MdR gives every ACSL property the kind pass, whatever its status: only the 3 alarms reached code scanning. Run 2, pre-registered below, takes the assertion and the preconditions from Report's table. The Status above is the record as committed. |
+| **Status update** | 2026-11-15 — Run 1 scored: A1 to A5, A8 and A9 MATCH; A6 and A7 MISS. Frama-C 29's MdR gives every ACSL property the kind pass, whatever its status: only the 3 alarms reached code scanning. Run 2, pre-registered below, takes the assertion and the preconditions from Report's table. Run 2 scored: B1 to B7 and B9 MATCH, B8 MISS: 84 results uploaded, and still 3 alerts; the 81 new results had a start line and no columns. Run 3, pre-registered below, gives each result its columns and enforces. The Status above is the record as committed. |
 | **Baseline**   | 7915e88 and VERIFY-081's close: `1`, `3`, `4`, `5` and `6` #65 (9281c73), `2 · Platforms` #87 and `8 · Records` #99 (7915e88), `9 · Probes` #27 (bb3a456), `14 · Eva` #13 (10ab302). |
 | **Scope**      | `tools/eva/eva.py` (MdR in Eva's command); `tools/eva/mdr.py` (new); `tools/eva/README.md`; `.github/workflows/eva.yml`, its total job; the workflow map; and `.github/workflows/platforms.yml`, the `metrics` job's comment, which VERIFY-081 left for that file's next change. |
 | **Category**   | The to-do list's item 5, Frama-C's plug-ins, group 1, its second part. The author decided on 2026-11-14: MdR's SARIF, uploaded to GitHub's code scanning. |
@@ -36742,3 +36742,80 @@ probe or program reads the changed files.
 
 **What follows.** B1 to B9 scored. If they hold, run 3 sets `ENFORCE`
 and the README's badge, and the record closes.
+
+### Run 2 scored (2026-11-15)
+
+The push of d92b0aa and 653bc77 started `2 · Platforms` #89, `8 · Records`
+#101 and `14 · Eva` #15, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| B1 | **MATCH.** 2, 8 and 14 ran, and no other. |
+| B2 | **MATCH.** The 18 jobs of 2 and 8 gave #88's and #100's notices, times aside. |
+| B3 | **MATCH.** 14's native job and ten Eva jobs gave #14's notices, times aside. |
+| B4 | **MATCH.** "260 of 260 runs ...: 293540 results, open 30, pass 293510; levels error 6880, none 286660". |
+| B5 | **MATCH.** "the alarms, 30 of 30, have MdR's open result ...; the assertions and preconditions, 744, are as Report's table holds them ... (MdR has a user-spec result at the place of 744)". |
+| B6 | **MATCH.** "mdr upload: 84 results for code scanning, 84 warning(s), 0 error(s); rules dangling_pointer 1, ptr_comparison 2, user-spec 81". |
+| B7 | **MATCH.** The upload is green, "Analysis upload status is complete.", with 84 warnings of an inconsistent fingerprint, one per result. |
+| B8 | **MISS.** The author reads the same 3 open alerts in the Security tab, not 84. |
+| B9 | **MATCH.** No "mdr problems" notice; "mdr others" 0. |
+
+Eight of nine.
+
+**Why B8 missed, as far as can be seen from here.** GitHub took the 84
+results, processed them without error, and kept 3 alerts: the alarms. Their
+regions are MdR's, with a start line and two columns; the 81 others had a
+start line only, as Report's table gives it. GitHub's reference marks no
+region field as required, but its example of the smallest SARIF it reads
+has `startLine`, `startColumn` and `endColumn`, and says that a file
+without the example's properties "will not be displayed correctly or sync
+on GitHub". The record did not read that example before run 2; it takes
+the missing columns for the cause, which run 3 tests.
+
+**Measured.** MdR's 293540 results hold 6880 of level error, which MdR
+gives an invalid property, over the ten models. Report's table here, with
+Frama-C 25, has 9 "Invalid or unreachable" at x86_64; where MdR's are is
+not known yet, and run 3 lists them.
+
+### Run 3: pre-registration (2026-11-15)
+
+**The change.** `mdr.py`:
+
+- the assertion and the preconditions are at the region of MdR's result
+  of rule `user-spec` at their place, which run 2 found for all 744, and
+  at the line's, from its first character to its last, if MdR's has no
+  columns; an alarm is at MdR's region, as before;
+- `ENFORCE` is set: a program without its SARIF, or a pinned alarm without
+  MdR's open result, fails the total job, and nothing is uploaded. Runs 1
+  and 2 had neither;
+- the log lists MdR's results of level error by place, and "mdr others"
+  counts them.
+
+The fingerprints do not change: the 84 results' are run 2's, so their
+alerts, if the regions bring them, are new for the 81 and the same for
+the 3. `eva.yml`'s comment is still left for that file's next change.
+
+**Measured here.** On the stand-in files, with columns: 80 results, each
+with a start line and two columns, 49 at MdR's region and 28 at the
+line's, where one program's regions were removed; the SARIF schema, 0
+errors. With a pinned alarm removed, the merge exits 1, naming it; with a
+program's SARIF removed too, it exits 1 and writes no `eva.sarif`.
+
+**The workflows.** `tools/which_workflows.py`: 2, 8 and 14 run.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| C1 | **2, 8 and 14 run**, and no other. | another set | H |
+| C2 | **2 and 8 are green, each job with #89's and #101's notices**, times aside, 2's slowest header among them. | a failure, or another notice | H |
+| C3 | **14's native job and ten Eva jobs are green with #15's notices**, times aside. | a failure, or another notice | H |
+| C4 | **MdR's SARIF is as in runs 1 and 2**: "293540 results, open 30, pass 293510; levels error 6880, none 286660". | another count | H |
+| C5 | **"mdr pins" as in run 2**: the alarms 30 of 30, the assertions and preconditions 744, MdR placing all 744. | another count | H |
+| C6 | **"mdr upload: 84 results ... 84 warning(s), 0 error(s)"**, the 81 "at MdR's region". | another figure, or a result at the line's | M–H: MdR's regions of the alarms have columns, and its regions of the others are built alike. |
+| C7 | **The total job is green, `ENFORCE` set, and the upload with it**, 84 warnings of an inconsistent fingerprint. | a failure, or another count | H |
+| C8 | **The Security tab shows 84 open alerts of `frama-c`**: run 2's 3, and 81 new. Scored from the author's reading. | another count | M: the missing columns are the record's reading of GitHub's example, not a rule GitHub states. |
+| C9 | **"mdr others" 0, and MdR's 6880 of level error listed by place.** | another count | H |
+
+**What follows.** C1 to C9 scored. If C8 holds, the record closes with
+the README's badge, in a push of the record and `README.md`, which starts
+8 alone. If it misses, run 4 looks for the cause with what run 3's log
+shows.
