@@ -6,8 +6,11 @@ E-ACSL, Frama-C's runtime assertion checker, turns a program's ACSL
 annotations -- the contracts of the functions it calls, their assertions
 and loop invariants -- into C that checks them while the program runs.
 Each program of tools/eva/programs is instrumented and compiled by
-e-acsl-gcc.sh, as Frama-C reads it for Eva (eva.py's preprocessing, C11),
-at the host's machine model, x86_64. tools/eva/eacsl_markers.c defines the
+e-acsl-gcc.sh, as Frama-C reads it for Eva (eva.py's preprocessing, C11,
+and Frama-C's own C library, -L), at the host's machine model, x86_64.
+Without -L the script reads the system's headers, where Frama-C's
+library's logic is not: core/slice.h's contract of str_from_cstr names
+valid_read_string, and 16 programs stopped there (VERIFY-083 run 1b). tools/eva/eacsl_markers.c defines the
 markers it calls (CHECK and END, eva_program.h). Then it runs.
 
 E-ACSL's segment memory model wants the program's memory where it expects
@@ -100,12 +103,13 @@ def cpp_words(program):
 
 
 def command(program, stem, markers):
-    """e-acsl-gcc.sh's command: instrument, then compile the instrumented
-    code alone (-c -X), with the segment model and --keep-going."""
+    """e-acsl-gcc.sh's command: instrument with Frama-C's C library (-L),
+    then compile the instrumented code alone (-c -X), with the segment
+    model and --keep-going."""
     for path in (stem, markers):
         if any(c.isspace() for c in path):
             raise ValueError(f'{path!r} has a space, which e-acsl-gcc.sh would split')
-    return ([SCRIPT, '-c', '-X', '-m', 'segment', '-k']
+    return ([SCRIPT, '-c', '-X', '-L', '-m', 'segment', '-k']
             + [w for flag in cpp_words(program) for w in ('-E', flag)]
             + ['-l', markers, '-o', stem + '.frama.c', '-O', stem, eva.source(program)])
 

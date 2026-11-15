@@ -217,7 +217,8 @@ checks it on the values the program does take.
 The `e-acsl` job of `14 · Eva` runs `eacsl.py` on the 26 programs, at
 x86_64, the host's model. Each is instrumented and compiled by
 `e-acsl-gcc.sh` (the segment memory model, `--keep-going`), with Eva's
-preprocessing and C11; `eacsl_markers.c` defines the markers CHECK and END
+preprocessing, C11, and Frama-C's C library (`-L`), whose logic Canon-C's
+contracts name; `eacsl_markers.c` defines the markers CHECK and END
 call under Frama-C. Each then runs without address randomization
 (`setarch -R`): the segment model wants the program's memory where it
 expects it, and with randomization its runtime stops at the start
