@@ -36877,3 +36877,110 @@ eight of nine, run 3 nine of nine. What it shows:
   line, warns that ours differs, and keeps ours: two properties on one
   line are two alerts (run 1's two alarms on `ptr.c`'s line 38; 84
   alerts, where the line's fingerprint would give 69).
+
+---
+
+## VERIFY-083: Pre-registration — Frama-C's E-ACSL: the 26 Programs Check Their Annotations as They Run; Run 1, Report-Only
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-083 |
+| **Date**       | 2026-11-15 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 73d8d04 and VERIFY-082's close: `1`, `3`, `4`, `5` and `6` #66 (8946d5a), `2 · Platforms` #90 and `14 · Eva` #16 (511cb19), `8 · Records` #103 (73d8d04). |
+| **Scope**      | `tools/eva/eacsl.py` and `tools/eva/eacsl_markers.c` (new); `tools/eva/README.md`; `.github/workflows/eva.yml`, the job `e-acsl`, and its header, whose sentence on MdR VERIFY-082 left for this file's next change; the workflow map. |
+| **Category**   | The to-do list's item 5, Frama-C's plug-ins, group 1, its third part. The author decided on 2026-11-14: E-ACSL, on the 26 programs Eva analyses. |
+
+### What it is
+
+E-ACSL, Frama-C's runtime assertion checker, turns a program's ACSL
+annotations into C that checks them while the program runs: the contracts
+of the functions it calls, their assertions and loop invariants. Where Eva
+leaves a call's precondition Unknown over all the values a program could
+take, E-ACSL checks it on the values the program does take; of the 81 Eva
+leaves open at x86_64, it checks those it can translate.
+
+`tools/eva/eacsl.py run` takes each of the 26 programs, at x86_64, the
+host's model:
+
+- `e-acsl-gcc.sh -c -X -m segment -k`: instrumented as Frama-C reads it for
+  Eva (`eva.py`'s preprocessing) in C11, then compiled alone, with the
+  segment memory model and `--keep-going`, so that a failed annotation is
+  reported and the run goes on;
+- linked with `tools/eva/eacsl_markers.c`, which defines the two markers
+  `eva_program.h` calls under Frama-C: a CHECK that fails, and the END
+  with the count of failed checks;
+- run without address randomization, `setarch -R`, which the segment model
+  needs (below).
+
+A program is as E-ACSL runs it when it is instrumented and compiled, and
+runs to its END with no CHECK failed, no annotation failed ("FILE:LINE:
+Error: KIND failed:" on stderr) and no verdict E-ACSL calls unsound. With
+`--keep-going`, the exit status does not tell a failed annotation; the
+script reads the messages. Counted besides: the annotations E-ACSL does not
+translate, by construct, and the checks it inserts, the calls of
+`__e_acsl_assert` in the instrumented code. The job `e-acsl` of `14 · Eva`
+runs it after Frama-C's setup and GMP's development files, which E-ACSL's
+runtime links and the setup installs only on a cache miss. `ENFORCE` is
+off.
+
+### Measured here
+
+Frama-C 25.0 has E-ACSL's plug-in and its runtime, not `e-acsl-gcc.sh`:
+the script was run through a stand-in that does its two steps as its
+source does (Frama-C at `gcc_x86_64` with `-variadic-no-translation` and
+`-e-acsl`, then GCC with `e_acsl_rtl.c`, `libeacsl-dlmalloc.a` and GMP).
+
+- **4 of the 26 instrument**: `bits`, `checked`, `error` and `lifetime`.
+  Each compiles and runs to its END, fails 0, no annotation failed, no
+  verdict unsound; 254 checks inserted in the four.
+- **The 22 others stop in E-ACSL**, before any code: 8 on "typing was not
+  performed on construct" (`array`, `borrow`, `compare`, `diag`, `stack`,
+  `stringbuf`, `vec`, `vec_fmt`); 8 on "Unexpected error (Stack
+  overflow)" (`bitset`, `deque`, `hashmap`, `option`, `range`, `region`,
+  `result`, `vec_range`); 5 on "mkBinOp: unsupported operator for such
+  operands", a C integer beside a GMP one (`arena` and `pool` at
+  `core/arena.h` line 506, `memory`, `ptr` and `slice` in the C library's
+  `stdlib.h`); and `priority_queue` on the annotation error that stops it
+  for Eva and Metrics here.
+- **1900 annotations not translated**, in all 26, by construct: assigns
+  clauses in behaviours 745, datacons 427, predicates with labels 417,
+  logic functions or predicates performing read accesses 77, assigns 65,
+  `\dangling` 44, loop variants using GMP 42, and fewer others.
+- **Address randomization.** With it, 3 of the 4 stop at their start,
+  "Unsupported TLS area in the middle of heap area": `bits` 5 times of 5.
+  Without it (`setarch -R`), 3 of 3, and the four run. The bittree model
+  stops otherwise, "Not a start of block ... in free".
+- **A failure is seen.** A program calling `bits_test` with bit 70
+  instrumented the same way: "core/primitives/bits.h:166: Error:
+  Precondition failed: ... bit < 64", the value 70 given. With
+  `--keep-going` it runs on to its END and exits 0, and `eacsl.py` gives
+  it as not as E-ACSL runs it, the failure named; without, it aborts
+  (134).
+- Not run here: Frama-C 29's E-ACSL and its script.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 6, 8 and 14 run; 7 and 9 to 13 do not. 1
+to 6 run because `eva.yml` changes, which their ignores do not name.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| D1 | **1 to 6, 8 and 14 run**, and no other. | another set | H |
+| D2 | **1 to 6 and 8 are green**, each job with the notices of its last run (1, 3, 4, 5 and 6 #66; 2 #90; 8 #103), times aside, 2's slowest header among them. | a failure, or another notice | H: nothing they build or read changes. |
+| D3 | **14's native job, ten Eva jobs and total job are green with #16's notices**, times aside. | a failure, or another notice | H: `eva.py` and `mdr.py` do not change. |
+| D4 | **The job `e-acsl` is green**, and the switch has `e-acsl-gcc.sh`. | a failure | M: opam's Frama-C installs the script, as far as this record knows; GMP's files come from apt. |
+| D5 | **At least the 4 programs instrumented here instrument**: "instrumented N", N at least 4. | fewer | M: Frama-C 29's E-ACSL is four versions on; how many more is measured, not predicted. |
+| D6 | **Every program compiled runs to its END**: "compiled N, run to their end N". | an END missing | M: without randomization, as here. |
+| D7 | **No annotation fails and no CHECK fails**: "annotations failed 0 ... CHECKs failed 0". | a failure | M: WP proves every function against its contract, and each program calls them within their preconditions, as far as ASan, UBSan and Eva show; a failure would be a precondition a program breaks, of the 81 Eva leaves open, or a limit of E-ACSL's. |
+| D8 | **No verdict is unsound**: "verdicts unsound 0". | one or more | M–L |
+| D9 | **The job takes less than an hour.** | an hour or more | M |
+
+Measured, not predicted: how many programs instrument, the checks
+inserted, the annotations not translated by construct, and why the others
+stop.
+
+**What follows.** D1 to D9 scored. Run 2 pins, program by program, what
+Frama-C 29 gives (instrumented or not, the verdict), and enforces it:
+a program that stops instrumenting, or is no longer as E-ACSL runs it,
+fails the job.
