@@ -36356,6 +36356,7 @@ that changes `diag.h` the pointer probe. Their records predict it.
 | **ID**         | VERIFY-081 |
 | **Date**       | 2026-11-14 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-15 — Run 1 scored: M1 to M6 MATCH. CI's Frama-C 29 gives every one of the 858 functions the complexity Frama-C 25 gave it. Run 2, pre-registered below, enforces the pins. The Status above is the record as committed. |
 | **Baseline**   | bb3a456 and VERIFY-080's close: `1`, `3`, `4`, `5` and `6` #64, `2 · Platforms` #85, `8 · Records` #97. |
 | **Scope**      | `tools/metrics/` (`metrics.py`, `pins.txt`, `README.md`); `.github/workflows/platforms.yml`, the job `metrics`; `.github/workflows/records.yml`, its pin check and push path; the workflow map. |
 | **Category**   | The to-do list's item 5, Frama-C's plug-ins, group 1, its first part. The author decided on 2026-11-14: Metrics first, then MdR, then E-ACSL, each a record; Metrics reported and pinned, failing on a function's complexity changing without a record, as the size pins do. |
@@ -36425,3 +36426,51 @@ name (VERIFY-080 named `probes.yml` alone).
 **What follows.** M1 to M6 scored. If M4 holds, run 2 sets ENFORCE and
 the README's badge; if it misses, run 2 pins CI's figures first, and
 enforces at run 3.
+
+### Run 1 scored (2026-11-15)
+
+The push of e1d84fe, bb386d1 and 9281c73 started `1 · Build & test` #65,
+`2 · Platforms` #86, `3 · Static analysis & coverage` #65, `4`, `5` and
+`6` #65 and `8 · Records` #98, each green at its first attempt. The
+`metrics` job took 43 s, its setup's cache hit; it ran Frama-C 29.0
+(Copper).
+
+| # | scored |
+|---|--------|
+| M1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| M2 | **MATCH.** Every job 1 to 6 and 8 had before is green with the notices of its last run, times aside. |
+| M3 | **MATCH.** `metrics` is green: "858 functions of 56 of 56 headers". |
+| M4 | **MATCH.** "metrics pins: as pinned, 858 functions": Frama-C 29 gives every function the complexity Frama-C 25 gave it. |
+| M5 | **MATCH.** "cyclomatic complexity 1: 220; 2 to 5: 520; 6 to 10: 106; 11 to 20: 11; over 20: 1; statements 9035 in all", and the ten most complex as here, `error_message` first at 22. |
+| M6 | **MATCH.** 8's new step: "metrics pins: 858 functions in 51 rows; 0 problem(s)". |
+
+Six of six. Frama-C 29's normalization gives these 858 functions the
+statements and decisions Frama-C 25's does, so the pins measured locally
+hold in CI.
+
+### Run 2: pre-registration (2026-11-15)
+
+**The change.** As run 1's "What follows" said:
+
+- `tools/metrics/metrics.py` sets ENFORCE, so a difference from the pins
+  fails the `metrics` job;
+- the README gains the badge "Frama-C Metrics: CI", among the tools of
+  formal verification, after Eva's;
+- the workflow map and `tools/metrics/README.md` say it is enforced.
+
+The job's comment in `platforms.yml` still reads "Report-only in
+VERIFY-081's run 1", which stays true of run 1. A change to that file
+starts 1 to 6 (VERIFY-081's "The workflows"), so the comment is brought up
+to date with the file's next change instead.
+
+**The workflows.** `tools/which_workflows.py`: 2 and 8 run; no unit, probe
+or Eva program reads the changed files.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| N1 | **2 and 8 run**, and no other. | another set | H |
+| N2 | **2 is green, each of its 15 jobs with #86's notices, times aside**, `metrics`' "as pinned, 858 functions" among them, now enforced. | a failure, or another notice | H: the library is unchanged, ENFORCE changes only the job's exit status on a difference, and Frama-C's counts are syntactic. |
+| N3 | **8 is green, its 2 jobs with #98's notices, times aside**, and its metrics step's line as in run 1: "metrics pins: 858 functions in 51 rows; 0 problem(s)". | a failure, or another line | H |
+
+**What follows.** N1 to N3 scored. If they hold, VERIFY-081 closes, and
+item 5 continues with MdR.
