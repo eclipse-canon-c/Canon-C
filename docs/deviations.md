@@ -36887,7 +36887,7 @@ eight of nine, run 3 nine of nine. What it shows:
 | **ID**         | VERIFY-083 |
 | **Date**       | 2026-11-15 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-15 — Run 1 scored: D1 to D4 MATCH, D5 MISS, D6 to D9 not scored. E-ACSL instrumented no program: `e-acsl-gcc.sh` reads its arguments word by word, and the "-I" in each program's one `-E` took its file away ("no input files"). Run 1b, pre-registered below, gives each flag a `-E` of its own. Run 1b scored: E1 to E9 MATCH. 6 programs instrument, compile and run clean; 16 stop on an annotation error, the script reading the system's C headers, where `valid_read_string`, which Canon-C's contracts name, is not; 4 on E-ACSL's stack overflow. Run 1c, pre-registered below, reads Frama-C's C library (`-L`), as Eva does. The Status above is the record as committed. |
+| **Status update** | 2026-11-15 — Run 1 scored: D1 to D4 MATCH, D5 MISS, D6 to D9 not scored. E-ACSL instrumented no program: `e-acsl-gcc.sh` reads its arguments word by word, and the "-I" in each program's one `-E` took its file away ("no input files"). Run 1b, pre-registered below, gives each flag a `-E` of its own. Run 1b scored: E1 to E9 MATCH. 6 programs instrument, compile and run clean; 16 stop on an annotation error, the script reading the system's C headers, where `valid_read_string`, which Canon-C's contracts name, is not; 4 on E-ACSL's stack overflow. Run 1c, pre-registered below, reads Frama-C's C library (`-L`), as Eva does. Run 1c scored: F1 to F9 MATCH. 10 programs run, all their annotations holding, 1624 checks; 6 stop on E-ACSL's `mkBinOp`; 10 do not finish. Run 2, pre-registered below, pins the 26 results and enforces them. The Status above is the record as committed. |
 | **Baseline**   | 73d8d04 and VERIFY-082's close: `1`, `3`, `4`, `5` and `6` #66 (8946d5a), `2 · Platforms` #90 and `14 · Eva` #16 (511cb19), `8 · Records` #103 (73d8d04). |
 | **Scope**      | `tools/eva/eacsl.py` and `tools/eva/eacsl_markers.c` (new); `tools/eva/README.md`; `.github/workflows/eva.yml`, the job `e-acsl`, and its header, whose sentence on MdR VERIFY-082 left for this file's next change; the workflow map. |
 | **Category**   | The to-do list's item 5, Frama-C's plug-ins, group 1, its third part. The author decided on 2026-11-14: E-ACSL, on the 26 programs Eva analyses. |
@@ -37119,3 +37119,94 @@ annotations not translated, and why the others stop.
 
 **What follows.** F1 to F9 scored. Run 2 pins what Frama-C 29 gives,
 program by program, and enforces it.
+
+### Run 1c scored (2026-11-15)
+
+The push of 5025743 and 5e07cc3 started `2 · Platforms` #93, `8 · Records`
+#106 and `14 · Eva` #19, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| F1 | **MATCH.** 2, 8 and 14 ran, and no other. |
+| F2 | **MATCH.** 2's 16 jobs and 8's two gave #92's and #105's notices, times aside. |
+| F3 | **MATCH.** 14's native job, ten Eva jobs and total job gave #18's notices, times aside. |
+| F4 | **MATCH.** No program stops on an annotation error. |
+| F5 | **MATCH.** "instrumented 10": run 1b's 6, and `borrow`, `diag`, `memory` and `slice`. |
+| F6 | **MATCH.** "compiled 10, run to their end 10". |
+| F7 | **MATCH.** "annotations failed 0 ... CHECKs failed 0". |
+| F8 | **MATCH.** "verdicts unsound 0". |
+| F9 | **MATCH.** The job took 15 min 55 s, its E-ACSL step 15 min 19 s, `hashmap`'s 900 s among them. |
+
+Nine of nine.
+
+**Measured.** "e-acsl checks: 1624 inserted in the 10 instrumented
+programs", `memory` 444, `borrow` 360 and `ptr` 248 the most; 2006
+annotations not translated, assigns clauses in behaviours 791, datacons
+551, labeled `\valid` 145, predicates with labels 110 and labeled
+`\valid_read` 92 the most. The 16 others stop:
+
+- 6 on "Failure: mkBinOp: unsupported operator for such operands", in 1.9
+  to 2.4 s: a quantified integer, or a result, beside an `\at` of a C
+  integer that E-ACSL holds as GMP (`arena`, `pool`, `priority_queue`,
+  `stack`, `stringbuf`, `vec`);
+- 9 on "Unexpected error (Stack overflow)", after 162 to 179 s, `region`'s
+  after 672 s (`array`, `bitset`, `deque`, `option`, `range`, `region`,
+  `result`, `vec_fmt`, `vec_range`);
+- `hashmap`, "not done in 900 s".
+
+**Tried here, with Frama-C 25.** E-ACSL's GMP for every integer
+(`-e-acsl-gmp-only`, the script's `-g`) on `arena.c`: Frama-C 25 stops on
+its other failure, "typing was not performed", which Frama-C 29 does not
+give; so it says nothing of CI's `mkBinOp`. No limit on the stack
+(`ulimit -s unlimited`) on `option.c`: not done in 600 s of CPU (exit
+124), where the stack as it is overflows in 18 s. The overflow is no
+depth a larger stack reaches.
+
+### Run 2: pre-registration (2026-11-15)
+
+**The change.** `tools/eva/eacsl.py`:
+
+- each program's result: `runs` (as E-ACSL runs it); `stops: mkBinOp`;
+  `stops: does not finish`, the stack's overflow or the time limit, one
+  result since the two are one recursion that does not end, so that the
+  runner's speed cannot move a program from one to the other;
+- `tools/eva/eacsl_pins.txt` (new) pins the 26 as run 1c gave them: runs
+  10, `mkBinOp` 6, does not finish 10. A program compiled and not as
+  E-ACSL runs it is never pinned;
+- `ENFORCE` is set: a result not as pinned, or pins not well formed, fail
+  the job; a notice "e-acsl pins" gives the comparison;
+- `EACSL_SECONDS` is 300, not 900: the 10 that run take 7 s at most, the
+  6 that stop on `mkBinOp` 2.4 s at most, and the overflows 162 to 179 s; `region`
+  and `hashmap` are cut at 300 s, and do not finish either way;
+- `eacsl.py pin DIR [FILE]` writes the pins from a run's 26 summaries,
+  and `eacsl.py check` checks them.
+
+`eva.yml`'s comment, "Report-only in run 1", is left for that file's next
+change, which starts 1 to 6.
+
+**Measured here.** `eacsl.py check`: "26 programs, runs 10, stops:
+mkBinOp 6, stops: does not finish 10; 0 problem(s)". Through the stand-in,
+`bits`, `checked`, `error`, `lifetime`, `arena` and `option`, whose
+results with Frama-C 25 are their pins': "as pinned, 6 programs", exit 0;
+with `option` pinned `runs`, exit 1, "option: pinned "runs", gives "stops:
+does not finish""; `pin` from those six's summaries writes nothing,
+"array: no summary".
+
+**The workflows.** `tools/which_workflows.py`: 2, 8 and 14 run.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| G1 | **2, 8 and 14 run**, and no other. | another set | H |
+| G2 | **2 and 8 are green, each job with #93's and #106's notices**, times aside, 2's slowest header among them. | a failure, or another notice | H |
+| G3 | **14's native job, ten Eva jobs and total job are green with #19's notices**, times aside. | a failure, or another notice | H |
+| G4 | **The job `e-acsl` is green, enforced: "e-acsl pins: as pinned, 26 programs: runs 10, stops: mkBinOp 6, stops: does not finish 10".** | a failure, or another notice | H–M: the translation does not change from run to run, and a program that does not finish does not finish either way. |
+| G5 | **"10 of 26 programs as E-ACSL runs them: instrumented 10, compiled 10, run to their end 10; annotations failed 0, verdicts unsound 0, CHECKs failed 0".** | another figure | H |
+| G6 | **"1624 inserted in the 10 instrumented programs".** | another count | H |
+| G7 | **The E-ACSL step takes less than 12 minutes**, run 1c's 15 min 19 s. | 12 minutes or more | M: about 2000 s of the overflows and the cut on the runner's cores. |
+
+The annotations not translated are measured: `region` and `hashmap`, cut
+sooner, may warn of fewer.
+
+**What follows.** G1 to G7 scored. If they hold, the record closes with
+the README's badge, in a push of the record and `README.md`, which starts
+8 alone.
