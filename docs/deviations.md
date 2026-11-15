@@ -36526,7 +36526,7 @@ of three. What it shows:
 | **ID**         | VERIFY-082 |
 | **Date**       | 2026-11-15 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-15 — Run 1 scored: A1 to A5, A8 and A9 MATCH; A6 and A7 MISS. Frama-C 29's MdR gives every ACSL property the kind pass, whatever its status: only the 3 alarms reached code scanning. Run 2, pre-registered below, takes the assertion and the preconditions from Report's table. Run 2 scored: B1 to B7 and B9 MATCH, B8 MISS: 84 results uploaded, and still 3 alerts; the 81 new results had a start line and no columns. Run 3, pre-registered below, gives each result its columns and enforces. The Status above is the record as committed. |
+| **Status update** | 2026-11-15 — Run 1 scored: A1 to A5, A8 and A9 MATCH; A6 and A7 MISS. Frama-C 29's MdR gives every ACSL property the kind pass, whatever its status: only the 3 alarms reached code scanning. Run 2, pre-registered below, takes the assertion and the preconditions from Report's table. Run 2 scored: B1 to B7 and B9 MATCH, B8 MISS: 84 results uploaded, and still 3 alerts; the 81 new results had a start line and no columns. Run 3, pre-registered below, gives each result its columns and enforces. CLOSED: run 3 matched C1 to C9. Code scanning holds, as 84 open alerts of severity Warning, the properties Eva's pins hold open, the alarms from MdR's SARIF and the rest from Report's table; a program without its SARIF, or an alarm MdR does not confirm, fails `14 · Eva`'s total job ("Run 3 scored", below). The Status above is the record as committed. |
 | **Baseline**   | 7915e88 and VERIFY-081's close: `1`, `3`, `4`, `5` and `6` #65 (9281c73), `2 · Platforms` #87 and `8 · Records` #99 (7915e88), `9 · Probes` #27 (bb3a456), `14 · Eva` #13 (10ab302). |
 | **Scope**      | `tools/eva/eva.py` (MdR in Eva's command); `tools/eva/mdr.py` (new); `tools/eva/README.md`; `.github/workflows/eva.yml`, its total job; the workflow map; and `.github/workflows/platforms.yml`, the `metrics` job's comment, which VERIFY-081 left for that file's next change. |
 | **Category**   | The to-do list's item 5, Frama-C's plug-ins, group 1, its second part. The author decided on 2026-11-14: MdR's SARIF, uploaded to GitHub's code scanning. |
@@ -36819,3 +36819,61 @@ program's SARIF removed too, it exits 1 and writes no `eva.sarif`.
 the README's badge, in a push of the record and `README.md`, which starts
 8 alone. If it misses, run 4 looks for the cause with what run 3's log
 shows.
+
+### Run 3 scored (2026-11-15)
+
+The push of 08fdd4c and 511cb19 started `2 · Platforms` #90, `8 · Records`
+#102 and `14 · Eva` #16, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| C1 | **MATCH.** 2, 8 and 14 ran, and no other. |
+| C2 | **MATCH.** The 18 jobs of 2 and 8 gave #89's and #101's notices, times aside. |
+| C3 | **MATCH.** 14's native job and ten Eva jobs gave #15's notices, times aside. |
+| C4 | **MATCH.** "293540 results, open 30, pass 293510; levels error 6880, none 286660". |
+| C5 | **MATCH.** The alarms 30 of 30; the assertions and preconditions 744, MdR placing all 744. |
+| C6 | **MATCH.** "84 results for code scanning, 84 warning(s), 0 error(s); ... MdR's SARIF, as Report's table 3, Report's table, at MdR's region 81". |
+| C7 | **MATCH.** The total job is green with `ENFORCE` set, the upload with it: "Analysis upload status is complete.", 84 warnings of an inconsistent fingerprint. |
+| C8 | **MATCH.** The author reads 84 open alerts of `frama-c` in the Security tab, each of severity Warning: filtered by `severity:error`, none; by warning, all. |
+| C9 | **MATCH.** "mdr others" 0; "of level error, which MdR gives an invalid property, 6880 at 117 places, not uploaded either", listed in the log. |
+
+Nine of nine. The columns were the cause of B8: with them, the 81 results
+run 2 uploaded without alerts are alerts.
+
+**Measured.** MdR's 6880 results of level error are, at the places looked
+at, the properties Report's table calls Dead: in code Eva finds the
+program never reaches. At `core/arena.h` line 789, MdR has 140 over the
+ten models, and Report's table, here with Frama-C 25, 14 preconditions of
+`bytes_from` Dead there at x86_64. The others looked at are a loop that
+does not end (`core/primitives/contract.h` line 279), a generic module's
+instantiation in a driver (`vmacros/vdrivers/stack_verify.h` line 42), and
+a call of `memcmp` the programs never reach (`core/slice.h` line 442).
+MdR's SARIF, uploaded as it is, would show those as errors, and nothing
+else: its alarms too are at level none.
+
+**Closed.** `14 · Eva`'s total job uploads to GitHub's code scanning,
+category `eva`, the 84 distinct properties Eva's pins hold open at the ten
+models: each an alert of severity Warning, at its file, line and columns,
+naming its status, the property, the function, the programs and the
+models. The 3 alarms are MdR's results, which Report's table must agree
+with; the assertion and the 81 preconditions are Report's statuses, at
+MdR's regions. A program without its SARIF, or an alarm without MdR's open
+result, fails the job, and nothing is uploaded. The README gains the badge
+"Frama-C MdR: code scanning". `eva.yml`'s comment, that the total job keeps
+MdR's results, is still left for that file's next change.
+
+The record scored 24 of its 27 predictions: run 1 seven of nine, run 2
+eight of nine, run 3 nine of nine. What it shows:
+
+- **MdR's SARIF carries a status for the alarms alone.** Frama-C 29's MdR
+  gives every ACSL property the kind pass and the level none, or error
+  when Eva finds it dead; so it says nothing of a precondition Eva leaves
+  Unknown. Run 1's prediction had read the mapping in summaries of the
+  source; the line that builds the result has none.
+- **Code scanning needs columns.** A result with a start line alone is
+  taken, processed without an error, and makes no alert. GitHub does not
+  say so; its smallest example has the columns.
+- **A result's own fingerprint holds.** The upload computes one from the
+  line, warns that ours differs, and keeps ours: two properties on one
+  line are two alerts (run 1's two alarms on `ptr.c`'s line 38; 84
+  alerts, where the line's fingerprint would give 69).
