@@ -28,17 +28,35 @@ annotation, with --keep-going.
     python3 tools/eva/eacsl.py run [PROGRAM...]
         Into eacsl_out/: each program's instrumented code (.frama.c),
         E-ACSL's output (.log), the run's (.out, .err) and a summary
-        (.json). Prints a table; the notices go to notices_eacsl.txt.
-        EACSL_GCC names the script (default e-acsl-gcc.sh), EACSL_SECONDS
-        limits each instrumentation (default 900).
+        (.json). Prints a table, and compares each program's result with
+        its pin; the notices go to notices_eacsl.txt. EACSL_GCC names the
+        script (default e-acsl-gcc.sh), EACSL_SECONDS limits each
+        instrumentation (default 300), EACSL_PINS names the pins (default
+        tools/eva/eacsl_pins.txt).
+    python3 tools/eva/eacsl.py pin [DIR] [FILE]
+        Writes the pins from a run's summaries (DIR, default eacsl_out).
+    python3 tools/eva/eacsl.py check
+        The pins are well formed: one result of three for each program.
 
 Counted besides, not part of the verdict: the annotations E-ACSL does not
 translate ("E-ACSL construct ... is not yet supported"), by construct, and
 the checks it inserts: the calls of __e_acsl_assert in the instrumented
 code, each a check of an annotation, or of part of one.
 
-ENFORCE: a program not as E-ACSL runs it fails the job (VERIFY-083's
-run 1 reports).
+Each program's result, as tools/eva/eacsl_pins.txt pins it:
+
+    runs                     as E-ACSL runs it, above
+    stops: mkBinOp           E-ACSL's translation stops on a C integer
+                             beside a GMP one ("mkBinOp: unsupported
+                             operator for such operands")
+    stops: does not finish   E-ACSL's stack overflows, or it is not done in
+                             EACSL_SECONDS: with no limit on the stack,
+                             option.c's instrumentation was not done in 600 s
+                             of CPU (VERIFY-083), so the two are one result
+
+A program compiled and not as E-ACSL runs it is never pinned. With
+ENFORCE (since VERIFY-083's run 2), a result not as pinned, or pins not
+well formed, fail the job.
 """
 import collections
 import json
@@ -57,13 +75,15 @@ sys.path.insert(0, HERE)
 sys.dont_write_bytecode = True
 import eva  # noqa: E402  (the programs and their preprocessing)
 
-ENFORCE = False   # VERIFY-083 run 1: report-only
+ENFORCE = True    # since VERIFY-083's run 2; runs 1, 1b and 1c reported
 
 OUT = 'eacsl_out'
 NOTICES = 'notices_eacsl.txt'
 CUT = 4000        # the runner cuts an annotation at 4096 characters
 SCRIPT = os.environ.get('EACSL_GCC', 'e-acsl-gcc.sh')
-SECONDS = int(os.environ.get('EACSL_SECONDS', '900'))
+SECONDS = int(os.environ.get('EACSL_SECONDS', '300'))
+PINS = os.environ.get('EACSL_PINS', os.path.join(HERE, 'eacsl_pins.txt'))
+RESULTS = ('runs', 'stops: mkBinOp', 'stops: does not finish')
 RUN_SECONDS = 120
 MARKERS = os.path.join(HERE, 'eacsl_markers.c')
 
@@ -212,6 +232,97 @@ def one(program, markers):
     return s
 
 
+def result_of(s):
+    """A program's result, as the pins hold it."""
+    if s['ok']:
+        return 'runs'
+    if s['compiled']:
+        return 'fails'
+    r = s['reason']
+    if 'mkBinOp' in r:
+        return 'stops: mkBinOp'
+    if 'Stack overflow' in r or r.startswith('not done in'):
+        return 'stops: does not finish'
+    return 'stops: ' + (r or 'unknown')
+
+
+def read_pins(path=None):
+    """The pins, and what is wrong with them."""
+    path = path or PINS
+    pins, problems = {}, []
+    try:
+        with open(path, encoding='utf-8') as f:
+            lines = f.read().splitlines()
+    except OSError as e:
+        return {}, [f'no pins: {e}']
+    for n, raw in enumerate(lines, 1):
+        line = raw.split('#', 1)[0].strip()
+        if not line or line.split()[0] == 'program':
+            continue
+        parts = line.split(None, 1)
+        if len(parts) != 2:
+            problems.append(f'line {n}: not "program result"')
+            continue
+        prog, res = parts[0], ' '.join(parts[1].split())
+        if prog in pins:
+            problems.append(f'line {n}: {prog} pinned twice')
+        if res not in RESULTS:
+            problems.append(f'line {n}: {prog}: "{res}" is not a result the pins hold')
+        pins[prog] = res
+    problems += [f'{p}: no pin' for p in sorted(eva.PROGRAMS) if p not in pins]
+    problems += [f'{p}: pinned, and not a program' for p in sorted(pins) if p not in eva.PROGRAMS]
+    return pins, problems
+
+
+HEADER = """\
+# E-ACSL on the programs of tools/eva/programs, at x86_64: each one's result,
+# as tools/eva/eacsl.py gives it with Frama-C 29.0 (Copper) (VERIFY-083).
+#
+#   runs                     instrumented and compiled, and run to its END with
+#                            no CHECK, no annotation and no verdict failing
+#   stops: mkBinOp           E-ACSL's translation stops on a C integer beside a
+#                            GMP one ("mkBinOp: unsupported operator")
+#   stops: does not finish   E-ACSL's stack overflows, or it is not done in
+#                            EACSL_SECONDS (300)
+#
+# A result not as pinned fails the e-acsl job of 14 · Eva. A program compiled
+# and not as E-ACSL runs it is never pinned. eacsl.py pin DIR writes the pins
+# from a run's summaries, under a record.
+"""
+
+
+def pin(where_dir, path):
+    rows = []
+    for p in sorted(eva.PROGRAMS):
+        try:
+            with open(os.path.join(where_dir, p + '.json'), encoding='utf-8') as f:
+                s = json.load(f)
+        except OSError:
+            print(f'{p}: no summary in {where_dir}')
+            return 1
+        r = result_of(s)
+        if r not in RESULTS:
+            print(f'{p}: "{r}" is not a result the pins hold')
+            return 1
+        rows.append((p, r))
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(HEADER + f'{"program":<16}result\n')
+        for p, r in rows:
+            f.write(f'{p:<16}{r}\n')
+    print(f'{path}: {len(rows)} programs')
+    return 0
+
+
+def check():
+    pins, problems = read_pins()
+    counts = collections.Counter(pins.values())
+    print(f'e-acsl pins: {len(pins)} programs, ' + ', '.join(f'{r} {counts[r]}' for r in RESULTS)
+          + f'; {len(problems)} problem(s)')
+    for p in problems:
+        print('  ' + p)
+    return 1 if problems else 0
+
+
 def run(programs):
     os.makedirs(OUT, exist_ok=True)
     markers = os.path.abspath(os.path.join(OUT, 'eacsl_markers.o'))
@@ -273,12 +384,23 @@ def run(programs):
             + [f'{s["program"]}: unsound at {u["file"]}:{u["line"]} {u["kind"]}'
                for s in results for u in s['unsound']]
             + [f'{s["program"]}: CHECK at line {x}' for s in results for x in s['checks_failed']])))
+    pins, pin_problems = read_pins()
+    diffs = [f'{s["program"]}: pinned "{pins[s["program"]]}", gives "{result_of(s)}"'
+             for s in results if s['program'] in pins and result_of(s) != pins[s['program']]]
+    counts = collections.Counter(result_of(s) for s in results)
+    if not diffs and not pin_problems:
+        pinned = (f'e-acsl pins: as pinned, {n} programs: '
+                  + ', '.join(f'{r} {counts[r]}' for r in RESULTS if counts[r]))
+    else:
+        pinned = (f'e-acsl pins: {len(diffs)} difference(s), {len(pin_problems)} problem(s)'
+                  + ('' if ENFORCE else ', report-only') + ': ' + '; '.join(diffs + pin_problems))
+    lines.insert(1, ('e-acsl pins', pinned))
     with open(NOTICES, 'w', encoding='utf-8') as f:
         for title, msg in lines:
             f.write(f'::notice title={title}::{msg[:CUT]}\n')
     for _, msg in lines:
         print(msg)
-    return 1 if (ENFORCE and len(ok) < n) else 0
+    return 1 if (ENFORCE and (diffs or pin_problems)) else 0
 
 
 def main(argv):
@@ -289,6 +411,10 @@ def main(argv):
             print('no such program: ' + ', '.join(unknown))
             return 2
         return run(programs)
+    if len(argv) >= 2 and argv[1] == 'pin' and len(argv) <= 4:
+        return pin(argv[2] if len(argv) > 2 else OUT, argv[3] if len(argv) > 3 else PINS)
+    if len(argv) == 2 and argv[1] == 'check':
+        return check()
     print(__doc__)
     return 2
 

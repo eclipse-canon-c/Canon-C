@@ -234,6 +234,18 @@ the checks it inserts.
 
     python3 tools/eva/eacsl.py run [PROGRAM...]
 
+Each program's result is pinned, in `eacsl_pins.txt`: `runs`, as above;
+`stops: mkBinOp`, E-ACSL's translation stopping on a C integer beside a GMP
+one; or `stops: does not finish`, E-ACSL's stack overflowing, or 300 s
+passing (with no limit on the stack, `option.c`'s instrumentation was not
+done in 600 s of CPU). With Frama-C 29, 10 programs run, all their
+annotations holding, 1624 checks in all; 6 stop on `mkBinOp`; 10 do not
+finish (VERIFY-083's run 1c). Since VERIFY-083's run 2 a result not as
+pinned fails the job, as does a program compiled and not as E-ACSL runs
+it, which is never pinned.
+
+    python3 tools/eva/eacsl.py pin [DIR] [FILE]
+    python3 tools/eva/eacsl.py check
+
 Frama-C 25, here, has E-ACSL but not its script; it instruments 4 of the
-26 programs, and stops on the others (VERIFY-083). Report-only in
-VERIFY-083's run 1 (`ENFORCE`).
+26 programs, and stops on the others (VERIFY-083).

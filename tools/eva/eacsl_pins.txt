@@ -1,0 +1,40 @@
+# E-ACSL on the programs of tools/eva/programs, at x86_64: each one's result,
+# as tools/eva/eacsl.py gives it with Frama-C 29.0 (Copper) (VERIFY-083).
+#
+#   runs                     instrumented and compiled, and run to its END with
+#                            no CHECK, no annotation and no verdict failing
+#   stops: mkBinOp           E-ACSL's translation stops on a C integer beside a
+#                            GMP one ("mkBinOp: unsupported operator")
+#   stops: does not finish   E-ACSL's stack overflows, or it is not done in
+#                            EACSL_SECONDS (300)
+#
+# A result not as pinned fails the e-acsl job of 14 · Eva. A program compiled
+# and not as E-ACSL runs it is never pinned. eacsl.py pin DIR writes the pins
+# from a run's summaries, under a record.
+program         result
+arena           stops: mkBinOp
+array           stops: does not finish
+bits            runs
+bitset          stops: does not finish
+borrow          runs
+checked         runs
+compare         runs
+deque           stops: does not finish
+diag            runs
+error           runs
+hashmap         stops: does not finish
+lifetime        runs
+memory          runs
+option          stops: does not finish
+pool            stops: mkBinOp
+priority_queue  stops: mkBinOp
+ptr             runs
+range           stops: does not finish
+region          stops: does not finish
+result          stops: does not finish
+slice           runs
+stack           stops: mkBinOp
+stringbuf       stops: mkBinOp
+vec             stops: mkBinOp
+vec_fmt         stops: does not finish
+vec_range       stops: does not finish
