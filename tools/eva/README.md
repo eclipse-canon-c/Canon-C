@@ -205,3 +205,34 @@ an invalid property; the log lists them by place.
 at every model. A program without it, or a pinned alarm with no open
 result in MdR's SARIF, fails the total job, and nothing is uploaded: since
 VERIFY-082's run 3 (`ENFORCE`); runs 1 and 2 reported.
+
+## E-ACSL (VERIFY-083)
+
+E-ACSL, Frama-C's runtime assertion checker, turns a program's annotations
+into C that checks them while the program runs: the contracts of the
+functions it calls, their assertions and loop invariants. Where Eva leaves a
+call's precondition Unknown for all the values a program could take, E-ACSL
+checks it on the values the program does take.
+
+The `e-acsl` job of `14 · Eva` runs `eacsl.py` on the 26 programs, at
+x86_64, the host's model. Each is instrumented and compiled by
+`e-acsl-gcc.sh` (the segment memory model, `--keep-going`), with Eva's
+preprocessing and C11; `eacsl_markers.c` defines the markers CHECK and END
+call under Frama-C. Each then runs without address randomization
+(`setarch -R`): the segment model wants the program's memory where it
+expects it, and with randomization its runtime stops at the start
+("Unsupported TLS area in the middle of heap area").
+
+A program is as E-ACSL runs it when it is instrumented and compiled, and
+runs to its END with no CHECK failed, no annotation failed ("FILE:LINE:
+Error: KIND failed:", which `--keep-going` reports and goes on) and no
+verdict E-ACSL calls unsound. The exit status does not tell a failed
+annotation, with `--keep-going`. Counted besides: the annotations E-ACSL
+does not translate, by construct (it never checks an `assigns` clause), and
+the checks it inserts.
+
+    python3 tools/eva/eacsl.py run [PROGRAM...]
+
+Frama-C 25, here, has E-ACSL but not its script; it instruments 4 of the
+26 programs, and stops on the others (VERIFY-083). Report-only in
+VERIFY-083's run 1 (`ENFORCE`).

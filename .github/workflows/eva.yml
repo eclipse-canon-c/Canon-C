@@ -18,9 +18,15 @@ name: "14 · Eva: programs that use Canon-C"
 # in tools/eva/eva.py).
 #
 # MdR, Frama-C's Markdown Report plug-in, writes each run's statuses as
-# SARIF too. The total job keeps MdR's results for the properties the pins
-# hold open, at every model, as one run, and uploads it to GitHub's code
-# scanning, category eva (tools/eva/mdr.py, VERIFY-082).
+# SARIF too. The total job uploads the properties the pins hold open, at
+# every model, as one run, to GitHub's code scanning, category eva: the
+# alarms from MdR's SARIF, the assertion and the preconditions from
+# Report's table, which MdR's SARIF gives the kind pass (tools/eva/mdr.py,
+# VERIFY-082).
+#
+# E-ACSL, Frama-C's runtime assertion checker, makes each program check its
+# annotations as it runs: the e-acsl job instruments, compiles and runs the
+# 26 at x86_64, the host's model (tools/eva/eacsl.py, VERIFY-083).
 # ---------------------------------------------------------------------------
 
 on:
@@ -61,6 +67,41 @@ jobs:
       - name: "Notice"
         if: ${{ !cancelled() }}
         run: cat notices_1.txt 2>/dev/null || true
+
+  # VERIFY-083: each program instrumented by E-ACSL (e-acsl-gcc.sh, the
+  # segment model, --keep-going), compiled, and run without address
+  # randomization (setarch -R), which the segment model needs. A program
+  # is as E-ACSL runs it when it runs to its END with no CHECK failed, no
+  # annotation failed and no unsound verdict. Report-only in run 1.
+  e-acsl:
+    name: "E-ACSL: each program checks its annotations as it runs"
+    runs-on: ubuntu-24.04
+    # Setup can take 47 minutes when its cache misses (VERIFY-060 run 1).
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "GMP, which E-ACSL's runtime links"
+        # On a cache hit the setup installs opam alone, not libgmp-dev.
+        run: sudo apt-get install -y --no-install-recommends libgmp-dev
+      - name: "E-ACSL on every program"
+        run: |
+          eval $(opam env --switch=frama-c)
+          frama-c -version
+          command -v e-acsl-gcc.sh
+          python3 tools/eva/eacsl.py run
+      - name: Upload the instrumented programs, their runs and the summaries
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: eacsl
+          path: eacsl_out
+          if-no-files-found: warn
+          retention-days: 30
+          overwrite: true
+      - name: "Notices: E-ACSL"
+        if: ${{ !cancelled() }}
+        run: cat notices_eacsl.txt 2>/dev/null || true
 
   eva:
     name: "eva @ ${{ matrix.model }}"
