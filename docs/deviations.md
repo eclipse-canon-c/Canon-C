@@ -36356,7 +36356,7 @@ that changes `diag.h` the pointer probe. Their records predict it.
 | **ID**         | VERIFY-081 |
 | **Date**       | 2026-11-14 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-15 — Run 1 scored: M1 to M6 MATCH. CI's Frama-C 29 gives every one of the 858 functions the complexity Frama-C 25 gave it. Run 2, pre-registered below, enforces the pins. CLOSED: run 2 matched N1 to N3. Since it, a function whose cyclomatic complexity is not as pinned, or that is measured and not pinned, or pinned and not measured, fails `2 · Platforms`' `metrics` job; each of the three was checked here to fail it ("Run 2 scored", below). The Status above is the record as committed. |
+| **Status update** | 2026-11-15 — Run 1 scored: M1 to M6 MATCH. CI's Frama-C 29 gives every one of the 858 functions the complexity Frama-C 25 gave it. Run 2, pre-registered below, enforces the pins. CLOSED: run 2 matched N1 to N3. Since it, a function whose cyclomatic complexity is not as pinned, or that is measured and not pinned, or pinned and not measured, fails `2 · Platforms`' `metrics` job; each of the three was checked here to fail it ("Run 2 scored", below). Correction, 2026-11-15 (VERIFY-083): `2 · Platforms` has 16 jobs, not the 15 N2 and its scoring say; run 2 compared 18 with 8's two, and all 16 gave #86's notices, so N2's MATCH stands. The Status above is the record as committed. |
 | **Baseline**   | bb3a456 and VERIFY-080's close: `1`, `3`, `4`, `5` and `6` #64, `2 · Platforms` #85, `8 · Records` #97. |
 | **Scope**      | `tools/metrics/` (`metrics.py`, `pins.txt`, `README.md`); `.github/workflows/platforms.yml`, the job `metrics`; `.github/workflows/records.yml`, its pin check and push path; the workflow map. |
 | **Category**   | The to-do list's item 5, Frama-C's plug-ins, group 1, its first part. The author decided on 2026-11-14: Metrics first, then MdR, then E-ACSL, each a record; Metrics reported and pinned, failing on a function's complexity changing without a record, as the size pins do. |
@@ -36887,6 +36887,7 @@ eight of nine, run 3 nine of nine. What it shows:
 | **ID**         | VERIFY-083 |
 | **Date**       | 2026-11-15 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-15 — Run 1 scored: D1 to D4 MATCH, D5 MISS, D6 to D9 not scored. E-ACSL instrumented no program: `e-acsl-gcc.sh` reads its arguments word by word, and the "-I" in each program's one `-E` took its file away ("no input files"). Run 1b, pre-registered below, gives each flag a `-E` of its own. The Status above is the record as committed. |
 | **Baseline**   | 73d8d04 and VERIFY-082's close: `1`, `3`, `4`, `5` and `6` #66 (8946d5a), `2 · Platforms` #90 and `14 · Eva` #16 (511cb19), `8 · Records` #103 (73d8d04). |
 | **Scope**      | `tools/eva/eacsl.py` and `tools/eva/eacsl_markers.c` (new); `tools/eva/README.md`; `.github/workflows/eva.yml`, the job `e-acsl`, and its header, whose sentence on MdR VERIFY-082 left for this file's next change; the workflow map. |
 | **Category**   | The to-do list's item 5, Frama-C's plug-ins, group 1, its third part. The author decided on 2026-11-14: E-ACSL, on the 26 programs Eva analyses. |
@@ -36984,3 +36985,66 @@ stop.
 Frama-C 29 gives (instrumented or not, the verdict), and enforces it:
 a program that stops instrumenting, or is no longer as E-ACSL runs it,
 fails the job.
+
+### Run 1 scored (2026-11-15)
+
+The push of b7d8329 and ba2f0b0 started `1`, `3`, `4`, `5` and `6` #67,
+`2 · Platforms` #91, `8 · Records` #104 and `14 · Eva` #17, each green at
+its first attempt.
+
+| # | scored |
+|---|--------|
+| D1 | **MATCH.** 1 to 6, 8 and 14 ran, and no other. |
+| D2 | **MATCH.** The 62 jobs of 1, 3, 4, 5 and 6 and the 16 of 2 gave their last runs' notices, times aside; 8's two jobs, as #103's, gave none. |
+| D3 | **MATCH.** 14's native job, ten Eva jobs and total job gave #16's notices, times aside. |
+| D4 | **MATCH.** The job is green; the switch has `/home/runner/.opam/frama-c/bin/e-acsl-gcc.sh`, Frama-C 29.0 (Copper). GMP's files were on the runner already: "libgmp-dev is already the newest version". |
+| D5 | **MISS.** "instrumented 0": every program stopped at once, "error: no input files", in 0.0 s. |
+| D6 to D9 | **Not scored.** No program was compiled or run: each holds of nothing. They are carried to run 1b. |
+
+Four of five.
+
+**Why.** `e-acsl-gcc.sh` normalizes its arguments with `getopt`, then reads
+them in a loop over `$@` unquoted, matching each word against its
+options. `eacsl.py` gave each program's flags as one `-E`, "-std=c11 -I
+core/primitives -I core ...": its word "-I" matched the script's own `-I`,
+which names Frama-C's executable, took the next word for it and shifted
+the arguments, until the program's file was gone. The loop, as read from
+the script's source, and run here on its own: run 1's form, "no input
+files"; one flag to each `-E`, with no space ("-Icore"), the file kept,
+Frama-C's path untouched, every flag passed, for all 26 programs. The
+script appends each `-E` to the others. The stand-in the record tested
+with here did the script's two steps, and read its arguments as a script
+would that quotes them; so it could not show this.
+
+### Run 1b: pre-registration (2026-11-15)
+
+**The change.** `tools/eva/eacsl.py` gives each preprocessing flag a `-E`
+of its own, one word: "-I" joined to its directory, as "-D" and "-U" to
+theirs. A flag that is one of the script's options, or has a space, stops
+that program, with the reason, before the script runs; none of the 26
+has one.
+
+**Measured here.** Through the stand-in, now appending each `-E`, as the
+script does: as in run 1's record, 4 of 26 instrumented, compiled and run
+to their END, nothing failed, 254 checks, 1900 annotations not
+translated.
+
+**The workflows.** `tools/which_workflows.py`: 2, 8 and 14 run.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| E1 | **2, 8 and 14 run**, and no other. | another set | H |
+| E2 | **2 and 8 are green, each job with #91's and #104's notices**, times aside, 2's slowest header among them. | a failure, or another notice | H |
+| E3 | **14's native job, ten Eva jobs and total job are green with #17's notices**, times aside. | a failure, or another notice | H |
+| E4 | **No program stops before Frama-C**: no "no input files", and each instrumentation runs Frama-C. | one stops | H: each command went through the script's loop, as its source reads, here. |
+| E5 | **At least the 4 programs instrumented here instrument**: "instrumented N", N at least 4. | fewer | M: as D5. |
+| E6 | **Every program compiled runs to its END**: "compiled N, run to their end N". | an END missing | M |
+| E7 | **No annotation fails and no CHECK fails**: "annotations failed 0 ... CHECKs failed 0". | a failure | M: as D7. |
+| E8 | **No verdict is unsound**: "verdicts unsound 0". | one or more | M–L |
+| E9 | **The job takes less than an hour.** | an hour or more | M |
+
+Measured, not predicted, as for run 1: how many instrument, the checks
+inserted, the annotations not translated, and why the others stop.
+
+**What follows.** E1 to E9 scored. Run 2 pins what Frama-C 29 gives,
+program by program, and enforces it.
