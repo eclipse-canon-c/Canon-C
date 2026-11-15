@@ -30,13 +30,16 @@ call returns (CHECK) and marks its end (END, eva_program.h).
     eva.py run MODEL [PROGRAM...]
         Eva on each program at the machine model MODEL (MODELS: the ten the
         machine-model proofs use), into eva_out/MODEL/: Eva's output (.log),
-        the property statuses (.csv, Frama-C's Report plugin) and a summary
-        (.json). EVA_SECONDS limits each run (default 1200). EVA_FRAMAC_ARGS
-        adds options (Frama-C 25 needs -c11, which 29 does not). Each
-        program's result is compared with its pin, its block in
-        tools/eva/pins/MODEL.txt: its line without the time, then each
-        property Eva leaves open (VERIFY-066 run 2). The line says "as
-        pinned", "not as pinned" (with the difference) or "no pin".
+        the property statuses (.csv, Frama-C's Report plugin), the same
+        statuses as SARIF (.sarif, Frama-C's MdR plug-in, when the Frama-C
+        has it: 29 does, 25 does not; tools/eva/mdr.py reads them,
+        VERIFY-082) and a summary (.json). EVA_SECONDS limits each run
+        (default 1200). EVA_FRAMAC_ARGS adds options (Frama-C 25 needs
+        -c11, which 29 does not). Each program's result is compared with
+        its pin, its block in tools/eva/pins/MODEL.txt: its line without
+        the time, then each property Eva leaves open (VERIFY-066 run 2).
+        The line says "as pinned", "not as pinned" (with the difference)
+        or "no pin".
 
     eva.py report [DIR]
         Reads the summaries under DIR (default eva_out) and writes the
@@ -155,6 +158,21 @@ OPEN = ('Unknown', 'Invalid')
 # How much of Frama-C's output a run that does not finish prints.
 TAIL = 80
 
+# MdR writes the statuses of the same run as SARIF, in the step that writes
+# Report's table (VERIFY-082). -mdr-no-print-libc: none of Frama-C's libc's
+# own properties.
+MDR = ['-mdr-gen', 'sarif', '-mdr-no-print-libc', '-mdr-out']
+_HAS_MDR = []
+
+
+def has_mdr():
+    """Whether this Frama-C has MdR: its help option exits 0, an unknown
+    option 1."""
+    if not _HAS_MDR:
+        p = subprocess.run(['frama-c', '-mdr-h'], capture_output=True, text=True)
+        _HAS_MDR.append(p.returncode == 0)
+    return _HAS_MDR[0]
+
 
 def unit_of(program):
     return agreement.UNITS[PROGRAMS[program]]
@@ -184,7 +202,9 @@ def includes(program):
     return files
 
 
-def eva_command(program, model, csv_path):
+def eva_command(program, model, csv_path, sarif_path=None):
+    """Frama-C's command for PROGRAM at MODEL: Eva, then Report's table to
+    CSV_PATH and, given SARIF_PATH and a Frama-C with MdR, MdR's SARIF."""
     extra = []
     inc = includes(program)
     for f, opts in USE_SPEC.items():
@@ -192,9 +212,10 @@ def eva_command(program, model, csv_path):
             extra += opts
     extra += OPTIONS.get(program, [])
     extra += shlex.split(os.environ.get('EVA_FRAMAC_ARGS', ''))
+    mdr = MDR + [sarif_path] if sarif_path and has_mdr() else []
     return (['frama-c'] + COMMON + MODELS[model] + extra
             + [f'-cpp-extra-args={cpp_of(program)}', source(program),
-               '-then', '-report-csv', csv_path])
+               '-then', '-report-csv', csv_path] + mdr)
 
 
 def parse_log(text):
@@ -400,9 +421,11 @@ def run(model, programs):
     for program in programs:
         stem = os.path.join(out_dir, program)
         csv_path = os.path.abspath(stem + '.csv')
-        if os.path.exists(csv_path):
-            os.remove(csv_path)
-        cmd = eva_command(program, model, csv_path)
+        sarif_path = os.path.abspath(stem + '.sarif')
+        for old in (csv_path, sarif_path):
+            if os.path.exists(old):
+                os.remove(old)
+        cmd = eva_command(program, model, csv_path, sarif_path)
         print('Running:', ' '.join(shlex.quote(c) for c in cmd), flush=True)
         start = time.time()
         try:

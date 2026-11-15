@@ -16,6 +16,11 @@ name: "14 · Eva: programs that use Canon-C"
 # at the ten machine models the proofs use (x86_64, and the nine of
 # proofs-machdeps.yml). Report-only until VERIFY-066's third run (ENFORCE
 # in tools/eva/eva.py).
+#
+# MdR, Frama-C's Markdown Report plug-in, writes each run's statuses as
+# SARIF too. The total job keeps MdR's results for the properties the pins
+# hold open, at every model, as one run, and uploads it to GitHub's code
+# scanning, category eva (tools/eva/mdr.py, VERIFY-082).
 # ---------------------------------------------------------------------------
 
 on:
@@ -105,6 +110,11 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # Code scanning's upload needs security-events: write (VERIFY-082); the
+    # other jobs keep the workflow's contents: read.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v7
@@ -123,6 +133,28 @@ jobs:
         with:
           name: eva-summary
           path: eva_summary.tsv
+          if-no-files-found: warn
+          retention-days: 90
+          overwrite: true
+      # VERIFY-082: eva.sarif is written only when every program has its
+      # SARIF at every model, and uploaded only then.
+      - name: "MdR's SARIF of the properties the pins hold open (VERIFY-082)"
+        run: python3 tools/eva/mdr.py merge eva_out eva.sarif
+      - name: "Notices: MdR"
+        if: ${{ !cancelled() }}
+        run: cat notices_mdr.txt 2>/dev/null || true
+      - name: "Upload to code scanning"
+        if: ${{ success() && hashFiles('eva.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: eva.sarif
+          category: eva
+      - name: Upload the SARIF
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: eva-sarif
+          path: eva.sarif
           if-no-files-found: warn
           retention-days: 90
           overwrite: true

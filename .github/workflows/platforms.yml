@@ -235,7 +235,8 @@ jobs:
   #    as shipped (NDEBUG). Each function's cyclomatic complexity is pinned
   #    (tools/metrics/pins.txt) and compared; its other counts (statements,
   #    decisions, loops, calls, ...) go to metrics.csv. Nothing is proved:
-  #    the counts are syntactic. Report-only in VERIFY-081's run 1.
+  #    the counts are syntactic. Report-only in VERIFY-081's run 1; since
+  #    its run 2, a complexity not as pinned fails the job.
   # -------------------------------------------------------------------------
   metrics:
     runs-on: ubuntu-24.04
