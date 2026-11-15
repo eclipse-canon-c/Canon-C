@@ -73,13 +73,41 @@ STOPPED = re.compile(r'(User Error:.*|Failure:.*|Frama-C aborted:.*|Unexpected e
                      r'fail to compile.*|aborted by Frama-C.*|error:.*)')
 
 
+# e-acsl-gcc.sh reads its arguments word by word, unquoted ("for i in $@"),
+# so a word of an argument that is one of its options is taken for that
+# option: VERIFY-083's run 1 gave "-std=c11 -I core ..." as one -E, whose
+# "-I" took the next word for Frama-C's path, and no program kept its file
+# ("no input files"). Each flag goes in a -E of its own, one word.
+SCRIPT_OPTIONS = {'-h', '-q', '-s', '-D', '-V', '-F', '-c', '-d', '-v', '-o', '-O', '-E', '-l',
+                  '-e', '-C', '-f', '-X', '-L', '-M', '-g', '-I', '-G', '-a', '-A', '-T', '-m',
+                  '-k'}
+
+
+def cpp_words(program):
+    """Eva's preprocessing flags for PROGRAM, in C11, each one word: -I and
+    its directory joined, as -D and -U with theirs."""
+    toks = shlex.split('-std=c11 ' + eva.cpp_of(program))
+    words, i = [], 0
+    while i < len(toks):
+        t = toks[i]
+        if t in ('-I', '-D', '-U') and i + 1 < len(toks):
+            t, i = t + toks[i + 1], i + 1
+        if t in SCRIPT_OPTIONS or t.startswith('--') or any(c.isspace() for c in t):
+            raise ValueError(f"{t!r} would be read as e-acsl-gcc.sh's own")
+        words.append(t)
+        i += 1
+    return words
+
+
 def command(program, stem, markers):
     """e-acsl-gcc.sh's command: instrument, then compile the instrumented
     code alone (-c -X), with the segment model and --keep-going."""
-    return [SCRIPT, '-c', '-X', '-m', 'segment', '-k',
-            '-E', '-std=c11 ' + eva.cpp_of(program),
-            '-l', markers,
-            '-o', stem + '.frama.c', '-O', stem, eva.source(program)]
+    for path in (stem, markers):
+        if any(c.isspace() for c in path):
+            raise ValueError(f'{path!r} has a space, which e-acsl-gcc.sh would split')
+    return ([SCRIPT, '-c', '-X', '-m', 'segment', '-k']
+            + [w for flag in cpp_words(program) for w in ('-E', flag)]
+            + ['-l', markers, '-o', stem + '.frama.c', '-O', stem, eva.source(program)])
 
 
 def text_of(x):
@@ -126,7 +154,13 @@ def one(program, markers):
     s = {'program': program, 'instrumented': False, 'compiled': False, 'reached_end': False,
          'fails': None, 'checks_failed': [], 'failed': [], 'unsound': [], 'run_exit': None,
          'reason': '', 'not_supported': {}, 'checks': 0}
-    cmd = command(program, stem, markers)
+    try:
+        cmd = command(program, stem, markers)
+    except ValueError as e:
+        s.update(reason=str(e), ok=False, exit=None, seconds=0.0)
+        with open(stem + '.json', 'w', encoding='utf-8') as f:
+            json.dump(s, f, indent=1, ensure_ascii=False)
+        return s
     start = time.time()
     try:
         p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=SECONDS)
