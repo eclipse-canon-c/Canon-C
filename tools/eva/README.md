@@ -177,10 +177,15 @@ the calls whose precondition Eva cannot decide.
 - An alarm comes from MdR's SARIF: its open result at the alarm's file and
   line, under the alarm's name, so MdR and Report's table must agree on it.
 - The assertion and the preconditions come from Report's table, which the
-  pins are made from. Frama-C 29's MdR gives every ACSL property the kind
-  pass, whatever its status, and the level none unless it is invalid: in
-  VERIFY-082's run 1, of its 293540 results, the 30 alarms were open and
-  all the others passing, none open at a place the pins hold.
+  pins are made from, at the region of MdR's result at their place.
+  Frama-C 29's MdR gives every ACSL property the kind pass, whatever its
+  status, and the level none unless it is invalid: in VERIFY-082's run 1,
+  of its 293540 results, the 30 alarms were open and all the others
+  passing, none open at a place the pins hold.
+
+Each result has a start line and two columns, as GitHub's smallest example
+has: in VERIFY-082's run 2 the 81 results with only a start line made no
+alert.
 
 A property open at several models, or reached from several programs, is
 one result, which names them. Each is a warning for Unknown, an error for
@@ -191,11 +196,12 @@ upload warns, for each, that its own fingerprint, from the line alone,
 differs, and keeps ours. The reasons above are why each holds.
 
 MdR's other open results are counted and not uploaded: none so far, as it
-leaves only alarms open.
+leaves only alarms open. So are its results of level error, which it gives
+an invalid property; the log lists them by place.
 
     python3 tools/eva/mdr.py merge [DIR] [OUT]
 
 `eva.sarif` is written, and uploaded, only when every program has its SARIF
-at every model. A pinned alarm with no open result in MdR's SARIF is a
-problem: reported in VERIFY-082's runs 1 and 2, as `mdr.py`'s `ENFORCE`
-says.
+at every model. A program without it, or a pinned alarm with no open
+result in MdR's SARIF, fails the total job, and nothing is uploaded: since
+VERIFY-082's run 3 (`ENFORCE`); runs 1 and 2 reported.

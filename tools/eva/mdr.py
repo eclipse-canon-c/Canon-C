@@ -22,7 +22,12 @@ merge uploads, for code scanning, the properties Eva's pins hold open
   and Report's table must agree on it;
 - an open assertion, or a call whose precondition Eva leaves open, as
   Report's table, from which the pins are made, gives it: its file, line
-  and status. MdR's result for it would say pass.
+  and status, at the region of MdR's result there (the line's, when MdR
+  has none with columns). MdR's result for it would say pass.
+
+Every result has a start line and two columns, as GitHub's smallest
+example: in VERIFY-082's run 2, of 84 results uploaded, the 81 with only a
+start line made no alert.
 
 One property at several models or programs is one result, which names
 them. Each result is at level warning for Unknown, error for Invalid, and
@@ -46,8 +51,10 @@ MdR's other open results are counted, not uploaded.
         result; the notices go to notices_mdr.txt.
 
 A program with no SARIF at a model, or a pinned alarm with no open result
-in MdR's SARIF, is a problem: reported, and failing the job once ENFORCE
-is set (VERIFY-082's runs 1 and 2 report).
+in MdR's SARIF, is a problem, which fails the job (ENFORCE, since
+VERIFY-082's run 3; runs 1 and 2 reported): eva.sarif is then not
+uploaded. MdR's results of level error, which it gives an invalid
+property, are counted and listed by place, not uploaded.
 """
 import collections
 import glob
@@ -63,7 +70,7 @@ sys.path.insert(0, HERE)
 sys.dont_write_bytecode = True
 import eva  # noqa: E402  (the programs, the models and the summaries)
 
-ENFORCE = False   # VERIFY-082 runs 1 and 2: report-only
+ENFORCE = True    # since VERIFY-082's run 3; runs 1 and 2 reported
 
 # SARIF's kinds for a status Eva leaves open: Unknown, Invalid, Inconsistent.
 OPEN_KINDS = ('open', 'fail', 'review')
@@ -144,13 +151,33 @@ def rule_of(item):
     return 'user-spec'
 
 
-def source_line(path, line, cache={}):
-    """The text of a file's line, its spaces collapsed."""
+def file_lines(path, cache={}):
     if path not in cache:
         with open(os.path.join(ROOT, path), encoding='utf-8', errors='replace') as f:
             cache[path] = f.read().split('\n')
-    lines = cache[path]
+    return cache[path]
+
+
+def source_line(path, line):
+    """The text of a file's line, its spaces collapsed."""
+    lines = file_lines(path)
     return ' '.join(lines[line - 1].split()) if 0 < line <= len(lines) else ''
+
+
+def complete(reg):
+    """Whether a region has the start line and the two columns GitHub's
+    smallest example has: a result without them does not become an alert
+    (VERIFY-082's run 2: 84 uploaded, the 3 with them alerts)."""
+    return all(k in reg for k in ('startLine', 'startColumn', 'endColumn'))
+
+
+def line_region(path, line):
+    """A line's text, from its first character to its last, as a region."""
+    lines = file_lines(path)
+    text = lines[line - 1].rstrip() if 0 < line <= len(lines) else ''
+    first = len(text) - len(text.lstrip())
+    return {'startLine': line, 'startColumn': first + 1, 'endLine': line,
+            'endColumn': max(len(text), first + 1) + 1}
 
 
 def fingerprint(key, seen):
@@ -186,6 +213,7 @@ def merge(where_dir, out):
     others_kind = collections.Counter()
     outside = 0
     alarms = alarms_matched = specs = specs_placed = 0
+    errors_at = collections.Counter()       # MdR's results of level error, by place
     rules_all, driver = {}, {}
     merged = {}
     for model in eva.MODELS:
@@ -208,14 +236,18 @@ def merge(where_dir, out):
                 rules_all.setdefault(k, v)
             driver = driver or drv
             pool = collections.defaultdict(list)    # MdR's open results, by place
-            spec_places = set()                      # where MdR has a user-spec result
+            spec_regions = {}                        # MdR's user-spec results' regions, by place
             for res in results:
                 kind = res.get('kind') or 'fail'
                 kinds[kind] += 1
-                levels[res.get('level') or 'warning'] += 1
+                level = res.get('level') or 'warning'
+                levels[level] += 1
                 pl = place(res)
+                if level == 'error' and res.get('ruleId') == 'user-spec':
+                    errors_at[f'{pl[0]}:{pl[1]}' if pl else '(outside the repository)'] += 1
                 if pl is not None and res.get('ruleId') == 'user-spec':
-                    spec_places.add(pl[:2])
+                    if pl[:2] not in spec_regions or (complete(pl[2]) and not complete(spec_regions[pl[:2]])):
+                        spec_regions[pl[:2]] = pl[2]
                 if kind not in OPEN_KINDS:
                     continue
                 if pl is None:
@@ -227,9 +259,15 @@ def merge(where_dir, out):
                 at = (item['file'], item['line'])
                 if rule == 'user-spec':
                     # Report's table: MdR's SARIF gives an ACSL property the kind pass.
+                    # The region is MdR's for a property at that place, else the line's.
                     specs += 1
-                    specs_placed += at in spec_places
-                    region, source, mdr_text = {'startLine': item['line']}, "Report's table", ''
+                    specs_placed += at in spec_regions
+                    region = spec_regions.get(at)
+                    if region is not None and complete(region):
+                        source = "Report's table, at MdR's region"
+                    else:
+                        region, source = line_region(*at), "Report's table, at the line"
+                    mdr_text = ''
                 else:
                     alarms += 1
                     cands = pool.get(at, [])
@@ -244,6 +282,8 @@ def merge(where_dir, out):
                     pick['used'] = True
                     alarms_matched += 1
                     region, source = pick['region'], "MdR's SARIF, as Report's table"
+                    if not complete(region):
+                        region = line_region(*at)
                     mdr_text = (pick['res'].get('message') or {}).get('text') or ''
                 key = (rule, item['file'], item['line'], item['status'], item['kind'], item['property'])
                 e = merged.setdefault(key, {
@@ -280,6 +320,7 @@ def merge(where_dir, out):
                            'programs': programs, 'source': e['source'], 'mdrMessage': e['mdr']},
         })
     rule_counts = collections.Counter(r['ruleId'] for r in results)
+    sources = collections.Counter(r['properties']['source'] for r in results)
     rules = [{'id': r, 'shortDescription': {'text': (rules_all.get(r) or r).rstrip('.') + '.'},
               'defaultConfiguration': {'level': 'warning'}} for r in sorted(rule_counts)]
     drv = {'name': driver.get('name') or 'frama-c',
@@ -292,8 +333,8 @@ def merge(where_dir, out):
                                             f"{len(eva.MODELS)} machine models: the alarms from MdR's SARIF, "
                                             f"the rest from Report's table (tools/eva/mdr.py, VERIFY-082)"}}]}
     expected = len(eva.MODELS) * len(eva.PROGRAMS)
-    complete = files == expected
-    if complete:
+    all_read = files == expected
+    if all_read:
         with open(out, 'w', encoding='utf-8') as f:
             json.dump(doc, f, indent=1, ensure_ascii=False)
             f.write('\n')
@@ -308,6 +349,9 @@ def merge(where_dir, out):
               f"{r['message']['text'][:200]}")
     for p in problems:
         print('problem: ' + p)
+    print("MdR's results of level error, by place, the 40 most:")
+    for where_at, n in errors_at.most_common(40):
+        print(f'  {n:6}  {where_at}')
     warnings = sum(1 for r in results if r['level'] == 'warning')
     lines = [
         ('mdr', f"mdr: MdR's SARIF for {files} of {expected} runs ({len(eva.PROGRAMS)} programs at "
@@ -322,11 +366,14 @@ def merge(where_dir, out):
         ('mdr upload', f"mdr upload: {len(results)} results for code scanning, {warnings} warning(s), "
                        f"{len(results) - warnings} error(s); rules "
                        + ', '.join(f'{r} {n}' for r, n in sorted(rule_counts.items()))
-                       + ('' if complete else f'; {out} not written: a run has no SARIF')),
+                       + '; ' + ', '.join(f'{k} {v}' for k, v in sorted(sources.items()))
+                       + ('' if all_read else f'; {out} not written: a run has no SARIF')),
         ('mdr others', f"mdr others: MdR's open results no pin holds, not uploaded: {sum(others.values())} ("
                        + ', '.join(f'{k} {v}' for k, v in sorted(others_kind.items())) + '); '
                        + '; '.join(f'{m} {others[m]}' for m in eva.MODELS)
-                       + (f'; {outside} open results outside the repository' if outside else '')),
+                       + (f'; {outside} open results outside the repository' if outside else '')
+                       + f'; of level error, which MdR gives an invalid property, {sum(errors_at.values())} '
+                         f'at {len(errors_at)} places, not uploaded either'),
     ]
     if problems:
         lines.append(('mdr problems', f'mdr problems: {len(problems)}'
