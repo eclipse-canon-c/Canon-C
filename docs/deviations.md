@@ -36516,3 +36516,142 @@ of three. What it shows:
 - **A check is checked failing.** CI's runs took only the branch that
   passes; the three that fail were taken here, each naming the function
   and the figure.
+
+---
+
+## VERIFY-082: Pre-registration — Frama-C's MdR: the Properties Eva Leaves Open, as SARIF, in GitHub's Code Scanning; Run 1, Report-Only
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-082 |
+| **Date**       | 2026-11-15 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 7915e88 and VERIFY-081's close: `1`, `3`, `4`, `5` and `6` #65 (9281c73), `2 · Platforms` #87 and `8 · Records` #99 (7915e88), `9 · Probes` #27 (bb3a456), `14 · Eva` #13 (10ab302). |
+| **Scope**      | `tools/eva/eva.py` (MdR in Eva's command); `tools/eva/mdr.py` (new); `tools/eva/README.md`; `.github/workflows/eva.yml`, its total job; the workflow map; and `.github/workflows/platforms.yml`, the `metrics` job's comment, which VERIFY-081 left for that file's next change. |
+| **Category**   | The to-do list's item 5, Frama-C's plug-ins, group 1, its second part. The author decided on 2026-11-14: MdR's SARIF, uploaded to GitHub's code scanning. |
+
+### What it is
+
+MdR, Frama-C's Markdown Report plug-in, writes the property statuses of an
+analysis as Markdown or as SARIF, the static analysers' common format.
+`tools/eva/eva.py` now has it write SARIF in the same Frama-C run as
+Report's table, for each program at each model:
+`-mdr-gen sarif -mdr-no-print-libc -mdr-out eva_out/MODEL/PROGRAM.sarif`,
+when the Frama-C has MdR. Its help option, `-mdr-h`, tells: 0 with it, 1
+without. The `eva total` job reads the 260 files with `tools/eva/mdr.py`
+and uploads one SARIF run to code scanning, category `eva`, with
+`github/codeql-action/upload-sarif@v4`. The job gains `security-events:
+write`; the other jobs keep `contents: read`.
+
+What MdR writes, as this record reads its source (`sarif_gen.ml` of
+Frama-C 28 and 30, around CI's 29; `mdr_params.ml` of 29): a result for
+each alarm, under the alarm's name as its rule, and for each other
+property with a status, under the rule `user-spec`; the status as the
+result's kind (Valid `pass`, Unknown `open`, Invalid `fail`, never tried
+`notApplicable`); the level `error` for Invalid and `none` for every
+other status; a place, relative to `PWD` for a file under the current
+directory, the repository's root here.
+
+### What is uploaded, and why
+
+Eva's pins hold, at each model, the alarms, the open assertion `kept` and
+the calls whose precondition Eva cannot decide: 81 at x86_64 and 77 at each
+of the nine others, 774 in all, 84 distinct over the models: 74 at all
+ten, `hashmap.c` line 33's two calls among them as one; `ptr.c`'s two
+preconditions in three forms each, by the model's largest `usize`, at five,
+four and one models; `borrow.c`'s four, at x86_64 only.
+`tools/eva/README.md` says why each holds.
+
+MdR's SARIF holds more. Report's table of the same runs, here with
+Frama-C 25 at x86_64, gives besides those 81 another 273 Unknown and 9
+"Invalid or unreachable" properties in the repository's files, and 1425
+"Dead". Of the 273:
+
+- 187 are of the library's own contracts, 177 postconditions and 10 loop
+  invariants, which Eva does not establish where the programs call the
+  functions, and WP proves;
+- 51 are preconditions as a whole, each open because one of its calls is,
+  which the pins hold, of the same program, function and text;
+- 35 are the `assigns \nothing` of the programs' two markers in
+  `eva_program.h`, functions Eva runs as its own builtins.
+
+The 9 are the two postconditions of the `does_not_fit` behaviour of
+`arena_alloc`, in `pool.c`, `region.c`, `stringbuf.c` and `vec.c`, and one
+of `arena_alloc_aligned`'s, in `arena.c`: programs whose calls all fit,
+so that no call takes the behaviour. MdR would make those 9 errors.
+
+So `mdr.py merge` uploads MdR's results for the properties the pins hold,
+and counts the rest:
+
+- each pinned property, from the run's summary, is matched to an open
+  result of MdR at its file and line, under the rule expected: the alarm's
+  name for an alarm, `user-spec` for an assertion or a call's
+  precondition;
+- one property at several models or programs is one result, whose message
+  names them, with the status, the property and the function;
+- each is at level `warning` for Unknown and `error` for Invalid, of
+  SARIF's default kind, `fail`. MdR gives Unknown the level `none`, and
+  code scanning reads the level, not the kind, and does not show `none`:
+  so others report, not GitHub's documentation, which leaves `kind` out;
+- each has its own fingerprint, a hash of its rule, file, line's text and
+  property. For a result without one, the upload makes it from the file's
+  text at the result's line, so that two properties on one line would be
+  one alert: the 84 results are on 69 distinct lines and rules;
+- the paths are relative to the repository's root, as GitHub reads them;
+  results outside it are dropped (none should be, with
+  `-mdr-no-print-libc`);
+- `eva.sarif` is written only when all 260 files are read, and uploaded
+  only then. In run 1 a pinned property without MdR's result is reported,
+  not failed (`ENFORCE`).
+
+### Measured here
+
+- Frama-C 25 has no MdR: it is not among its plug-ins, and `-mdr-h` is an
+  unknown option (exit 1). `eva.py` leaves MdR out, and its commands are as
+  before: `arena.c`, `ptr.c`, `vec_range.c` and `hashmap.c` as pinned at
+  x86_64, no SARIF written; the Eva error probe's call of `eva_command`,
+  with three arguments, gives the command it gave.
+- `mdr.py` was run on stand-in SARIF files, built from the local runs'
+  Report tables in MdR's form, as above, and copied to the ten models:
+  - 810 of 810 pinned properties matched (x86_64's 81, ten times); 80
+    results, 80 fingerprints, on 69 distinct (rule, file, line); 282 open
+    results no pin holds at each model, 9 of them `fail`;
+  - with `priority_queue.c`'s files missing (Eva does not finish it with
+    Frama-C 25, as for Metrics): "250 of 260", ten problems, `eva.sarif`
+    not written;
+  - with one result removed: "809 of 810", the problem naming the program,
+    model, place and property;
+  - `eva.sarif` validates against OASIS's SARIF 2.1.0 schema (jsonschema
+    4.26): 0 errors.
+- Not run here: MdR, and the upload.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 6, 8, 9 and 14 run; 7 and 10 to 13 do
+not. 1, 3, 4, 5 and 6 run because two workflow files change that their
+ignores do not name, `eva.yml` and `platforms.yml`; 9 runs the probes whose
+filters name `tools/eva/eva.py`, evaerror and diagpush. No unit of 13 and
+no program of 14 includes a changed file.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| A1 | **1 to 6, 8, 9 and 14 run**, and no other; in 9, the probes evaerror and diagpush. | another set | H |
+| A2 | **1 to 6 and 8 are green**, each job with the notices of its last run (1, 3, 4, 5 and 6 #65; 2 #87; 8 #99), times aside, 2's slowest header among them. | a failure, or another notice | H: nothing they build or read changes. |
+| A3 | **9's two probes are green with #27's notices**, times aside. Of diag_push's, its WP step's one unproved goal and its agreement step are predicted only as proved 3073 / 3074 and by none 1. | a failure, or another notice | M–H: the Eva error probe's command is as before; diag_push's Eva step runs `eva.py run`, with MdR now, in its patched tree, as A4 for `diag.c`. |
+| A4 | **14's native job and its ten Eva jobs are green with #13's notices**, times aside: every program as pinned at every model, 260 of 260. MdR changes nothing Eva reports. | a failure, or another notice | M–H: MdR runs in Eva's Frama-C process, after it; had it stopped, the run's exit would not be 0, and its program would fail. |
+| A5 | **Every program has its SARIF at every model**: "mdr: MdR's SARIF for 260 of 260 runs". | another count | M–H |
+| A6 | **Every property the pins hold open has MdR's result at its file and line, under the rule expected**: "mdr pins: 774 of 774". | fewer | M: MdR's places are Frama-C's locations, as Report's are, and its rules the alarms' names, as Report's kinds; but `-mdr-no-print-libc` would leave out the two calls of the C library's functions inside Canon-C's (`vsnprintf`, `snprintf_va_2`), if MdR took a call's precondition to be the callee's. |
+| A7 | **84 results for code scanning**: "84 warning(s), 0 error(s); rules dangling_pointer 1, ptr_comparison 2, user-spec 81". | another figure | M: it follows A6. |
+| A8 | **The upload to code scanning is green**: the action uploads `eva.sarif` and GitHub processes it without error. | a failure | M: the first upload of a SARIF to this repository, which nothing here can try. |
+| A9 | **14 is green, its total job among them**, whose first ten notices are #13's. | a failure, or another notice | M: A5 to A8. |
+
+Measured, not predicted: MdR's results by kind, and its open results no
+pin holds, at each model ("mdr others"; here, from Report's table, 282 at
+x86_64, and MdR may count the 1425 "Dead" as open or as passing). The
+alerts the Security tab shows are not read here: this session's token
+cannot read code scanning (403). The record expects 84, one per result;
+the author can read the count.
+
+**What follows.** A1 to A9 scored. If A6 holds, run 2 sets `ENFORCE` in
+`mdr.py`, and the README's badge; if it misses, run 2 fixes the match
+first.
