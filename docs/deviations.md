@@ -36356,7 +36356,7 @@ that changes `diag.h` the pointer probe. Their records predict it.
 | **ID**         | VERIFY-081 |
 | **Date**       | 2026-11-14 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-15 — Run 1 scored: M1 to M6 MATCH. CI's Frama-C 29 gives every one of the 858 functions the complexity Frama-C 25 gave it. Run 2, pre-registered below, enforces the pins. The Status above is the record as committed. |
+| **Status update** | 2026-11-15 — Run 1 scored: M1 to M6 MATCH. CI's Frama-C 29 gives every one of the 858 functions the complexity Frama-C 25 gave it. Run 2, pre-registered below, enforces the pins. CLOSED: run 2 matched N1 to N3. Since it, a function whose cyclomatic complexity is not as pinned, or that is measured and not pinned, or pinned and not measured, fails `2 · Platforms`' `metrics` job; each of the three was checked here to fail it ("Run 2 scored", below). The Status above is the record as committed. |
 | **Baseline**   | bb3a456 and VERIFY-080's close: `1`, `3`, `4`, `5` and `6` #64, `2 · Platforms` #85, `8 · Records` #97. |
 | **Scope**      | `tools/metrics/` (`metrics.py`, `pins.txt`, `README.md`); `.github/workflows/platforms.yml`, the job `metrics`; `.github/workflows/records.yml`, its pin check and push path; the workflow map. |
 | **Category**   | The to-do list's item 5, Frama-C's plug-ins, group 1, its first part. The author decided on 2026-11-14: Metrics first, then MdR, then E-ACSL, each a record; Metrics reported and pinned, failing on a function's complexity changing without a record, as the size pins do. |
@@ -36474,3 +36474,45 @@ or Eva program reads the changed files.
 
 **What follows.** N1 to N3 scored. If they hold, VERIFY-081 closes, and
 item 5 continues with MdR.
+
+### Run 2 scored (2026-11-15)
+
+The push of e5a2ee3 and 7915e88 started `2 · Platforms` #87 and
+`8 · Records` #99, each green at its first attempt. The `metrics` job took
+46 s, its setup's cache hit; it ran Frama-C 29.0 (Copper).
+
+| # | scored |
+|---|--------|
+| N1 | **MATCH.** 2 and 8 ran, and no other. |
+| N2 | **MATCH.** 2's 15 jobs are green, each with #86's notices, times aside; `metrics`: "metrics pins: as pinned, 858 functions". |
+| N3 | **MATCH.** 8's 2 jobs are green with #98's notices; its metrics step: "metrics pins: 858 functions in 51 rows; 0 problem(s)". |
+
+Three of three.
+
+**The failure, checked here.** A green run does not take the branch that
+fails. On 7915e88, with Frama-C 25, `metrics.py run` with `pins.txt`
+changed as below:
+
+| `pins.txt` | the notice "metrics pins" | exit |
+|------------|---------------------------|------|
+| `error_message` pinned 21 | "1 difference(s): semantics/error.h error_message: pinned 21, measured 22" | 1 |
+| `error_message`'s line removed | "1 difference(s): semantics/error.h error_message: measured 22, no pin" | 1 |
+| a line added, `error_nowhere` 3 | "1 difference(s): semantics/error.h error_nowhere: pinned 3, not measured" | 1 |
+| as committed | "as pinned, 858 functions" | 0 |
+
+**Closed.** `2 · Platforms`' `metrics` job measures Canon-C's 858
+functions with Frama-C's Metrics, each header alone and as shipped, and
+fails when a function's cyclomatic complexity is not as
+`tools/metrics/pins.txt` holds it. A change that makes a function more or
+less complex pins it again, with `metrics.py pin`, under its record.
+
+The record scored 9 of its 9 predictions: run 1 six of six, run 2 three
+of three. What it shows:
+
+- **Figures measured here hold in CI.** Frama-C 25 measured the pins, and
+  CI's Frama-C 29 found the same 858 complexities and the same 9035
+  statements: a change's new figures can be measured here and predicted
+  exactly.
+- **A check is checked failing.** CI's runs took only the branch that
+  passes; the three that fail were taken here, each naming the function
+  and the figure.
