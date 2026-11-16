@@ -38387,3 +38387,153 @@ seven of twelve, run 2 five of nine, run 2b seven of seven. What it shows:
   the two views programs of `tools/eva/programs/` ran past 30 minutes with
   smoke tests at 120 s. Whether one follows is the author's to decide, in
   a record of its own.
+
+---
+
+## VERIFY-086: Pre-registration — Frama-C's MetAcsl: Two of the Library's Cross-Cutting Rules, the Contract Handler Written by Its Setter Alone and the Heap Called Only Where Documented, Proved by WP on Every Unit; Run 1, Report-Only
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-086 |
+| **Date**       | 2026-11-16 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 107f51d (VERIFY-085's close): `1`, `3`, `4`, `5` and `6` #70 (6cabb94); `2 · Platforms` #101 and `8 · Records` #116 (107f51d). |
+| **Scope**      | `tools/metacsl/` (new: `rules/handler_written.h`, `rules/handler_kept.h`, `rules/heap_raw.h`, `rules/heap_wrappers.h`, `metacsl.py`, `README.md`); `.github/workflows/metacsl.yml` (new, `15 · MetAcsl`); `.github/workflows/records.yml`, a step and a path; the workflow map's row 15. |
+| **Category**   | The to-do list's item 6, Frama-C's plug-ins, group 2, its third part. The author decided on 2026-11-16: of the cross-cutting rules, the contract handler's integrity and the heap called only where documented; proved by WP on every unit. |
+
+### What is missing
+
+A contract speaks of one function. Two of the library's rules speak of all
+of them, and no contract states them:
+
+- **The handler.** `core/primitives/contract.h`: "canon_contract_handler
+  is the library's ONLY global mutable object", to be written "through
+  contract_set_handler() only". Nothing checks that no other function
+  writes it.
+- **The heap.** The README's note on `malloc` and `free`: `core/arena.h`
+  and `core/pool.h` "never call `malloc`"; "The heap dependency is only
+  active if your code calls `mem_alloc()`, `mem_alloc_type()`, or
+  `mem_alloc_array()` directly", and `data/convenience/` uses the heap.
+  "No hidden allocations." Nothing checks which functions reach the heap.
+
+MetAcsl, a Frama-C plug-in (frama-c-metacsl; 0.7 is the version for
+Frama-C 29), takes such a rule as a meta-property: a predicate, the
+functions it applies to (`\targets`) and a context, the points of each
+function where it must hold: each write (`\writing`), each call
+(`\calling`), each return (`\postcond`). It writes the predicate as an
+annotation at each such point, and WP, Eva or E-ACSL checks the
+annotations.
+
+### What the documentation says that is not so
+
+The README's note is short of the code. Besides `core/memory.h`'s
+wrappers and `data/convenience/`, these call `mem_alloc` or `mem_free`:
+vec's heap constructor and destructor, `vec_<type>_alloc` and
+`vec_<type>_free` (`data/vec/vec_impl.h`; `data/vec/vec.h` documents the
+"heap" strategy), and `util/str/`'s `str_alloc_copy`, `str_alloc_concat`,
+`str_alloc_sub`, `str_free` and `str_alloc_join`. A program that calls
+none of the three the README names can still reach `malloc`. Corrected
+when the heap rules hold (What follows).
+
+### What is decided
+
+- **Four meta-properties**, one file each, `tools/metacsl/rules/`
+  (`tools/metacsl/README.md` describes them):
+  - `handler_written`: at each write of every function but
+    `contract_set_handler`, `\separated(\written, &canon_contract_handler)`;
+  - `handler_kept`: at the return of every function but
+    `contract_set_handler`, `canon_contract_handler ==
+    \old(canon_contract_handler)`. The same rule, without the handler's
+    address, which no code of the library takes: WP can then keep the
+    handler out of memory. `handler_written` takes it, so the two run
+    apart;
+  - `heap_raw`: at each call of every function but `mem_alloc` and
+    `mem_free`, the function called is not `malloc`, `calloc`, `realloc`
+    or `free`;
+  - `heap_wrappers`: at each call of every function but
+    `mem_alloc_array_checked`, `vec_int_alloc` and `vec_int_free`, the
+    function called is not `mem_alloc`, `mem_free` or
+    `mem_alloc_array_checked`.
+
+  A handler rule is stated only where `contract.h` is included (its guard,
+  `CANON_CORE_PRIMITIVES_CONTRACT_H`): 21 units of 27. A name a unit does
+  not have is ignored in `\targets` (MetAcsl's warning `unknown-func`,
+  made inactive), and `\tguard` makes a comparison with a function the
+  unit does not declare true.
+- **WP on every unit.** `tools/metacsl/metacsl.py run PART` takes each
+  unit of `tools/agreement/agreement.py`'s `UNITS`, by part (core,
+  semantics, data, as the proof workflows group them), and runs it three
+  times: the heap rules, `handler_kept`, `handler_written`. Each run is a
+  C file, `metacsl_out/UNIT/RUN/unit.c`, that includes the unit's file and
+  then the run's rules, preprocessed with the unit's options, and Frama-C
+  takes it with the unit's extra options: `-meta -meta-checks
+  -meta-list-targets -meta-warn-key unknown-func=inactive -then-last -wp
+  -wp-model MODEL -wp-prop=@check -wp-prover alt-ergo,z3,cvc5 -wp-timeout
+  10 -then-last -report-untried -report-csv`. MetAcsl writes checks, and WP
+  proves the checks alone: no unit has checks of its own. Report's table
+  gives each check its status.
+- **`15 · MetAcsl`**, a new workflow, one job a part. Each installs
+  frama-c-metacsl 0.7 in the Frama-C setup's switch (updating the switch's
+  index first if 0.7 is not in it), and removes it at its end, so that a
+  cache the setup saves on a miss is the setup's. Each part posts a notice
+  for each rule, its checks by unit and how many are proved, and one for
+  the part; the log lists each check not proved. A run is stopped at 60
+  minutes, and none starts past 240 minutes of a part, inside the job's
+  300. Report-only in run 1 (`ENFORCE`): a part fails only when a run gives
+  no table or is stopped.
+- **`8 · Records`** checks the units and the rules
+  (`metacsl.py check`): every unit of agreement.py has its part, and the
+  rules exist.
+
+### Measured here
+
+With Frama-C 25.0 (no MetAcsl, no WP) and gcc 13.3.0:
+
+- **MetAcsl does not run here.** Frama-C 25 rejects a `meta` annotation
+  ("unexpected token '\prop'"). The rules' syntax and MetAcsl's options are
+  read from MetAcsl 0.8's source (`meta_annotate.ml`, `meta_options.ml`:
+  the contexts, `-meta-checks`, `-meta-warn-key`, `-meta-list-targets`),
+  0.11's README, and the changelog, by which 0.7 and 0.8 differ only in
+  the Frama-C each builds with. WP's `-wp-prop=@check` is in Frama-C 31's
+  options ("and @check (which includes all check clauses)").
+- **The 81 runs' files**, preprocessed with gcc and comments kept, as
+  Frama-C does: 69 with their rules, the 27 heap runs with two
+  meta-properties and the 21 handler runs of each kind with one; the six
+  units without `contract.h` (bits, checked, compare, compare-order,
+  error, lifetime) with none.
+- **Frama-C 25 parses 26 of the 27 units' files**, the rules left out
+  (`-c11`, for `_Static_assert`); `data/priority_queue.h` stops on its
+  `calls` clause, as it does alone (VERIFY-085's measures).
+- **`metacsl.py`** against a stand-in for Frama-C 29 with MetAcsl, which
+  parses with Frama-C 25 and prints a WP-shaped summary: the notices, a
+  unit without a table (the part fails), the trimmed tables. `metacsl.py
+  check`: "27 units in 3 parts, 4 rules; 0 problem(s)". pyflakes;
+  actionlint on `metacsl.yml` and `records.yml`;
+  `record_coverage.py --strict --complete`.
+
+Not run here: MetAcsl; WP.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 6, 8 and 15 run, and no other. 1 to 6
+run because workflow files change (they ignore `probes.yml`, not every
+workflow file); 8 because `records.yml` and `tools/metacsl/` change.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| G1 | **1 to 6, 8 and 15 run**, and no other. | another set | H |
+| G2 | **1 to 6 are green**, each job with #70's notices, 2's with #101's, times aside, 2's slowest header among them; **8 is green**, with no notice. | a failure, or another notice | H: nothing they build or read changes. |
+| G3 | **Each of 15's jobs installs MetAcsl 0.7**: Frama-C lists the plug-in, and its help lists `-meta-checks`. | a job without it | M: opam installs it from the cached switch's index, or from one updated. |
+| G4 | **15 is green**: every run of every unit gives Report's table, none stopped and none left past the budget. | a part fails | M–L: MetAcsl 0.7 has not run here; the rules' syntax is read from 0.8's source and 0.11's README. |
+| G5 | **The heap rules hold, but at calls through a function pointer**: every check of `heap_raw` and `heap_wrappers` proved, but at such a call (in region's `region_end`, option's and result's combinators, `priority_queue`'s comparator). | a check not proved at a direct call | M–L: whether MetAcsl drops a direct call's check as true by itself, and what WP makes of a pointer compared with a function. |
+| G6 | **`handler_kept` is proved of every function with a body that calls no function pointer.** | one such function's check not proved | M–L: the handler's address is not taken, so WP can keep it out of memory, and every callee's `assigns` leaves it out. |
+| G7 | **`handler_written` is not proved at some writes through a pointer**: WP leaves unproved checks at writes through pointers whose preconditions allow a block of one cell, and proves every check at a write to a local variable. | none unproved, or one unproved at a write to a local | L–M: separating a pointer from the handler's address needs what no precondition says, but WP's typed model may not. |
+
+**What follows.** G1 to G7 scored. Then run 2, pre-registered from the
+measures: each rule whose checks WP proves, but those argued, is
+enforced, its residuals pinned unit by unit; of the two forms of the
+handler rule, the one WP proves. The README's note on the heap is
+corrected with the heap rules. The record closes with the README's badge
+"Frama-C MetAcsl" and `docs/verification.md`'s section on the rules.
