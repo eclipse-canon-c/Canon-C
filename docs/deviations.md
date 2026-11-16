@@ -37750,3 +37750,196 @@ ten of ten. What it shows:
   it stood, and so carried VERIFY-079's omission. The card is a sum of the
   units' pinned lines, and is to be summed from them again, as 13's total
   is.
+
+---
+
+## VERIFY-085: Pre-registration — Frama-C's Aorai: Three of the Library's Call-Order Rules as Automata, Checked by Eva on the Programs That Use Them and on Programs That Keep and Break Each, and Measured Under WP by a Probe; Run 1, Report-Only
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-085 |
+| **Date**       | 2026-11-16 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 663269c (VERIFY-084's close): `1`, `3`, `4`, `5` and `6` #68, `2 · Platforms` #96, `9 · Probes` #30 and `14 · Eva` #21 (ba0ebd2); `8 · Records` #111 (663269c). |
+| **Scope**      | `tools/aorai/` (new: the automata `hashmap_iteration.ya`, `stringbuf_views.ya` and `bitset_views.ya`, `aorai.py`, `programs/`, `README.md`); `.github/workflows/eva.yml`, the job `aorai`, its header and its paths; `tools/probes/verify-085/` (new: `aorai_wp_probe.py`, `steps`, `README.md`); `.github/workflows/probes.yml`, the job `aorai-probe`, its filter, its paths and its header; the workflow map's rows 9 and 14. |
+| **Category**   | The to-do list's item 6, Frama-C's plug-ins, group 2, its second part. The author decided on 2026-11-16: of the call-order rules, hashmap's iteration and the views of a closed buffer or bitset; checked by Eva, enforced after a report-only run, and measured under WP by a probe. |
+
+### What is missing
+
+A contract speaks of one call. Some of the library's rules are about the
+order of calls, and no contract states them:
+
+- **`data/hashmap/hashmap.h`**: `hashmap_iter_next` is "a stateless
+  forward iterator. Initialize iter=0, call until false. Do not mutate
+  the map during iteration." The iterator is a `usize`: its contract
+  cannot know that the map changed since the iteration began. Nothing
+  checks the rule, in any build.
+- **`data/stringbuf.h`**: `stringbuf_close` "invalidates outstanding
+  borrowed views", and a later init draws a new lifetime, "so borrows
+  captured before close cannot silently re-validate against the post-init
+  StringBuf". Its contract is `assigns \nothing`. A build with
+  `CANON_LIFETIME_DEBUG` checks each read of a view at run time
+  (`borrowed_str_get`, `borrowed_bytes_get`, through
+  `lifetime_assert_valid`); nothing checks it before the program runs.
+- **`data/bitset.h`**: the same of `bitset_close`.
+
+Aorai, a Frama-C plug-in, takes such a rule written as an automaton in its
+language, Ya, and instruments a program with it: a ghost state that each
+call updates, and contracts on every function that name the calls each
+state allows. Eva or WP then says whether the program keeps the rule. Its
+page: "The classical method to validate annotations is to use the Wp or
+Eva plug-ins." Frama-C 29's Aorai reads Ya only (its options, 29.0's
+`aorai_option.ml`: no LTL, no Promela).
+
+### What is decided
+
+- **Three automata**, `tools/aorai/`, described in its README, since Ya
+  has no comments (Frama-C 25 rejects `/*`, `//` and `#`):
+  - `hashmap_iteration.ya`: a call of `hashmap_iter_next` with
+    `*iter == 0` starts an iteration; in an iteration, a call of
+    `hashmap_init`, `hashmap_insert`, `hashmap_remove` or `hashmap_clear`
+    ends it; out of one, a call of `hashmap_iter_next` with `*iter != 0`,
+    an iteration going on, is refused. An iteration can be left before its
+    end and a new one started from 0, whatever came between.
+  - `stringbuf_views.ya`: after `stringbuf_close`, a read of a view
+    (`borrowed_str_get` or `borrowed_bytes_get`, its view `b` not null) is
+    refused until the buffer is initialised again and a view taken from it.
+  - `bitset_views.ya`: the same, with `bitset_close`, `bitset_init`,
+    `bitset_as_borrowed_bytes` and `borrowed_bytes_get`.
+
+  A refused call leads to a state, `stale`, with no way out. Every other
+  call leaves the state as it is.
+- **Calls, not objects.** An automaton reads a program's maps as one map
+  and its iterators as one, its buffers as one and its views as one. For
+  a program that keeps one of each at a time it is the rule; for one that
+  keeps more, it can refuse what the rule allows, and allow what the rule
+  refuses (the README gives the cases). The record claims the rules of
+  the programs here, not of every program.
+- **A read is guarded on its view, `b` not null.** Measured here: with the
+  reads guarded on calls alone, Aorai decides each views control by
+  itself, a program without branches, and gives `main` the precondition
+  `\false`, which Eva finds invalid at `main`, not at the read. With the
+  guard on a value, Aorai leaves the check to each read, a precondition
+  that Eva decides at that call. `borrowed_str_get` and
+  `borrowed_bytes_get` require `b` not null anyway.
+- **No rule of `core/region.h`.** Aorai stops at a call through a pointer
+  that has no `calls` clause, and `region_end` calls each hook so; a
+  library cannot name its callers' hooks.
+- **Eva checks, at x86_64.** `tools/aorai/aorai.py`'s `CASES` pairs a
+  program with an automaton and gives the verdict the rule gives it. The
+  programs: `tools/eva/programs/`'s three that use the rules' functions,
+  `hashmap.c`, `stringbuf.c` and `bitset.c`, which keep them; and
+  `tools/aorai/programs/`, one that keeps each rule (`hashmap_ok.c`,
+  `stringbuf_ok.c`, `bitset_ok.c`) and one for each way of breaking it
+  (`hashmap_stale.c`; `stringbuf_closed.c`, `stringbuf_reopened.c`;
+  `bitset_closed.c`, `bitset_reopened.c`), the call the rule refuses
+  marked `/* refused */`. 11 cases. Aorai instruments the program, and
+  Eva runs it with `eva.py`'s options for the program it names, but for
+  `-eva-use-spec ptr_align_padding`: measured here, from the
+  specification Eva leaves Aorai's postcondition on that function
+  unknown, the ghost code that keeps the state being in the body. Report's
+  table gives each property its status; Aorai's are those that name its
+  state (`aorai_`). A case **follows** its rule when none of them is
+  invalid or unknown and the program reaches its `END`; it **breaks** it
+  when a call violates one of Aorai's preconditions, and only the marked
+  call; anything else is "undecided".
+- **The run-time checks, beside it.** `aorai.py native` compiles each
+  program of `tools/aorai/programs/` as `eva.py native` compiles the Eva
+  programs, and runs it; then with `CANON_LIFETIME_DEBUG` and the
+  contracts' checks on. A program that breaks a views rule should stop
+  at the read, as Aorai says; `hashmap_stale.c` should not, no run-time
+  check seeing the iteration rule. `LIFETIME_DEBUG` says what each gives.
+- **The job `aorai`** of `14 · Eva` runs `check`, `native` and `run`, and
+  posts a notice for each automaton, one for all, and one for the native
+  runs. Report-only in run 1 (`ENFORCE`): Frama-C 29's Aorai has not run
+  on these files.
+- **WP, by a probe.** `9 · Probes` gains VERIFY-085's probe,
+  `tools/probes/verify-085/aorai_wp_probe.py`, report-only, one job a
+  part: `main`, Aorai then WP on each case's `main` alone (`-wp-fct
+  main`); `lib-hashmap`, `lib-stringbuf` and `lib-bitset`, WP on every
+  function of the three programs that keep the rules, each with its
+  automaton. WP runs with the options of the unit each program is
+  preprocessed as. Each part posts WP's summary, Aorai's properties by
+  status, and for a case that breaks its rule the status of the
+  precondition at the marked call. A part fails only without data, or
+  when stopped at its limit, 30 minutes a case of `main`, 230 a lib part.
+  The file `steps` names all four.
+
+### Measured here
+
+With Frama-C 25.0 (its Aorai and Eva; no WP) and gcc 13.3.0:
+
+- **What Aorai instruments.** With an automaton that allows every call,
+  Aorai instruments 21 of `tools/eva/programs/`'s 27. It stops at a call
+  through a pointer in six: `compare` (the sort's comparator), `option`
+  and `result` (their drivers' calls through a function, the contract
+  handler for `option`), `priority_queue` (its comparator; Frama-C 25
+  does not read its `calls` clause), `region` (the hooks) and `vec_fmt`
+  (its callback). An automaton that names a function the program lacks is
+  refused ("No such function"), so each case names only programs that use
+  its functions.
+- **`aorai.py check`**: "11 cases, 3 automata, 8 programs of its own; 0
+  problem(s)".
+- **`aorai.py run`**: "11 cases as CASES says: breaks 5, follows 6". The
+  six that follow: Aorai's properties all Valid or Dead, and the END
+  reached, with `fails` hashmap {0}, stringbuf {0; 1; 2; 3; 4; 5}, bitset
+  {0}, as Eva's pins have them, and {0} for the three of
+  `tools/aorai/programs/`. The five that break: hashmap_stale at line 31,
+  stringbuf_closed at 20, stringbuf_reopened at 23, bitset_closed at 20,
+  bitset_reopened at 22, each "Invalid or unreachable" at that call and
+  at the callee's precondition, none elsewhere, and no END. Each case
+  took 1 to 2 s.
+- **`aorai.py native`**: "8 programs, normal build /
+  CANON_LIFETIME_DEBUG: hashmap_ok 0/0; hashmap_stale 0/0; stringbuf_ok
+  0/0; stringbuf_closed 0/aborts; stringbuf_reopened 0/aborts; bitset_ok
+  0/0; bitset_closed 0/aborts; bitset_reopened 0/aborts". The closed
+  controls stop at `lifetime_assert_valid`'s `source_open`, the reopened
+  ones at its `source_id == borrow_id`: the new init's lifetime.
+- **The probe**: its parts, run against a stand-in for `frama-c` that
+  drops WP's options, runs Frama-C 25 on the rest and prints a WP-shaped
+  summary: its notices, the marked calls found, the outputs. WP itself
+  not run.
+- **Frama-C reads a relative path against `$PWD`**, not the process's
+  directory: run from elsewhere, Aorai found no automaton. Both scripts
+  run Frama-C from the repository's root with `PWD` set to it.
+- **The rest**: actionlint on `eva.yml` and `probes.yml`; pyflakes on the
+  two scripts; `record_coverage.py --strict --complete`.
+
+Not run here: Frama-C 29's Aorai and Eva on these files; WP.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 6, 8, 9 and 14 run; 7 and 10 to 13 do
+not. 1 to 6 run because `eva.yml` changes (they ignore `probes.yml`, not
+every workflow file). In 9 every probe, since each watches `probes.yml`;
+in 14 every job, since `eva.yml` changes.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| A1 | **1 to 6, 8, 9 and 14 run**, and no other. | another set | H |
+| A2 | **1 to 6 are green**, each job with #68's notices, 2's with #96's, times aside, 2's slowest header among them; **8 is green**, with no notice. | a failure, or another notice | H: nothing they build or read changes. |
+| A3 | **9 is green.** The twelve older probes give #30's notices, times aside, but for the diag_push probe's counts that move between runs: of its agreement step only "none 1", and of its WP step only "Proved goals: 3073 / 3074". The order probe's nine parts each post that they did not run, and its report that no part ran. | a failure, or another notice | H |
+| A4 | **14's native, e-acsl, ten eva and total jobs are green**, each with #21's notices, times aside. | a failure, or another notice | H: nothing they read changes. |
+| A5 | **The aorai job is green, and its native notice is the one measured here**: "8 programs, normal build / CANON_LIFETIME_DEBUG: hashmap_ok 0/0; hashmap_stale 0/0; stringbuf_ok 0/0; stringbuf_closed 0/aborts; stringbuf_reopened 0/aborts; bitset_ok 0/0; bitset_closed 0/aborts; bitset_reopened 0/aborts". | a failure, or another result | H: the runner's gcc is 13 too. |
+| A6 | **Frama-C 29's Aorai instruments every case**, and no case is undecided for want of a table: Frama-C exits 0 on each. | an error from Aorai or Eva, or a case without Report's table | M: the automata's syntax, their guards on values (`*iter`, `b`) and their trap (`{ false }`) are measured with Frama-C 25; Aorai's manual for 26.1 gives Ya the same. |
+| A7 | **"11 cases as CASES says: breaks 5, follows 6"**: the six follow, and hashmap_stale breaks at line 31, stringbuf_closed at 20, stringbuf_reopened at 23, bitset_closed at 20 and bitset_reopened at 22. | another verdict for any case | M: as A6; and whether Frama-C 29's Aorai leaves each check to its call, as 25's does with the guards on values. |
+| A8 | **Instrumented, each program ends as here**: hashmap {0}, stringbuf {0; 1; 2; 3; 4; 5}, bitset {0}, as Eva's pins have them; the three of `tools/aorai/programs/` that follow, {0}; the five that break, no END. | other values, or an END reached | M–H: so it is with Frama-C 25, and the pins are 29's. |
+| A9 | **The probe's four parts give their data**: each of main's 11 WP runs and each lib part gives WP's summary and Report's table, none stopped at its limit. | a part without data | M: WP on Aorai's ghost code is not measured here. |
+| A10 | **WP proves each of Aorai's properties of `main` in the six cases that follow** (Valid, or Valid under hypotheses: the callees' contracts are not proved in that run). | one of them otherwise | M–L: Aorai gives each function the states it is called and returns in, which WP takes at each call; its loop invariants in `main` are, its manual says, "not guaranteed to be complete". |
+| A11 | **In the five that break, the precondition at the marked call is not proved.** | proved | H: it is false there; a proof would mean hypotheses that contradict each other. |
+| A12 | **Each lib part proves every one of Aorai's properties**, in under 230 minutes. | one not proved, or stopped | L: each part is a whole unit's proof and Aorai's on top of it, of which nothing is measured. |
+
+**What follows.** A1 to A12 scored. Then run 2, pre-registered from the
+measurements:
+
+- If A6 and A7 hold, run 2 enforces: a case not as `CASES` says, or a
+  program not as `LIFETIME_DEBUG` says, fails the job. The record closes
+  with `docs/verification.md`'s section on the rules and the README's
+  badge "Frama-C Aorai".
+- If A6 or A7 does not hold, a run 1b measures what Frama-C 29 does with
+  the automata and the verdicts before run 2.
+- The probe's results go to the author, with what a WP check of the
+  rules would cost: a job of its own, its scope, or none. Until then it
+  stays a probe, report-only.
