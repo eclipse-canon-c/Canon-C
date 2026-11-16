@@ -1,0 +1,5 @@
+# The parts of order_probe.py that run, any number a line; a part the file
+# does not name posts that it did not run. VERIFY-084 run 1: every part.
+together alt-ergo z3 cvc5
+contract false
+cortex_m4 rv64_lp64 msvc_x86_64

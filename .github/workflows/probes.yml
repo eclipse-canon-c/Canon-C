@@ -2,8 +2,8 @@ name: "9 · Probes (closed experiments)"
 # The probes of VERIFY-039 and VERIFY-040, merged into one workflow by
 # VERIFY-050: G4, G11, G13, G19, Count and Round 3; and VERIFY-057's pointer
 # probe, VERIFY-060's char probe, VERIFY-066's Eva error probe, VERIFY-073's
-# diag_push probe and VERIFY-079's vec_range probe, added since. Each is an
-# experiment, not a gate; its result is scored in
+# diag_push probe, VERIFY-079's vec_range probe and VERIFY-084's order probe,
+# added since. Each is an experiment, not a gate; its result is scored in
 # docs/deviations.md. Each job still runs only when its own paths change, as
 # its workflow did: the `changes` job compares the push with the commit it
 # moved master from and sets one output per probe. A manual run runs them
@@ -50,6 +50,10 @@ on:
       - 'tools/probes/verify-073/**'
       - 'tools/eva/programs/diag.c'
       - 'tools/probes/verify-079/**'
+      - 'tools/probes/verify-084/**'
+      - 'tools/machdeps/machdep_cortex_m4.yaml'
+      - 'tools/machdeps/machdep_rv64_lp64.yaml'
+      - '.github/workflows/proofs-machdeps.yml'
       - 'core/**'
       - 'semantics/**'
       - 'data/**'
@@ -79,6 +83,7 @@ jobs:
       evaerror: ${{ steps.f.outputs.evaerror }}
       diagpush: ${{ steps.f.outputs.diagpush }}
       vecrange: ${{ steps.f.outputs.vecrange }}
+      order: ${{ steps.f.outputs.order }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -87,7 +92,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
-          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/**", "semantics/**", "data/**", "vmacros/vdrivers/**"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"], "diagpush": ["tools/probes/verify-073/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/diag.c", "tools/eva/programs/eva_program.h"], "vecrange": ["tools/probes/verify-079/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py"]}'
+          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/**", "semantics/**", "data/**", "vmacros/vdrivers/**"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"], "diagpush": ["tools/probes/verify-073/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/diag.c", "tools/eva/programs/eva_program.h"], "vecrange": ["tools/probes/verify-079/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py"], "order": ["tools/probes/verify-084/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/compare.h", "core/primitives/types.h", "tools/agreement/agreement.py", ".github/workflows/proofs-machdeps.yml", "tools/machdeps/machdep_cortex_m4.yaml", "tools/machdeps/machdep_rv64_lp64.yaml"]}'
         run: |
           python3 - <<'PY'
           import json, os, subprocess, fnmatch
@@ -1023,3 +1028,78 @@ jobs:
           name: vecrange-probe
           path: vecrange_out
           retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # Order probe (VERIFY-084, compare.h's comparators as total orders)
+  #
+  # VERIFY-084: an experiment, not a gate. It runs when the probe, this file,
+  # the toolchain pins, compare.h or types.h, what it reads of 13 · Prover
+  # agreement (tools/agreement/agreement.py) or of 11 · Proofs: machine
+  # models (proofs-machdeps.yml, two of tools/machdeps/'s models) change,
+  # and on demand.
+  #
+  # QUESTION: algo_cmp_fn's documentation asks a comparator to be reflexive,
+  # antisymmetric and transitive; each of compare.h's 24 comparators states
+  # only that its result is -1, 0 or 1. Does WP prove the three of each
+  # comparator's code, through functions that call it and assert them, with
+  # the calls inlined (-inline-calls, -remove-inlined), under
+  # frama-c-compare's options; which provers prove what alone; and at the
+  # other machine models' classes? And, as controls: without the inlining,
+  # does WP prove none of them; and with it, does WP prove no false one?
+  #
+  # PROBE: tools/probes/verify-084/order_probe.py runs one part a job of the
+  # matrix: the driver compare_order_verify.h with the three provers together
+  # (after checking the files: gen_order.py --check, and each driver as the
+  # inlining leaves it), with each alone, at cortex_m4, rv64_lp64 and
+  # msvc_x86_64 together; the driver without inlining, its assertions only
+  # (contract); and compare_order_false.h's false assertions (false). The
+  # report job compares them: the would-be pin file of 13, each model
+  # against x86_64, the controls. The file steps names the parts that run.
+  # Report-only: it prints each goal's result and posts notices, and a part
+  # fails only if its WP gives no summary or no report, or is stopped after
+  # 230 minutes. Each part's files are its artifact, order-probe-PART. Its
+  # predictions and their scores are VERIFY-084's, in docs/deviations.md.
+  # -------------------------------------------------------------------------
+  order-probe:
+    needs: changes
+    if: needs.changes.outputs.order == 'true'
+    # Pinned, not ubuntu-latest: see the runner note in
+    # ci.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    # One WP run a part, which the probe stops after 230 minutes; setup can
+    # take 47 minutes when its cache misses (VERIFY-060 run 1).
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [together, alt-ergo, z3, cvc5, contract, 'false', cortex_m4, rv64_lp64, msvc_x86_64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "Part ${{ matrix.part }} of tools/probes/verify-084/order_probe.py"
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-084/order_probe.py "${{ matrix.part }}"
+      - name: Upload the part's output (order probe)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: order-probe-${{ matrix.part }}
+          path: order_out
+          if-no-files-found: warn
+          retention-days: 90
+
+  order-probe-report:
+    needs: [changes, order-probe]
+    if: ${{ !cancelled() && needs.changes.outputs.order == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: "order-probe-*"
+          path: order_out
+          merge-multiple: true
+      - name: "The parts compared (tools/probes/verify-084/order_probe.py report)"
+        run: python3 tools/probes/verify-084/order_probe.py report order_out
