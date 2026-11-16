@@ -15,8 +15,11 @@ each a job of the probe's matrix in probes.yml:
 
   main            each case of aorai.py's CASES: Aorai, then WP on main
                   alone (-wp-fct main), the callees' contracts taken as
-                  given; Report's table then gives each of main's
-                  properties its status
+                  given, with WP's smoke tests (since run 1b); Report's
+                  table then gives each of main's properties its status.
+                  Then hashmap_stale_checks.c, here: hashmap_stale.c with
+                  ACSL checks, of \false at four points and of iter == 0
+                  before the refused call (run 1b)
   lib-hashmap     hashmap_ok.c with hashmap_iteration.ya, WP on every
   lib-stringbuf   function; stringbuf_ok.c with stringbuf_views.ya;
   lib-bitset      bitset_ok.c with bitset_views.ya
@@ -27,9 +30,13 @@ model, -wp-rte, -wp-split, Alt-Ergo, Z3 and CVC5, 120 s. Aorai's
 properties are those that name its state (aorai_), as for aorai.py. Each
 part posts notices: WP's summary, Aorai's properties by status, and for a
 case that breaks its rule, the status of Aorai's precondition at the call
-marked refused. It never fails on what it measures: a part fails only if a
-WP run gives no summary or no table, or is stopped at its limit (30
-minutes a case of main, 230 a lib part).
+marked refused. Its log lists Aorai's properties neither valid nor
+ignored (never tried, as a behavior's assumption or an assigns clause's
+\from), WP's lines on smoke tests, and for a case that breaks its rule
+every property of main at the marked call and Aorai's of main; for the
+checks, their statuses. It never fails on what it measures: a part fails
+only if a WP run gives no summary or no table, or is stopped at its limit
+(30 minutes a case of main, 230 a lib part).
 
 The file steps, next to this script, names the parts that run; a part it
 does not name posts that it did not run. Without the file, every part
@@ -56,6 +63,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 STEPS = os.path.join(HERE, 'steps')
 OUT = os.path.abspath('aorai_wp_out')
 LIBS = {'lib-hashmap': 'hashmap_ok', 'lib-stringbuf': 'stringbuf_ok', 'lib-bitset': 'bitset_ok'}
+# Run 1b: hashmap_stale.c with checks of \false and of iter == 0 before the
+# refused call, a case of the part main after aorai.py's.
+CHECKS = 'tools/probes/verify-085/hashmap_stale_checks.c'
 PARTS = ['main'] + list(LIBS)
 LIMITS = {'main': 30 * 60, 'lib': 230 * 60}
 CUT = 4000   # the runner cuts an annotation at 4096 characters
@@ -97,7 +107,11 @@ def command(tools, case, scope, csv_path):
             '-wp', '-wp-rte', '-wp-model', model, '-wp-prover', 'alt-ergo,z3,cvc5',
             '-wp-timeout', '120', '-wp-split'] + agreement.EXTRA.get(name, []))
     if scope == 'main':
-        cmd += ['-wp-fct', 'main']
+        # Run 1b: smoke tests, which try to prove that a call's contract or
+        # a precondition leaves the code after it unreachable (VERIFY-085's
+        # run 1: WP proved the precondition of the call hashmap_stale.c's
+        # rule refuses, which Eva finds invalid).
+        cmd += ['-wp-fct', 'main', '-wp-smoke-tests']
     # -report-untried: a property WP did not try is in the table too.
     return cmd + ['-then-last', '-report-untried', '-report-csv', csv_path], name
 
@@ -164,13 +178,32 @@ def one(tools, case, scope, limit):
         at = [r['status'] for r in mine if r['file'] == base and int(r['line']) == marks[0]
               and r['property kind'].startswith('precondition of')]
         line += f'; at the call marked refused (line {marks[0]}): {", ".join(at) or "no property"}'
-    unproved = [f'{r["function"]}:{r["line"]} {r["property kind"]}: {r["property"][:100]}'
-                for r in mine if not r['status'].startswith('Valid')]
+    # Ignored: never tried, as WP does not prove a behavior's assumption or
+    # an assigns clause's \from; the rest not valid are listed.
+    unproved = [f'{r["status"]}: {r["function"]}:{r["line"]} {r["property kind"]}: {r["property"][:160]}'
+                for r in mine if not r['status'].startswith('Valid') and r['status'] != 'Ignored']
+    smoke = [ln for ln in text.splitlines() if 'moke' in ln or 'oomed' in ln]
+    if scope == 'main':
+        line += f'; smoke-test lines {len(smoke)}, doomed {sum("oomed" in ln for ln in smoke)}'
     line += f'; {minutes:.1f} minutes'
     print(line)
     if unproved:
-        print(f'--- {name}: Aorai\'s properties not valid ({len(unproved)}) ---')
-        shown('\n'.join(unproved[:300]))
+        print(f'--- {name}: Aorai\'s properties neither valid nor ignored ({len(unproved)}) ---')
+        shown('\n'.join(unproved[:200]))
+    if smoke:
+        print(f'--- {name}: WP\'s lines on smoke tests ({len(smoke)}) ---')
+        shown('\n'.join(smoke[:80]))
+    checks = [r for r in rows if r.get('function') == 'main'
+              and ('check' in r['property kind'] or 'assert' in r['property kind'])
+              and os.path.basename(source) == r['file']]
+    if source == CHECKS:
+        line += '; checks: ' + ', '.join(f'{r["property"][:60]} {r["status"]}' for r in checks)
+    if marks:
+        base = os.path.basename(source)
+        print(f'--- {name}: every property of main at line {marks[0]}, and Aorai\'s of main ---')
+        shown('\n'.join(f'{r["status"]}: {r["line"]} {r["property kind"]}: {r["property"][:200]}'
+                         for r in rows if r.get('function') == 'main' and r['file'] == base
+                         and (int(r['line']) == marks[0] or 'aorai_' in (r.get('property') or ''))))
     summary = {'case': name, 'unit': unit, 'summary': s[:2], 'cats': s[2],
                'aorai': statuses(mine), 'unproved': unproved, 'minutes': round(minutes, 1)}
     with open(os.path.join(d, 'summary.json'), 'w') as f:
@@ -198,7 +231,8 @@ def main(argv):
     failed = []
     if part == 'main':
         lines = {}
-        for case in tools[0].CASES:
+        extra = ('hashmap_stale_checks', CHECKS, 'hashmap', 'hashmap_iteration', 'breaks')
+        for case in tools[0].CASES + [extra]:
             try:
                 lines.setdefault(case[3], []).append(one(tools, case, 'main', LIMITS['main']))
             except RuntimeError as e:

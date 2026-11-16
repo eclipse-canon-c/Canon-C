@@ -4,10 +4,10 @@
 
 open     : { CALL(bitset_close) } -> closed
          | other -> open;
-closed   : { CALL(borrowed_bytes_get) && borrowed_bytes_get().b != 0 } -> stale
+closed   : { CALL(borrowed_bytes_get) && borrowed_bytes_get().b == borrowed_bytes_get().b } -> stale
          | { CALL(bitset_init) } -> reopened
          | other -> closed;
-reopened : { CALL(borrowed_bytes_get) && borrowed_bytes_get().b != 0 } -> stale
+reopened : { CALL(borrowed_bytes_get) && borrowed_bytes_get().b == borrowed_bytes_get().b } -> stale
          | { CALL(bitset_as_borrowed_bytes) } -> open
          | { CALL(bitset_close) } -> closed
          | other -> reopened;

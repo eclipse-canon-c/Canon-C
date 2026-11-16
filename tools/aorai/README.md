@@ -34,8 +34,8 @@ Ya has no comments, so the automata are described here.
   leads to `reopened`, and in `reopened` a view taken
   (`stringbuf_as_borrowed_str`, `stringbuf_as_borrowed_bytes`,
   `stringbuf_buffer_as_borrowed_bytes`) back to `open`. In `closed` and in
-  `reopened`, a read of a view (`borrowed_str_get` or `borrowed_bytes_get`
-  with a view, `b` not null) leads to `stale`: the read is refused. That
+  `reopened`, a read of a view (`borrowed_str_get` or `borrowed_bytes_get`,
+  guarded on `b == b`: see below) leads to `stale`: the read is refused. That
   is what a build with `CANON_LIFETIME_DEBUG` checks at run time: the
   close marks the lifetime closed, and the next init draws a new one, so
   that a view taken before the close does not become valid again.
@@ -54,13 +54,21 @@ before a close and read after the buffer was initialised again and
 another view taken, or an iteration that a mutation ended, continued
 after a second iterator started from 0.
 
-**Why a read is guarded on its view.** A rule made of calls alone, Aorai
+**Why a read is guarded on `b == b`.** A rule made of calls alone, Aorai
 decides by itself in a program without branches: it finds that no run of
 `main` keeps the rule and gives `main` the precondition `\false`, without
-saying which call. With the read guarded on a value, `b` not null, Aorai
-leaves the check to each read, as a precondition that Eva or WP then
-decides at that call. `borrowed_str_get` and `borrowed_bytes_get` require
-`b` not null anyway.
+saying which call. With the read guarded on a value, Aorai leaves the
+check to each read, as a precondition that Eva or WP then decides at that
+call: for `stringbuf_closed.c`, `aorai_CurStates ≡ closed ⇒ (b ≢ b ∧ b ≢ b)
+∨ b ≢ b`, that is, not in `closed`. The guard is true of every call; it is
+there only so that Aorai does not evaluate it. VERIFY-085's run 1 had it
+`b != 0`, which Frama-C 25's Aorai reads and 29's refuses, a pointer
+compared with an integer ("types borrowed_str const * and ℤ are not
+convertible"); Ya has no `\null`. A guard on the view's length, `b->str.len
+>= 0`, type-checks, but Aorai joins the two reads' guards by the name of
+their parameter, `b` in both, and writes into `borrowed_str_get`'s
+precondition `b->bytes.len`, a field `borrowed_str` does not have. `b == b`
+reads the same in both.
 
 **What Aorai cannot instrument.** It stops at a call through a function
 pointer that has no `calls` clause. `core/region.h`'s `region_end` calls

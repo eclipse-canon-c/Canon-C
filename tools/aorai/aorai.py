@@ -237,14 +237,32 @@ def run(selected):
         secs = time.time() - t0
         with open(os.path.join(d, 'frama-c.log'), 'w', encoding='utf-8') as f:
             f.write(log)
-        verdict, s = judge(source, read_table(csv_path), log, rc)
+        rows = read_table(csv_path)
+        verdict, s = judge(source, rows, log, rc)
         s.update({'case': case, 'automaton': auto, 'verdict': verdict, 'want': want,
                   'seconds': round(secs, 1)})
         with open(os.path.join(d, 'summary.json'), 'w') as f:
             json.dump(s, f, indent=1)
         print(f'{case} ({auto}): {describe(s)}', flush=True)
+        # Aorai's properties neither valid nor dead, and, for a case not as
+        # CASES says, the end of Frama-C's log, so that the job's log tells.
+        odd = [r for r in rows or [] if 'aorai_' in (r.get('property') or '')
+               and r['status'] not in ('Valid', 'Dead')]
+        if odd:
+            shown('\n'.join(f'  {r["status"]}: {r["file"]}:{r["line"]} {r["function"]} '
+                             f'{r["property kind"]}: {r["property"][:200]}' for r in odd[:40]))
+        if verdict != want:
+            print(f'--- {case}: the end of Frama-C\'s log ---')
+            shown('\n'.join(log.splitlines()[-25:]))
         results.append(s)
     return notices(results)
+
+
+def shown(text):
+    """A tool's output in the log, none of its lines a workflow command."""
+    for line in text.splitlines():
+        print('| ' + line if line.lstrip().startswith(('::', '##[')) else line)
+    sys.stdout.flush()
 
 
 def describe(s):

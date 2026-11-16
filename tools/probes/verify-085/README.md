@@ -16,7 +16,7 @@ other function's, that it moves the state as its contract says.
 
 | part | what |
 |------|------|
-| `main` | each case of `tools/aorai/aorai.py`'s `CASES`: Aorai, then WP on `main` alone (`-wp-fct main`), the callees' contracts taken as given |
+| `main` | each case of `tools/aorai/aorai.py`'s `CASES`: Aorai, then WP on `main` alone (`-wp-fct main`), the callees' contracts taken as given, with WP's smoke tests (since run 1b); then `hashmap_stale_checks.c`, here (run 1b) |
 | `lib-hashmap`, `lib-stringbuf`, `lib-bitset` | `hashmap_ok.c`, `stringbuf_ok.c` and `bitset_ok.c`, each with its automaton, and WP on every function |
 
 WP runs with the options of the unit whose program the case is
@@ -29,6 +29,20 @@ and, for a case that breaks its rule, the status of Aorai's precondition
 at the call marked `/* refused */`. It never fails on what it measures: a
 part fails only if a WP run gives no summary or no table, or is stopped
 at its limit (30 minutes a case of `main`, 230 minutes a lib part).
+
+**Run 1b.** In run 1, WP proved the precondition of the call
+`hashmap_stale.c` marks refused, which Eva finds invalid. So the part
+`main` now runs WP's smoke tests, which try to prove that a call's
+contract or a precondition leaves the code after it unreachable, and a
+last case, `hashmap_stale_checks.c`: `hashmap_stale.c` with ACSL checks,
+which WP proves or not but never assumes, of `\false` after the init,
+after the loop, after the first `hashmap_iter_next` and after the insert,
+and of `iter == 0` before the refused call. A check of `\false` proved
+marks a point WP reaches with hypotheses that contradict each other;
+`iter_zero` proved would mean WP takes `iter` to be 0 there. The part's
+log lists, for each case that breaks its rule, every property of `main`
+at the marked call and Aorai's of `main`, and for every case Aorai's
+properties neither valid nor ignored.
 
 The file `steps` names the parts that run; a part it does not name posts
 that it did not run. Each part's files, `aorai_wp_out/PART/`, are its
