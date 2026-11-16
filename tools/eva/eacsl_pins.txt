@@ -11,6 +11,8 @@
 # A result not as pinned fails the e-acsl job of 14 · Eva. A program compiled
 # and not as E-ACSL runs it is never pinned. eacsl.py pin DIR writes the pins
 # from a run's summaries, under a record.
+# compare_order's line is VERIFY-084's run 2 prediction: here, with Frama-C
+# 25's E-ACSL, it runs, 313 checks, none failing.
 program         result
 arena           stops: mkBinOp
 array           stops: does not finish
@@ -19,6 +21,7 @@ bitset          stops: does not finish
 borrow          runs
 checked         runs
 compare         runs
+compare_order   runs
 deque           stops: does not finish
 diag            runs
 error           runs

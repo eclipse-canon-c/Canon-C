@@ -1,0 +1,23 @@
+# frama-c-compare-order: the goals that one or two provers prove alone, each prover running alone,
+# as VERIFY-084's probe found them (9 · Probes #29, at 62105e2): the driver run as its job runs it,
+# with each prover alone at 120 s. A goal not listed is proved by WP itself, by all three provers,
+# or by none (the names its proof job pins: none). No proof took a prover over 30 s alone, so none
+# is slow. The 16: each floating-point comparator's assertions' last part, the path on which
+# every value compared is a number, where Z3 alone fails ("Failed"), as it does on parts 4 of
+# algo_cmp_f32's and algo_cmp_f64's postconditions in frama-c-compare.
+two Alt-Ergo+CVC5 typed_cast_order_f32_antisymmetric_assert_antisymmetric_part16
+two Alt-Ergo+CVC5 typed_cast_order_f32_desc_antisymmetric_assert_antisymmetric_part16
+two Alt-Ergo+CVC5 typed_cast_order_f32_desc_reflexive_assert_reflexive_part4
+two Alt-Ergo+CVC5 typed_cast_order_f32_desc_transitive_assert_transitive_eq_part64
+two Alt-Ergo+CVC5 typed_cast_order_f32_desc_transitive_assert_transitive_lt_part64
+two Alt-Ergo+CVC5 typed_cast_order_f32_reflexive_assert_reflexive_part4
+two Alt-Ergo+CVC5 typed_cast_order_f32_transitive_assert_transitive_eq_part64
+two Alt-Ergo+CVC5 typed_cast_order_f32_transitive_assert_transitive_lt_part64
+two Alt-Ergo+CVC5 typed_cast_order_f64_antisymmetric_assert_antisymmetric_part16
+two Alt-Ergo+CVC5 typed_cast_order_f64_desc_antisymmetric_assert_antisymmetric_part16
+two Alt-Ergo+CVC5 typed_cast_order_f64_desc_reflexive_assert_reflexive_part4
+two Alt-Ergo+CVC5 typed_cast_order_f64_desc_transitive_assert_transitive_eq_part64
+two Alt-Ergo+CVC5 typed_cast_order_f64_desc_transitive_assert_transitive_lt_part64
+two Alt-Ergo+CVC5 typed_cast_order_f64_reflexive_assert_reflexive_part4
+two Alt-Ergo+CVC5 typed_cast_order_f64_transitive_assert_transitive_eq_part64
+two Alt-Ergo+CVC5 typed_cast_order_f64_transitive_assert_transitive_lt_part64

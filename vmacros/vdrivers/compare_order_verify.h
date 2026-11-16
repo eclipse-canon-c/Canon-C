@@ -13,10 +13,10 @@
  * SPDX-License-Identifier: MIT AND CC0-1.0
  **************************************************************************/
 
-/* tools/probes/verify-084/compare_order_verify.h                  [VERIFY-084]
+/* vmacros/vdrivers/compare_order_verify.h                         [VERIFY-084]
  * ============================================================================
  * WP driver: each of compare.h's 24 comparators is a total order.
- * Written by gen_order.py (tools/probes/verify-084/); edit that, not this.
+ * Written by tools/probes/verify-084/gen_order.py; edit that, not this.
  *
  * algo_cmp_fn's documentation (core/primitives/compare.h) asks a comparator
  * to be reflexive, antisymmetric and transitive. The contract of each of
@@ -38,16 +38,21 @@
  * needs: cmp(a, b) > 0 && cmp(b, c) > 0 ==> cmp(a, c) > 0, and when
  * cmp(a, b) == 0, cmp(a, c) and cmp(b, c) have the same sign.
  *
- * WP proves them with Frama-C's -inline-calls and -remove-inlined, each
- * given the 24 comparators' names: each call is replaced by the
- * comparator's body, and a _desc comparator's call to its ascending one
- * too, so the assertions are proved of the comparators' code. The kernel
- * keeps each inlined body's contract as a statement contract, which WP has
- * not supported since Frama-C 23 (its manual, 1.6 and 2.1); the reads of
- * the inlined bodies are checked by -wp-rte's run-time checks instead. The
- * comparators then leave the analysed unit; frama-c-compare proves them.
- * Frama-C's RPP plug-in proves such properties by self-composition too,
- * but needs Frama-C 33 (docs/for-future.md).
+ * The job frama-c-compare-order (proofs-core.yml) proves them with
+ * Frama-C's -inline-calls and -remove-inlined, each given the 24
+ * comparators' names: each call is replaced by the comparator's body, and
+ * a _desc comparator's call to its ascending one too, so the assertions
+ * are proved of the comparators' code. The kernel keeps each inlined
+ * body's contract as a statement contract, which WP has not supported
+ * since Frama-C 23 (its manual, 1.6 and 2.1); the reads of the inlined
+ * bodies are checked by -wp-rte's run-time checks instead. The comparators
+ * then leave the analysed unit; frama-c-compare proves them. Frama-C's RPP
+ * plug-in proves such properties by self-composition too, but needs
+ * Frama-C 33 (docs/for-future.md).
+ *
+ * tools/eva/programs/compare_order.c calls each function on chosen values,
+ * the comparators called, not inlined: Eva checks the assertions there,
+ * and E-ACSL as the program runs.
  * ============================================================================ */
 
 #ifndef CANON_VDRIVER_COMPARE_ORDER_VERIFY_H

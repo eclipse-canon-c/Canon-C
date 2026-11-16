@@ -46,22 +46,26 @@
  * ────────────────────────────────────────────────────────────────────────────
  * Every comparator carries an ACSL contract specifying:
  *   - Memory safety: \valid_read on char-level byte ranges
- *   - Functional correctness: three-way comparison result (-1, 0, +1)
+ *   - The result's range: -1 <= \result <= 1
  *   - Side-effect bounding: assigns \nothing (pure functions)
+ * The job frama-c-compare proves the 24 against them (VERIFY-005).
  *
  * The (x > y) - (x < y) pattern always produces exactly -1, 0, or +1.
  * This is a branchless three-way comparison that WP can reason about
  * as simple integer arithmetic on boolean-to-int conversions.
  *
- * Floating-point comparators use \is_NaN from ACSL's floating-point
- * logic to specify NaN handling with complete and disjoint behaviors.
+ * That each comparator is a total order (algo_cmp_fn, below) relates two
+ * or three calls, which no contract states: the driver
+ * vmacros/vdrivers/compare_order_verify.h asserts it of calls to each,
+ * and the job frama-c-compare-order proves it of the comparators' code,
+ * NaNs included (VERIFY-084).
  *
  * ACSL note on void* parameters: Frama-C WP treats void* as char*
  * (sint8*) internally. Casting void* to a typed pointer (e.g. u32*)
  * in ACSL requires/ensures clauses produces "incompatible pointer cast"
  * warnings that prevent WP from proving any goals. The contracts use
- * char-level \valid_read on the raw bytes and express functional
- * properties using local variables assigned inside the function body.
+ * char-level \valid_read on the raw bytes, and state the result's range,
+ * not the values compared.
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
@@ -114,6 +118,10 @@
  * - cmp(a, b) < 0  implies  cmp(b, a) > 0      (antisymmetric)
  * - cmp(a, b) < 0 && cmp(b, c) < 0
  *     implies cmp(a, c) < 0                     (transitive)
+ *
+ * The 24 comparators below do, each proved of its code (VERIFY-084), with
+ * antisymmetry as cmp(b, a) == -cmp(a, b), and with cmp(a, b) == 0 and
+ * cmp(b, c) == 0 implying cmp(a, c) == 0.
  */
 typedef int (*algo_cmp_fn)(const void* a, const void* b, void* ctx);
 

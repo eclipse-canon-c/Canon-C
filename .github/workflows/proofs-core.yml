@@ -379,9 +379,10 @@ jobs:
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/primitives/compare.h"
         # compare.h achieved 208/208 (100%) with Typed+Cast model.
-        # All 28 comparator functions are fully proved — functional
-        # correctness, RTE absence, and assigns \nothing.
-        # See docs/deviations.md, entry VERIFY-005.
+        # All 24 comparators are proved against their contracts: each
+        # result in -1..1, no runtime error, and assigns \nothing. That
+        # each is a total order is frama-c-compare-order's (VERIFY-084).
+        # See docs/deviations.md, entries VERIFY-005 and VERIFY-084.
         # (2026-07-16 retrofit): Failed gated at zero explicitly (it was
         # previously invisible to the T+U-only count); Proved line pinned.
         run: |
@@ -456,7 +457,7 @@ jobs:
             exit 1
           fi
           echo "PASS: compare.h fully verified — 208/208 goals proved,"
-          echo "      0 residuals. All 28 comparators proved correct."
+          echo "      0 residuals. All 24 comparators proved against their contracts."
           echo "==============================================="
       - name: Upload WP proof output (compare.h)
         if: always()
@@ -464,6 +465,119 @@ jobs:
         with:
           name: wp-proof-compare
           path: wp_compare_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        # Posts the WP summary as an annotation, readable through the API
+        # without the log. Reads the job's WP output files; changes no gate.
+        if: always()
+        run: |
+          for f in wp_*.txt; do
+            [ -f "$f" ] || continue
+            P=$(grep -E "^\[wp\] Proved goals:" "$f" | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+            [ -n "$P" ] || continue
+            U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" "$f" || true)
+            B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "$f" || true)
+            echo "::notice title=${{ github.job }}::${f}: proved ${P}; unproved ${U}; failed/invalid/stepout ${B}"
+          done
+
+  frama-c-compare-order:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: vmacros/vdrivers/compare_order_verify.h (VERIFY-084)"
+        # compare.h's 24 comparators as total orders. For each, three
+        # functions call it and assert that it is reflexive, antisymmetric
+        # and transitive (96 assertions); -inline-calls and -remove-inlined
+        # replace each call by the comparator's body, so that WP proves
+        # them of the comparators' code, and take the comparators out of
+        # the unit, which frama-c-compare proves. 3156/3156, as VERIFY-084's
+        # probe measured it (9 · Probes #29): Qed 2780, Terminating 72,
+        # Unreachable 72, and the provers. Its unit in 13 · Prover agreement
+        # is frama-c-compare-order; 11 · Proofs: machine models proves it at
+        # the nine other models. See docs/deviations.md, entry VERIFY-084.
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -inline-calls algo_cmp_u8,algo_cmp_u8_desc,algo_cmp_u16,algo_cmp_u16_desc,algo_cmp_u32,algo_cmp_u32_desc,algo_cmp_u64,algo_cmp_u64_desc,algo_cmp_i8,algo_cmp_i8_desc,algo_cmp_i16,algo_cmp_i16_desc,algo_cmp_i32,algo_cmp_i32_desc,algo_cmp_i64,algo_cmp_i64_desc,algo_cmp_usize,algo_cmp_usize_desc,algo_cmp_isize,algo_cmp_isize_desc,algo_cmp_f32,algo_cmp_f32_desc,algo_cmp_f64,algo_cmp_f64_desc \
+            -remove-inlined algo_cmp_u8,algo_cmp_u8_desc,algo_cmp_u16,algo_cmp_u16_desc,algo_cmp_u32,algo_cmp_u32_desc,algo_cmp_u64,algo_cmp_u64_desc,algo_cmp_i8,algo_cmp_i8_desc,algo_cmp_i16,algo_cmp_i16_desc,algo_cmp_i32,algo_cmp_i32_desc,algo_cmp_i64,algo_cmp_i64_desc,algo_cmp_usize,algo_cmp_usize_desc,algo_cmp_isize,algo_cmp_isize_desc,algo_cmp_f32,algo_cmp_f32_desc,algo_cmp_f64,algo_cmp_f64_desc \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/compare_order_verify.h 2>&1 | tee wp_compare_order_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (compare_order_verify.h) exit status: ${WP_EXIT}"
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_compare_order_output.txt || true)
+          echo "  ${PROVED_LINE}"
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_compare_order_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_compare_order_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_compare_order_output.txt || true)
+          INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_compare_order_output.txt || true)
+          STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_compare_order_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected 0)"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED, a prover error:"
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_compare_order_output.txt
+            exit 1
+          fi
+          if [ "${INVALID_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${INVALID_COUNT} goal(s) INVALID — an assertion is"
+            echo "      FALSIFIED with a counter-example. Invalid is WP's"
+            echo "      refutation verdict; Failed is a prover error. This"
+            echo "      is categorically different from a residual and can"
+            echo "      never be pinned:"
+            grep -E "^\\[wp\\] \\[Invalid\\]" wp_compare_order_output.txt
+            exit 1
+          fi
+          if [ "${STEPOUT_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${STEPOUT_COUNT} goal(s) hit a prover STEP limit."
+            echo "      Stepout is a non-proved verdict this project has"
+            echo "      never observed. It is deliberately NOT pooled into"
+            echo "      the residual count, because the residual set is"
+            echo "      defined as Timeout u Unknown. If this fires, decide"
+            echo "      whether to pool it and update the definition first:"
+            grep -E "^\\[wp\\] \\[Stepout\\]" wp_compare_order_output.txt
+            exit 1
+          fi
+          if [ "${UNPROVED_COUNT}" -ne 0 ]; then
+            echo "FAIL: compare_order_verify.h should have 0 unproved goals."
+            echo "      Found ${UNPROVED_COUNT} unproved goals — this is a regression."
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_compare_order_output.txt || true
+            exit 1
+          fi
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "3156 / 3156" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3156 / 3156)."
+            echo "      The driver or a comparator changed: measure it, say"
+            echo "      why in a record, and ratchet the pin in one commit."
+            exit 1
+          fi
+          echo "PASS: compare.h's 24 comparators are total orders — 3156/3156"
+          echo "      goals proved, 0 residuals: reflexive, antisymmetric and"
+          echo "      transitive, of their code."
+          echo "==============================================="
+      - name: Upload WP proof output (compare_order_verify.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-compare-order
+          path: wp_compare_order_output.txt
           retention-days: 90
       - name: "Result annotation (VERIFY-050)"
         # Posts the WP summary as an annotation, readable through the API

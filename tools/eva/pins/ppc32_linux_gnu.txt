@@ -8,12 +8,16 @@
 # diag.c's block is VERIFY-073's, as its probe measured it at the ten models (9 · Probes #21, run 1c), with semantics/diag.h as VERIFY-073 made it.
 # vec_range.c's block is VERIFY-079's: Eva leaves open the assertion kept that run 2 put into
 # data/vec/vec_range.h, which WP proves; as 14 · Eva #12 gave it at the ten models (run 2b).
+# compare_order.c's block is VERIFY-084's run 2 prediction: measured here with Frama-C 25
+# at x86_64, msvc_x86_64 and ppc_32, and the same at the other seven models.
 
 checked @ ppc32_linux_gnu: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 62/0/0; functions 31/31
 
 bits @ ppc32_linux_gnu: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 8/0/0; functions 19/19
 
 compare @ ppc32_linux_gnu: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 81/0/0; functions 26/26
+
+compare_order @ ppc32_linux_gnu: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 456/0/0; functions 97/97
 
 ptr @ ppc32_linux_gnu: end reached, fails {0; 1; 2}; alarms 2; program calls: 0 invalid, 1 unknown; library calls: 0 invalid, 1 unknown; checks not confirmed at lines 38,39; preconditions 67/2/0; functions 22/55
   alarm: Unknown: tools/eva/programs/ptr.c:38 main: ptr_comparison: \pointer_comparable((void *)up, (void *)0)

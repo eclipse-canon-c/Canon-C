@@ -15,9 +15,9 @@
 
 /* tools/probes/verify-084/compare_order_false.h                   [VERIFY-084]
  * ============================================================================
- * The negative control of compare_order_verify.h: assertions that are
- * false, which WP must not prove with the same options.
- * Written by gen_order.py (tools/probes/verify-084/); edit that, not this.
+ * The negative control of vmacros/vdrivers/compare_order_verify.h:
+ * assertions that are false, which WP must not prove with the same options.
+ * Written by gen_order.py, next to this file; edit that, not this.
  *
  *   order_false_T_symmetric  symmetric   cmp(b, a) == cmp(a, b): false
  *                                        whenever a and b compare unequal

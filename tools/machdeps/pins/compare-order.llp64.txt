@@ -1,0 +1,4 @@
+# frama-c-compare-order at the LLP64 model: msvc_x86_64.
+# VERIFY-084, run 2: what its probe gave at msvc_x86_64 (9 · Probes #29), for the class.
+# The proved line, then each unproved goal (Timeout or Unknown).
+proved 3156 / 3156

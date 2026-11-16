@@ -16,8 +16,12 @@ Kosmatov, Le Gall, Prevosto, Petiot).
 Why it waits: its only opam release, 0.0.4, needs Frama-C 33 or later, and
 its page calls it an early prototype; the proofs here run on Frama-C 29.
 Until the project moves to a Frama-C that RPP supports, such a property is
-proved through a wrapper function that makes both calls, with an ordinary
-contract.
+proved through wrapper functions that make the calls, with ordinary
+annotations. VERIFY-084 does so for compare.h's 24 comparators:
+`vmacros/vdrivers/compare_order_verify.h` asserts that each is reflexive,
+antisymmetric and transitive, and `frama-c-compare-order` proves it with
+the calls inlined (`-inline-calls`), so of the comparators' code, as RPP's
+self-composition would.
 
 Sources: [RPP's page](https://frama-c.com/fc-plugins/rpp.html) and [its
 opam package](https://ocaml.org/p/frama-c-rpp).

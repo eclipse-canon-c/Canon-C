@@ -1,0 +1,4 @@
+# frama-c-compare-order at the three LP64 models: rv64_lp64, rv64_linux_gnu, aarch64_linux_gnu.
+# VERIFY-084, run 2: what its probe gave at rv64_lp64 (9 · Probes #29), for the class.
+# The proved line, then each unproved goal (Timeout or Unknown).
+proved 3156 / 3156

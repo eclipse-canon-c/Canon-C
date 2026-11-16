@@ -2,10 +2,11 @@
 """tools/machdeps/check_pins.py  (run from the repository root)
 
 VERIFY-060, phase C. The pins of 11 · Proofs: machine models are
-tools/machdeps/pins/<unit>.<class>.txt: for each core/ unit and each class
-of models (ilp32, lp64, llp64), the proved line and the goals left unproved.
-This checks that the thirty files are there and read, and that each goal
-they leave unproved is one the unit's x86_64 job pins too, as
+tools/machdeps/pins/<unit>.<class>.txt: for each core/ unit, and since
+VERIFY-084 the order driver of compare.h's comparators (compare-order), and
+each class of models (ilp32, lp64, llp64), the proved line and the goals
+left unproved. This checks that the 33 files are there and read, and that
+each goal they leave unproved is one the unit's x86_64 job pins too, as
 tools/record_coverage.py reads proofs-core.yml. Each x86_64 residual is
 argued in docs/deviations.md (record coverage checks that), so a model's
 residual is argued where the x86_64 one is, and no model adds a residual
@@ -21,7 +22,7 @@ import re
 import sys
 
 UNITS = ['checked', 'bits', 'compare', 'ptr', 'slice', 'memory', 'arena',
-         'pool', 'region', 'lifetime']
+         'pool', 'region', 'lifetime', 'compare-order']
 CLASSES = ['ilp32', 'lp64', 'llp64']
 HERE = os.path.dirname(os.path.abspath(__file__))
 

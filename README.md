@@ -294,9 +294,10 @@ under a block of their own.
 
 The proofs cover the code as Frama-C sees it, which is close to a
 shipped build but not the same. They are made at Frama-C's x86_64 machine
-model, and the ten core/ units also at nine more: Cortex-M4, 32-bit Arm,
-RV32 and RV64, AArch64, big-endian 32-bit PowerPC and LLP64 (arena.h also
-at `gcc_x86_32`); elsewhere the library is tested or compiled, not proved.
+model, and the ten core/ units, and the order of compare.h's comparators,
+also at nine more: Cortex-M4, 32-bit Arm, RV32 and RV64, AArch64,
+big-endian 32-bit PowerPC and LLP64 (arena.h also at `gcc_x86_32`);
+elsewhere the library is tested or compiled, not proved.
 They
 compile the run-time `require` and `ensure` checks out, and take the
 portable fallbacks of `checked.h` and `bits.h`, where a GCC or Clang
@@ -1026,8 +1027,9 @@ configuration not listed in these documents is not checked.
   with the job that shows it, and which are not supported and why:
   [`docs/architectures.md`](docs/architectures.md).
 - **Formal verification**: Frama-C/WP on every verified unit, the ten core/
-  units at ten machine models; Coq for the twelve goals of bits.h the
-  provers leave; the three provers' agreement; Eva on a program for each
+  units at ten machine models; each of compare.h's 24 comparators proved a
+  total order, of its code (VERIFY-084); Coq for the twelve goals of bits.h
+  the provers leave; the three provers' agreement; Eva on a program for each
   unit at the ten machine models, every result pinned:
   [`docs/verification.md`](docs/verification.md).
 - **Which workflow holds which job**, and where a new one goes:

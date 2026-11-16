@@ -4,9 +4,12 @@ order_probe.py -- VERIFY-084's probe: compare.h's 24 comparators as total
 orders, proved by WP through wrapper functions whose calls are inlined,
 measured in CI before a proof job pins them.
 
-compare_order_verify.h, next to this script and written by gen_order.py,
-has for each comparator three functions whose assertions state that it is
-reflexive, antisymmetric and transitive. WP runs on it as frama-c-compare
+vmacros/vdrivers/compare_order_verify.h, written by gen_order.py, has for
+each comparator three functions whose assertions state that it is
+reflexive, antisymmetric and transitive. Run 1 measured it here, in this
+directory; since run 2 it is there, and the job frama-c-compare-order
+(proofs-core.yml) proves it as the probe's together part did. The probe is
+closed: its file steps names no part. WP runs on it as frama-c-compare
 runs on compare.h (tools/agreement/agreement.py's UNITS: Typed+Cast,
 -wp-rte, -wp-split, 120 s, the same preprocessing), and with -inline-calls
 and -remove-inlined, each given the 24 comparators: each call is replaced by
@@ -49,7 +52,10 @@ no report, or is stopped at LIMIT; report fails only if no part wrote a
 summary.
 
 The file steps, next to this script, names the parts that run; a part it
-does not name posts that it did not run. Without the file, every part runs.
+does not name posts that it did not run, and report that no part ran.
+Without the file, every part runs. "named PART" prints run=true or
+run=false, for the workflow to skip Frama-C's setup for a part not named,
+and "named any" whether it names a part, for the report's download.
 
 Each part's files go to order_out/PART/ in the directory it is run from,
 which must be the repository's root: wp.txt and wp.json, WP's output and
@@ -58,6 +64,7 @@ check, to order_out/files/.
 
     python3 tools/probes/verify-084/order_probe.py PART
     python3 tools/probes/verify-084/order_probe.py report [DIR]
+    python3 tools/probes/verify-084/order_probe.py named PART|any
 """
 import importlib.util
 import json
@@ -75,7 +82,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 STEPS = os.path.join(HERE, 'steps')
 OUT = os.path.abspath('order_out')
 UNIT = 'frama-c-compare'   # the driver is proved with its options
-DRIVER = 'tools/probes/verify-084/compare_order_verify.h'
+DRIVER = 'vmacros/vdrivers/compare_order_verify.h'
 FALSE = 'tools/probes/verify-084/compare_order_false.h'
 MACHDEPS = '.github/workflows/proofs-machdeps.yml'
 PROVERS = ['alt-ergo', 'z3', 'cvc5']
@@ -459,6 +466,9 @@ def report(where):
         else:
             missing.append(p)
     if not got:
+        if not enabled():
+            notice('order report', f'no part ran: {os.path.relpath(STEPS, ROOT)} names none')
+            return 0
         sys.exit(f'::error title=order report::no part wrote a summary under {where}')
     notes = []
     t = got.get('together')
@@ -558,6 +568,10 @@ def report(where):
 
 
 def main(argv):
+    if len(argv) == 3 and argv[1] == 'named' and argv[2] in PARTS + ['any']:
+        named = enabled() if argv[2] == 'any' else [p for p in enabled() if p == argv[2]]
+        print(f'run={"true" if named else "false"}')
+        return 0
     if len(argv) in (2, 3) and argv[1] == 'report':
         return report(argv[2] if len(argv) == 3 else OUT)
     if len(argv) != 2 or argv[1] not in PARTS:

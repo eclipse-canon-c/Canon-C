@@ -1,7 +1,9 @@
 name: "11 · Proofs: machine models"
-# VERIFY-060 (docs/deviations.md). The ten core/ units, proved at nine
-# machine models besides Frama-C's default x86_64, at which proofs-core.yml
-# proves them:
+# VERIFY-060 (docs/deviations.md). The ten core/ units, and since VERIFY-084
+# the order of compare.h's comparators (vmacros/vdrivers/
+# compare_order_verify.h, its x86_64 job frama-c-compare-order), proved at
+# nine machine models besides Frama-C's default x86_64, at which
+# proofs-core.yml proves them:
 #   - from tools/machdeps/, generated from the targets' compilers, committed
 #     and drift-checked by machdeps.yml: Cortex-M4 (read with -enums
 #     gcc-short-enums, arm-none-eabi's enum layout), RV32 and RV64 bare
@@ -14,16 +16,17 @@ name: "11 · Proofs: machine models"
 # file per unit and class of models (ilp32, lp64, llp64), since the models of
 # a class gave the same results at phase B's three runs. Enforced since phase
 # C. Each pinned residual is one the x86_64 job pins too
-# (tools/machdeps/check_pins.py, run by 8 · Records). Ninety jobs, about 24
-# runner-hours a run, so it runs only when core/, the models, this file or
-# the Frama-C setup change, and by hand; at most 30 at once. The char control
-# of phase B's run 2 is a probe now (probes.yml).
+# (tools/machdeps/check_pins.py, run by 8 · Records). Ninety-nine jobs, about
+# 24 runner-hours a run, so it runs only when core/, the order driver, the
+# models, this file or the Frama-C setup change, and by hand; at most 30 at
+# once. The char control of phase B's run 2 is a probe now (probes.yml).
 # Map: .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
     paths:
       - 'core/**'
+      - 'vmacros/vdrivers/compare_order_verify.h'
       - 'tools/machdeps/**'
       - '.github/workflows/proofs-machdeps.yml'
       - '.github/actions/framac-setup/**'
@@ -51,20 +54,21 @@ jobs:
           - { name: ppc32_linux_gnu,     class: ilp32, args: "-machdep tools/machdeps/machdep_ppc32_linux_gnu.yaml" }
           - { name: ppc_32,              class: ilp32, args: "-machdep ppc_32" }
           - { name: msvc_x86_64,         class: llp64, args: "-machdep msvc_x86_64" }
-        # Each unit's memory model and extra definitions are its x86_64 job's
+        # Each unit's memory model, extra definitions and extra options are its x86_64 job's
         # (proofs-core.yml). minutes leaves room for a slow setup: run 1 saw
         # one of 47 minutes.
         unit:
-          - { name: checked,  file: core/primitives/checked.h,  wp_model: "",                     defs: "", minutes: 120 }
-          - { name: bits,     file: core/primitives/bits.h,     wp_model: "",                     defs: "", minutes: 120 }
-          - { name: compare,  file: core/primitives/compare.h,  wp_model: "-wp-model Typed+Cast", defs: "", minutes: 120 }
-          - { name: ptr,      file: core/primitives/ptr.h,      wp_model: "-wp-model Typed+Cast", defs: "", minutes: 120 }
-          - { name: slice,    file: core/slice.h,               wp_model: "-wp-model Typed+Cast", defs: "", minutes: 120 }
-          - { name: memory,   file: core/memory.h,              wp_model: "-wp-model Typed+Cast", defs: "", minutes: 240 }
-          - { name: arena,    file: core/arena.h,               wp_model: "-wp-model Typed+Cast", defs: "", minutes: 240 }
-          - { name: pool,     file: core/pool.h,                wp_model: "-wp-model Typed+Cast", defs: "", minutes: 240 }
-          - { name: region,   file: core/region.h,              wp_model: "-wp-model Typed+Cast", defs: "", minutes: 300 }
-          - { name: lifetime, file: core/primitives/lifetime.h, wp_model: "-wp-model Typed",      defs: "-DCANON_LIFETIME_DEBUG -DCANON_LIFETIME_NO_ATOMICS", minutes: 120 }
+          - { name: checked,  file: core/primitives/checked.h,  wp_model: "",                     defs: "", extra: "", minutes: 120 }
+          - { name: bits,     file: core/primitives/bits.h,     wp_model: "",                     defs: "", extra: "", minutes: 120 }
+          - { name: compare,  file: core/primitives/compare.h,  wp_model: "-wp-model Typed+Cast", defs: "", extra: "", minutes: 120 }
+          - { name: ptr,      file: core/primitives/ptr.h,      wp_model: "-wp-model Typed+Cast", defs: "", extra: "", minutes: 120 }
+          - { name: slice,    file: core/slice.h,               wp_model: "-wp-model Typed+Cast", defs: "", extra: "", minutes: 120 }
+          - { name: memory,   file: core/memory.h,              wp_model: "-wp-model Typed+Cast", defs: "", extra: "", minutes: 240 }
+          - { name: arena,    file: core/arena.h,               wp_model: "-wp-model Typed+Cast", defs: "", extra: "", minutes: 240 }
+          - { name: pool,     file: core/pool.h,                wp_model: "-wp-model Typed+Cast", defs: "", extra: "", minutes: 240 }
+          - { name: region,   file: core/region.h,              wp_model: "-wp-model Typed+Cast", defs: "", extra: "", minutes: 300 }
+          - { name: lifetime, file: core/primitives/lifetime.h, wp_model: "-wp-model Typed",      defs: "-DCANON_LIFETIME_DEBUG -DCANON_LIFETIME_NO_ATOMICS", extra: "", minutes: 120 }
+          - { name: compare-order, file: vmacros/vdrivers/compare_order_verify.h, wp_model: "-wp-model Typed+Cast", defs: "", extra: "-inline-calls algo_cmp_u8,algo_cmp_u8_desc,algo_cmp_u16,algo_cmp_u16_desc,algo_cmp_u32,algo_cmp_u32_desc,algo_cmp_u64,algo_cmp_u64_desc,algo_cmp_i8,algo_cmp_i8_desc,algo_cmp_i16,algo_cmp_i16_desc,algo_cmp_i32,algo_cmp_i32_desc,algo_cmp_i64,algo_cmp_i64_desc,algo_cmp_usize,algo_cmp_usize_desc,algo_cmp_isize,algo_cmp_isize_desc,algo_cmp_f32,algo_cmp_f32_desc,algo_cmp_f64,algo_cmp_f64_desc -remove-inlined algo_cmp_u8,algo_cmp_u8_desc,algo_cmp_u16,algo_cmp_u16_desc,algo_cmp_u32,algo_cmp_u32_desc,algo_cmp_u64,algo_cmp_u64_desc,algo_cmp_i8,algo_cmp_i8_desc,algo_cmp_i16,algo_cmp_i16_desc,algo_cmp_i32,algo_cmp_i32_desc,algo_cmp_i64,algo_cmp_i64_desc,algo_cmp_usize,algo_cmp_usize_desc,algo_cmp_isize,algo_cmp_isize_desc,algo_cmp_f32,algo_cmp_f32_desc,algo_cmp_f64,algo_cmp_f64_desc", minutes: 120 }
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -73,6 +77,7 @@ jobs:
           MODEL_ARGS: ${{ matrix.model.args }}
           WP_MODEL: ${{ matrix.unit.wp_model }}
           DEFS: ${{ matrix.unit.defs }}
+          EXTRA: ${{ matrix.unit.extra }}
           UNIT: ${{ matrix.unit.file }}
         run: |
           eval $(opam env --switch=frama-c)
@@ -82,7 +87,7 @@ jobs:
           frama-c -wp -wp-rte ${MODEL_ARGS} ${WP_MODEL} \
             -wp-prover alt-ergo,z3,cvc5 \
             -wp-timeout 120 \
-            -wp-split \
+            -wp-split ${EXTRA} \
             -cpp-extra-args=" -I core/primitives -I core -I . ${DEFS} -DCANON_NO_REQUIRE -DNDEBUG" \
             "${UNIT}" 2>&1 | tee wp_output.txt
           echo "WP exit status: ${PIPESTATUS[0]}"

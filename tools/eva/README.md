@@ -11,7 +11,7 @@ program, from `main`: it computes the values the program can take, and
 reports each place where a runtime error may happen (an alarm) and each call
 whose precondition may not hold.
 
-`programs/` holds one small program per verified unit, 26 in all, one for
+`programs/` holds one small program per verified unit, 27 in all, one for
 each unit of `tools/agreement/agreement.py`. Each:
 
 - includes its unit's file, and is preprocessed with the unit's own flags,
@@ -23,6 +23,16 @@ each unit of `tools/agreement/agreement.py`. Each:
   container, an index out of range, an overflow);
 - checks what each call returns (`CHECK`) and marks its end (`END`), as
   `programs/eva_program.h` says.
+
+`compare_order.c`, VERIFY-084's, is the program of the driver
+`vmacros/vdrivers/compare_order_verify.h`, whose functions call compare.h's
+comparators and assert that each is reflexive, antisymmetric and
+transitive. It runs each function on every value, pair and triple of a few
+values of its type (an integer type's bounds, 0, 1 and -1; for `f32` and
+`f64` a NaN, the infinities, -1, -0, +0 and 1), the comparators called,
+not inlined as in the proof: so Eva checks the 96 assertions at those
+values, and E-ACSL as the program runs. Its functions return nothing, and
+the assertions are its checks.
 
 `eva.py` runs them in `14 · Eva: programs that use Canon-C`
 (`.github/workflows/eva.yml`):
@@ -214,7 +224,7 @@ functions it calls, their assertions and loop invariants. Where Eva leaves a
 call's precondition Unknown for all the values a program could take, E-ACSL
 checks it on the values the program does take.
 
-The `e-acsl` job of `14 · Eva` runs `eacsl.py` on the 26 programs, at
+The `e-acsl` job of `14 · Eva` runs `eacsl.py` on the 27 programs, at
 x86_64, the host's model. Each is instrumented and compiled by
 `e-acsl-gcc.sh` (the segment memory model, `--keep-going`), with Eva's
 preprocessing, C11, and Frama-C's C library (`-L`), whose logic Canon-C's
@@ -240,7 +250,8 @@ one; or `stops: does not finish`, E-ACSL's stack overflowing, or 300 s
 passing (with no limit on the stack, `option.c`'s instrumentation was not
 done in 600 s of CPU). With Frama-C 29, 10 programs run, all their
 annotations holding, 1624 checks in all; 6 stop on `mkBinOp`; 10 do not
-finish (VERIFY-083's run 1c). Since VERIFY-083's run 2 a result not as
+finish (VERIFY-083's run 1c). VERIFY-084's run 2 adds `compare_order.c`,
+pinned to run. Since VERIFY-083's run 2 a result not as
 pinned fails the job, as does a program compiled and not as E-ACSL runs
 it, which is never pinned.
 
@@ -248,4 +259,5 @@ it, which is never pinned.
     python3 tools/eva/eacsl.py check
 
 Frama-C 25, here, has E-ACSL but not its script; it instruments 4 of the
-26 programs, and stops on the others (VERIFY-083).
+26 programs, and stops on the others (VERIFY-083). Through a stand-in for
+the script, it runs `compare_order.c`, 313 checks, none failing (VERIFY-084).

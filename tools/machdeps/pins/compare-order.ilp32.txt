@@ -1,0 +1,4 @@
+# frama-c-compare-order at the five ILP32 models: cortex_m4, arm_linux_gnueabihf, rv32_ilp32, ppc32_linux_gnu, ppc_32.
+# VERIFY-084, run 2: what its probe gave at cortex_m4 (9 · Probes #29), for the class.
+# The proved line, then each unproved goal (Timeout or Unknown).
+proved 3156 / 3156

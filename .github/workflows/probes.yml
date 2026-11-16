@@ -92,7 +92,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
-          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/**", "semantics/**", "data/**", "vmacros/vdrivers/**"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"], "diagpush": ["tools/probes/verify-073/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/diag.c", "tools/eva/programs/eva_program.h"], "vecrange": ["tools/probes/verify-079/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py"], "order": ["tools/probes/verify-084/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/compare.h", "core/primitives/types.h", "tools/agreement/agreement.py", ".github/workflows/proofs-machdeps.yml", "tools/machdeps/machdep_cortex_m4.yaml", "tools/machdeps/machdep_rv64_lp64.yaml"]}'
+          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/**", "semantics/**", "data/**", "vmacros/vdrivers/**"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"], "diagpush": ["tools/probes/verify-073/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/diag.c", "tools/eva/programs/eva_program.h"], "vecrange": ["tools/probes/verify-079/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py"], "order": ["tools/probes/verify-084/**", "vmacros/vdrivers/compare_order_verify.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/compare.h", "core/primitives/types.h", "tools/agreement/agreement.py", ".github/workflows/proofs-machdeps.yml", "tools/machdeps/machdep_cortex_m4.yaml", "tools/machdeps/machdep_rv64_lp64.yaml"]}'
         run: |
           python3 - <<'PY'
           import json, os, subprocess, fnmatch
@@ -1054,11 +1054,15 @@ jobs:
   # msvc_x86_64 together; the driver without inlining, its assertions only
   # (contract); and compare_order_false.h's false assertions (false). The
   # report job compares them: the would-be pin file of 13, each model
-  # against x86_64, the controls. The file steps names the parts that run.
-  # Report-only: it prints each goal's result and posts notices, and a part
-  # fails only if its WP gives no summary or no report, or is stopped after
-  # 230 minutes. Each part's files are its artifact, order-probe-PART. Its
-  # predictions and their scores are VERIFY-084's, in docs/deviations.md.
+  # against x86_64, the controls. The file steps names the parts that run;
+  # a part it does not name skips Frama-C's setup and posts that it did not
+  # run. Report-only: it prints each goal's result and posts notices, and a
+  # part fails only if its WP gives no summary or no report, or is stopped
+  # after 230 minutes. Each part's files are its artifact, order-probe-PART.
+  # Its predictions and their scores are VERIFY-084's, in
+  # docs/deviations.md. Closed at run 2, its steps naming no part: the
+  # driver is vmacros/vdrivers/compare_order_verify.h, which the job
+  # frama-c-compare-order (proofs-core.yml) proves.
   # -------------------------------------------------------------------------
   order-probe:
     needs: changes
@@ -1075,13 +1079,19 @@ jobs:
         part: [together, alt-ergo, z3, cvc5, contract, 'false', cortex_m4, rv64_lp64, msvc_x86_64]
     steps:
       - uses: actions/checkout@v6
+      - name: "Whether the file steps names the part"
+        id: named
+        run: python3 tools/probes/verify-084/order_probe.py named "${{ matrix.part }}" >> "$GITHUB_OUTPUT"
       - uses: ./.github/actions/framac-setup
+        if: ${{ steps.named.outputs.run == 'true' }}
       - name: "Part ${{ matrix.part }} of tools/probes/verify-084/order_probe.py"
         run: |
-          eval $(opam env --switch=frama-c)
+          if [ "${{ steps.named.outputs.run }}" = true ]; then
+            eval $(opam env --switch=frama-c)
+          fi
           python3 tools/probes/verify-084/order_probe.py "${{ matrix.part }}"
       - name: Upload the part's output (order probe)
-        if: always()
+        if: ${{ always() && steps.named.outputs.run == 'true' }}
         uses: actions/upload-artifact@v6
         with:
           name: order-probe-${{ matrix.part }}
@@ -1096,7 +1106,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
+      - name: "Whether the file steps names a part"
+        id: named
+        run: python3 tools/probes/verify-084/order_probe.py named any >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v7
+        if: ${{ steps.named.outputs.run == 'true' }}
         with:
           pattern: "order-probe-*"
           path: order_out

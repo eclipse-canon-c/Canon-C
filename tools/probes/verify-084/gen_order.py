@@ -4,16 +4,16 @@ gen_order.py -- writes VERIFY-084's two WP drivers for the 24 comparators of
 core/primitives/compare.h, so that each wrapper is the same text with only
 the comparator and its type changed.
 
-  compare_order_verify.h  for each comparator, three functions that call it
-                          and assert that it is reflexive, antisymmetric and
-                          transitive (see the file's header);
-  compare_order_false.h   the negative control: for each comparator, a
-                          function whose assertion, symmetric, is false
-                          whenever the two values compare unequal; and for
-                          f32 and f64, one whose assertion, self_equal, that
-                          C's x == x holds, is false for a NaN.
-
-Both are written next to this script.
+  vmacros/vdrivers/compare_order_verify.h
+      for each comparator, three functions that call it and assert that it
+      is reflexive, antisymmetric and transitive (see the file's header);
+      the job frama-c-compare-order (proofs-core.yml) proves them, since
+      VERIFY-084's run 2;
+  tools/probes/verify-084/compare_order_false.h
+      the negative control, next to this script: for each comparator, a
+      function whose assertion, symmetric, is false whenever the two values
+      compare unequal; and for f32 and f64, one whose assertion, self_equal,
+      that C's x == x holds, is false for a NaN.
 
     python3 tools/probes/verify-084/gen_order.py           write both
     python3 tools/probes/verify-084/gen_order.py --check   exit 1 if a file
@@ -53,7 +53,7 @@ ORDER_HEAD = """\
 /* {path}{pad}[VERIFY-084]
  * ============================================================================
  * WP driver: each of compare.h's 24 comparators is a total order.
- * Written by gen_order.py (tools/probes/verify-084/); edit that, not this.
+ * Written by tools/probes/verify-084/gen_order.py; edit that, not this.
  *
  * algo_cmp_fn's documentation (core/primitives/compare.h) asks a comparator
  * to be reflexive, antisymmetric and transitive. The contract of each of
@@ -75,25 +75,30 @@ ORDER_HEAD = """\
  * needs: cmp(a, b) > 0 && cmp(b, c) > 0 ==> cmp(a, c) > 0, and when
  * cmp(a, b) == 0, cmp(a, c) and cmp(b, c) have the same sign.
  *
- * WP proves them with Frama-C's -inline-calls and -remove-inlined, each
- * given the 24 comparators' names: each call is replaced by the
- * comparator's body, and a _desc comparator's call to its ascending one
- * too, so the assertions are proved of the comparators' code. The kernel
- * keeps each inlined body's contract as a statement contract, which WP has
- * not supported since Frama-C 23 (its manual, 1.6 and 2.1); the reads of
- * the inlined bodies are checked by -wp-rte's run-time checks instead. The
- * comparators then leave the analysed unit; frama-c-compare proves them.
- * Frama-C's RPP plug-in proves such properties by self-composition too,
- * but needs Frama-C 33 (docs/for-future.md).
+ * The job frama-c-compare-order (proofs-core.yml) proves them with
+ * Frama-C's -inline-calls and -remove-inlined, each given the 24
+ * comparators' names: each call is replaced by the comparator's body, and
+ * a _desc comparator's call to its ascending one too, so the assertions
+ * are proved of the comparators' code. The kernel keeps each inlined
+ * body's contract as a statement contract, which WP has not supported
+ * since Frama-C 23 (its manual, 1.6 and 2.1); the reads of the inlined
+ * bodies are checked by -wp-rte's run-time checks instead. The comparators
+ * then leave the analysed unit; frama-c-compare proves them. Frama-C's RPP
+ * plug-in proves such properties by self-composition too, but needs
+ * Frama-C 33 (docs/for-future.md).
+ *
+ * tools/eva/programs/compare_order.c calls each function on chosen values,
+ * the comparators called, not inlined: Eva checks the assertions there,
+ * and E-ACSL as the program runs.
  * ============================================================================ */
 """
 
 FALSE_HEAD = """\
 /* {path}{pad}[VERIFY-084]
  * ============================================================================
- * The negative control of compare_order_verify.h: assertions that are
- * false, which WP must not prove with the same options.
- * Written by gen_order.py (tools/probes/verify-084/); edit that, not this.
+ * The negative control of vmacros/vdrivers/compare_order_verify.h:
+ * assertions that are false, which WP must not prove with the same options.
+ * Written by gen_order.py, next to this file; edit that, not this.
  *
  *   order_false_T_symmetric  symmetric   cmp(b, a) == cmp(a, b): false
  *                                        whenever a and b compare unequal
@@ -220,15 +225,16 @@ def driver(path, template, guard, wrappers):
     return ''.join(out)
 
 
-def files(where=HERE):
-    rel = os.path.relpath(where, ROOT)
+DRIVER = 'vmacros/vdrivers/compare_order_verify.h'
+CONTROL = 'tools/probes/verify-084/compare_order_false.h'
+
+
+def files():
     return {
-        os.path.join(where, 'compare_order_verify.h'):
-            driver(f'{rel}/compare_order_verify.h', ORDER_HEAD,
-                   'CANON_VDRIVER_COMPARE_ORDER_VERIFY_H', order_wrappers),
-        os.path.join(where, 'compare_order_false.h'):
-            driver(f'{rel}/compare_order_false.h', FALSE_HEAD,
-                   'CANON_VDRIVER_COMPARE_ORDER_FALSE_H', false_wrappers),
+        os.path.join(ROOT, DRIVER):
+            driver(DRIVER, ORDER_HEAD, 'CANON_VDRIVER_COMPARE_ORDER_VERIFY_H', order_wrappers),
+        os.path.join(ROOT, CONTROL):
+            driver(CONTROL, FALSE_HEAD, 'CANON_VDRIVER_COMPARE_ORDER_FALSE_H', false_wrappers),
     }
 
 

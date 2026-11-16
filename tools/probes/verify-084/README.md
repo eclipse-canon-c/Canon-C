@@ -1,5 +1,14 @@
 # VERIFY-084's probe: compare.h's comparators as total orders
 
+Closed at VERIFY-084's run 2: its file `steps` names no part. WP proved
+every goal of the driver, at x86_64 and at one model of each class, and
+the two controls held (`9 · Probes` #29). The driver is now
+`vmacros/vdrivers/compare_order_verify.h`, which the job
+`frama-c-compare-order` (`proofs-core.yml`) proves; `13 · Prover
+agreement` measures it, `11 · Proofs: machine models` proves it at the nine
+other models, and `tools/eva/programs/compare_order.c` runs it under Eva
+and E-ACSL. Below, the probe as run 1 ran it.
+
 `algo_cmp_fn`'s documentation in `core/primitives/compare.h` asks every
 comparator to be a total order:
 
@@ -18,7 +27,8 @@ or three, so WP cannot derive any of them from the contracts.
 `gen_order.py` writes two drivers, so that each function is the same text
 with only the comparator and its type changed:
 
-- **`compare_order_verify.h`**: for each comparator `cmp`, three functions
+- **`compare_order_verify.h`**, in this directory in run 1 and in
+  `vmacros/vdrivers/` since run 2: for each comparator `cmp`, three functions
   that call it and assert, for any `a`, `b` and `c` that meet its
   precondition and any `ctx`:
 
@@ -34,7 +44,7 @@ with only the comparator and its type changed:
   of what a sort needs: `cmp(a, b) > 0 && cmp(b, c) > 0` implies
   `cmp(a, c) > 0`, and when `cmp(a, b) == 0`, `cmp(a, c)` and `cmp(b, c)`
   have the same sign.
-- **`compare_order_false.h`**, the negative control: for each comparator,
+- **`compare_order_false.h`**, the negative control, here: for each comparator,
   `order_false_T_symmetric` asserts `symmetric`, `cmp(b, a) == cmp(a, b)`,
   false whenever `a` and `b` compare unequal; and for `f32` and `f64`,
   `order_false_T_self_equal` asserts `self_equal`, that C's `x == x` holds,
@@ -64,7 +74,8 @@ properties, proves them by self-composition too, but needs Frama-C 33
 
 `order_probe.py` runs in `9 · Probes` (`probes.yml`, the jobs `order-probe`
 and `order-probe-report`), report-only. Each part is a job of the matrix
-and one WP run:
+and one WP run; a part that `steps` does not name skips Frama-C's setup and
+posts that it did not run:
 
 | part | what |
 |------|------|

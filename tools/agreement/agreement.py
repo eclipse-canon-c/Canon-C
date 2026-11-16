@@ -61,8 +61,10 @@ as slow.
         every unit once; and, once pins exist, every unit has them.
 
 The units are the pointer probe's 26 (tools/probes/verify-057), with
-frama-c-diag's -variadic-no-translation. frama-c-arena-32, frama-c-win64,
-the -CC families and the machine-model jobs are left out.
+frama-c-diag's -variadic-no-translation, and VERIFY-084's
+frama-c-compare-order, whose -inline-calls and -remove-inlined, each given
+compare.h's 24 comparators, are its extra options. frama-c-arena-32,
+frama-c-win64, the -CC families and the machine-model jobs are left out.
 """
 import glob
 import json
@@ -92,6 +94,7 @@ UNITS = {
     'frama-c-checked': ('core/primitives/checked.h', 'Typed', CORE),
     'frama-c-bits': ('core/primitives/bits.h', 'Typed', CORE),
     'frama-c-compare': ('core/primitives/compare.h', 'Typed+Cast', CORE),
+    'frama-c-compare-order': ('vmacros/vdrivers/compare_order_verify.h', 'Typed+Cast', CORE),
     'frama-c-ptr': ('core/primitives/ptr.h', 'Typed+Cast', CORE),
     'frama-c-slice': ('core/slice.h', 'Typed+Cast', CORE),
     'frama-c-memory': ('core/memory.h', 'Typed+Cast', CORE),
@@ -116,8 +119,15 @@ UNITS = {
     'frama-c-array': ('vmacros/vdrivers/array_verify.h', 'Typed+Cast', '-CC ' + DATA),
     'frama-c-hashmap': ('vmacros/vdrivers/hashmap_verify.h', 'Typed+Cast', '-CC ' + DATA),
 }
-EXTRA = {'frama-c-diag': ['-variadic-no-translation']}
-# Proof jobs that prove units of these 26 at another machine model: not run here.
+# compare.h's 24 comparators, which frama-c-compare-order's job inlines and
+# takes out of its unit (VERIFY-084).
+COMPARATORS = ','.join(f'algo_cmp_{t}{d}'
+                       for t in ('u8', 'u16', 'u32', 'u64', 'i8', 'i16', 'i32', 'i64',
+                                 'usize', 'isize', 'f32', 'f64')
+                       for d in ('', '_desc'))
+EXTRA = {'frama-c-diag': ['-variadic-no-translation'],
+         'frama-c-compare-order': ['-inline-calls', COMPARATORS, '-remove-inlined', COMPARATORS]}
+# Proof jobs that prove units of these at another machine model: not run here.
 OTHER_MODELS = {'frama-c-arena-32', 'frama-c-win64'}
 # The run order: longest first, by the units' runs of VERIFY-064.
 ORDER = ['frama-c-vec', 'frama-c-bitset', 'frama-c-stack', 'frama-c-vec-fmt', 'frama-c-hashmap',
@@ -125,7 +135,7 @@ ORDER = ['frama-c-vec', 'frama-c-bitset', 'frama-c-stack', 'frama-c-vec-fmt', 'f
          'frama-c-priority-queue', 'frama-c-arena', 'frama-c-memory', 'frama-c-array',
          'frama-c-borrow', 'frama-c-diag', 'frama-c-range', 'frama-c-bits', 'frama-c-deque',
          'frama-c-slice', 'frama-c-ptr', 'frama-c-option', 'frama-c-result', 'frama-c-checked',
-         'frama-c-compare', 'frama-c-lifetime', 'frama-c-error']
+         'frama-c-compare-order', 'frama-c-compare', 'frama-c-lifetime', 'frama-c-error']
 # frama-c-stack's job pins its unproved names as -CC's vec family's (cc_pins/vec.txt).
 RESIDUALS_OF = {'frama-c-stack': 'cc-vec'}
 PROVERS = ('alt-ergo', 'z3', 'cvc5')
@@ -682,6 +692,10 @@ def job_command(lines):
                 cpp = ' '.join(t[len('-cpp-extra-args='):].split())
             elif t == '-variadic-no-translation':
                 extra.append(t)
+            elif t in ('-inline-calls', '-remove-inlined') and i + 1 < len(toks):
+                extra += [t, toks[i + 1]]
+                i += 2
+                continue
             elif not t.startswith('-') and t.endswith('.h'):
                 path = t
             i += 1

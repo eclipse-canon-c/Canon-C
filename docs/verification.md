@@ -12,9 +12,16 @@ Combined verification status across all annotated headers:
 |----------------------|--------------------------------------------------------------------------------|
 | **Headers verified** | 25 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h, stack.h, array.h, hashmap) — lifetime.h is a 25th unit of narrower scope, see VERIFY-021 |
 | **Functions**        | 512 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29 + vec_range.h's 1 + vec_fmt.h's 2 + stack.h's 14 + array.h's 20 + hashmap's 19; lifetime.h's 1 counted separately) |
-| **Total obligations**| 73986 (summed over the 25 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
-| **Proved automatic** | 73301 (99.07%)                                                                 |
+| **Total obligations**| 77142 (summed over the 25 verification units and the order of compare.h's comparators; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
+| **Proved automatic** | 76457 (99.11%)                                                                 |
 | **Unproved**         | 685 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+
+*Recomputed 2026-11-16 (VERIFY-084 run 2).* A unit of its own proves
+that each of compare.h's 24 comparators is a total order:
+`frama-c-compare-order`, 3156 / 3156 ("compare.h's comparators as total
+orders", below). +3156 obligations, +3156 proved, no unproved goal. Its 72
+functions are a driver's, not the library's, so the functions row does not
+count them. The card previously read 25 / 512 / 73986 / 73301 / 685.
 
 *Recomputed 2026-11-13 (VERIFY-073 run 2).* One unit moves, diag.h, from
 3050 / 3058 to 3073 / 3074: diag_push's shift of a full chain is a loop of
@@ -714,8 +721,9 @@ unproved names as at x86_64:
 
 **The core/ units at nine more models (VERIFY-060).** The ten units of
 core/ and core/primitives/ are proved at each of these, by their x86_64
-commands with the model added (`11 · Proofs: machine models`, 90 jobs, run
-when core/ or the models change):
+commands with the model added (`11 · Proofs: machine models`, run when
+core/ or the models change). Since VERIFY-084 so is the order of compare.h's
+comparators (`frama-c-compare-order`, below): 99 jobs.
 
 | class | models | pins |
 |-------|--------|------|
@@ -1166,7 +1174,7 @@ since VERIFY-039 G15 (`742 / 757` with 15 before it). Coq proves the twelve:
 |------------------------|-------------------------------------------------|
 | **Status**             | Fully verified — 100% automatic                |
 | **Baseline commit**    | debb202 (Canon-C CI #795)                       |
-| **Functions**          | 28 of 28 annotated and proved                  |
+| **Functions**          | 24 of 24 annotated and proved                  |
 | **Proof obligations**  | 208 / 208 discharged automatically (100%)       |
 | **Timeouts**           | 0                                               |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
@@ -1178,9 +1186,14 @@ since VERIFY-039 G15 (`742 / 757` with 15 before it). Coq proves the twelve:
 
 ### What is proved
 
-- **Functional correctness**: Every comparator's result is bounded to
+- **The result's range**: Every comparator's result is bounded to
   {-1, 0, +1}. The `(x > y) - (x < y)` branchless pattern is proved
   to always produce exactly these three values for all possible inputs.
+  The contracts state nothing more of the result.
+
+- **Total order**: that each comparator is reflexive, antisymmetric and
+  transitive is proved of its code by `frama-c-compare-order`
+  (VERIFY-084; "compare.h's comparators as total orders", below).
 
 - **Absence of runtime errors** (`-wp-rte`): WP proves no execution
   can trigger invalid memory access, signed overflow, division by zero,
@@ -1213,8 +1226,12 @@ proved-goal line and the residual set, given above.*
 | **Total**      | **208 / 208**    |                    |
 
 Note: Z3 4.15.2 and CVC5 1.2.1 are invoked as secondary and tertiary
-provers but all 60 non-Qed goals are closed by Alt-Ergo alone on this
-header.
+provers. Of the 60 goals Qed does not close, 36 go to a prover, Alt-Ergo
+first in this snapshot; the other 24 are Terminating (12) and Unreachable
+(12), which WP closes itself (`13 · Prover agreement` #11). Each prover
+alone proves the 36 but two, parts 4 of `algo_cmp_f32`'s and
+`algo_cmp_f64`'s postconditions, which Z3 alone fails
+(`tools/agreement/pins/frama-c-compare.txt`).
 
 ### WP memory model note
 
@@ -1241,13 +1258,15 @@ do not use void* parameters and work correctly with the default
   warnings in the ACSL preconditions (the `Typed+Cast` model handles
   the cast inside the function body, not in the contract).
 
-- All functions specify `assigns \nothing;` (28 of 28).
+- All functions specify `assigns \nothing;` (24 of 24).
 
-- Range ensures: `ensures -1 <= \result <= 1` on all 28 functions.
+- Range ensures: `ensures -1 <= \result <= 1` on all 24 functions.
 
-- Floating-point comparators (4 functions) have behavioral specs with
-  `complete` and `disjoint` behaviors covering NaN × NaN, NaN × normal,
-  normal × NaN, and normal × normal cases using `\is_NaN`.
+- The floating-point comparators' contracts state the range too, and no
+  behaviors: until 71d3a43 (2026-04-18) they had complete and disjoint
+  behaviors by `\is_NaN`, and every comparator's contract stated its
+  result exactly. How each orders NaNs is proved of its code by
+  `frama-c-compare-order` (VERIFY-084).
 
 ### Reproduction
 
@@ -1267,6 +1286,116 @@ frama-c -wp -wp-rte \
 ```
 
 Expected output: `Proved goals: 208 / 208` with 0 timeouts.
+
+---
+
+## compare.h's comparators as total orders
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Fully verified — 100% automatic (VERIFY-084)   |
+| **Driver**             | `vmacros/vdrivers/compare_order_verify.h`, written by `tools/probes/verify-084/gen_order.py` |
+| **Functions**          | 72: for each of compare.h's 24 comparators, three that call it |
+| **Assertions**         | 96: `reflexive`, `antisymmetric`, `transitive_lt` and `transitive_eq` for each comparator |
+| **Proof obligations**  | 3156 / 3156 discharged automatically (100%)    |
+| **Timeouts**           | 0                                               |
+| **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120`, and `-inline-calls` and `-remove-inlined`, each given the 24 comparators |
+| **CI enforcement**     | `frama-c-compare-order` (`4 · Proofs: core/`): 3156/3156 required; at the nine other models in `11 · Proofs: machine models`; each prover alone in `13 · Prover agreement` |
+
+### What is proved
+
+`algo_cmp_fn`'s documentation asks a comparator to be a total order. A
+contract speaks of one call, and these properties relate two or three, so
+the comparators' contracts, which state each result's range, cannot give
+them. For each comparator `cmp`, the driver's three functions call it and
+assert, for any `a`, `b` and `c` that meet its precondition and any `ctx`:
+
+| function | assertion | states |
+|----------|-----------|--------|
+| `order_T_reflexive` | `reflexive` | `cmp(a, a) == 0` |
+| `order_T_antisymmetric` | `antisymmetric` | `cmp(b, a) == -cmp(a, b)` |
+| `order_T_transitive` | `transitive_lt` | `cmp(a, b) < 0 && cmp(b, c) < 0 ==> cmp(a, c) < 0` |
+| | `transitive_eq` | `cmp(a, b) == 0 && cmp(b, c) == 0 ==> cmp(a, c) == 0` |
+
+With antisymmetry, the two transitive assertions give the rest of what a
+sort needs: `cmp(a, b) > 0 && cmp(b, c) > 0` implies `cmp(a, c) > 0`, and
+when `cmp(a, b) == 0`, `cmp(a, c)` and `cmp(b, c)` have the same sign.
+That step is argued, not proved.
+
+### How
+
+`-inline-calls` replaces each call by the comparator's body, a `_desc`
+comparator's call to its ascending one too, so WP proves the assertions of
+the comparators' code, not of their contracts; `-remove-inlined` takes the
+comparators out of the unit, which `frama-c-compare` proves. The kernel
+keeps each inlined body's contract as a statement contract, which WP has
+not supported since Frama-C 23; the inlined bodies' reads are checked by
+`-wp-rte`'s run-time checks. RPP, Frama-C's plug-in for relational
+properties, proves them by self-composition too, but needs Frama-C 33.
+
+WP splits each floating-point comparator's assertion on every combination
+of the four paths of each inlined body (both NaN, one NaN either way,
+neither): 4, 16 and 64 parts for one, two and three calls, of which Qed
+closes those whose paths contradict. The 3156 goals: 672 the assertions'
+(80 for the 20 integer comparators, one each; 592 for the 4 floating-point
+ones), 744 run-time checks, 1596 parts of the 72 functions' `assigns
+\nothing`, and Terminating 72 and Unreachable 72; 2780 by Qed.
+
+### What shows it is the code's
+
+VERIFY-084's probe ran two controls (`9 · Probes` #29). Without the
+inlining, WP proves none of the 96 assertions: each times out, the
+comparators' contracts relating no two calls. With it, WP proves none of
+26 false ones (`tools/probes/verify-084/compare_order_false.h`): for each
+comparator, `cmp(b, a) == cmp(a, b)`, false wherever two values compare
+unequal; and for `f32` and `f64`, that C's `x == x` holds, false for a NaN.
+Every part of the false assertions on which the values can compare unequal
+stays unproved, so WP's model has unequal values and NaNs, and the proofs
+of the 96 cover them.
+
+### Prover breakdown
+
+Each prover alone, as `13 · Prover agreement` runs it: Alt-Ergo and CVC5
+each prove the 3156; Z3 fails ("Failed") 16, each floating-point
+comparator's assertions' last part, the path on which every value compared
+is a number, as it fails parts 4 of `algo_cmp_f32`'s and `algo_cmp_f64`'s
+postconditions in `frama-c-compare`. The 16 are the unit's pins
+(`tools/agreement/pins/frama-c-compare-order.txt`). No proof takes a
+prover over half a second.
+
+### Machine models, Eva and E-ACSL
+
+The same 3156 goals, all proved, at `cortex_m4`, `rv64_lp64` and
+`msvc_x86_64` (the probe); since VERIFY-084's run 2, at the nine models of
+`11 · Proofs: machine models`, pinned by class. `tools/eva/programs/compare_order.c`
+calls each of the 72 functions on every value, pair and triple of a few
+values of its type (an integer type's bounds, 0, 1 and -1; for `f32` and
+`f64` a NaN, the infinities, -1, -0, +0 and 1), the comparators called, not
+inlined: Eva checks the 96 assertions at those values at the ten models,
+and E-ACSL as the program runs.
+
+### Reproduction
+
+```bash
+C=algo_cmp_u8,algo_cmp_u8_desc,algo_cmp_u16,algo_cmp_u16_desc,algo_cmp_u32,algo_cmp_u32_desc,algo_cmp_u64,algo_cmp_u64_desc,algo_cmp_i8,algo_cmp_i8_desc,algo_cmp_i16,algo_cmp_i16_desc,algo_cmp_i32,algo_cmp_i32_desc,algo_cmp_i64,algo_cmp_i64_desc,algo_cmp_usize,algo_cmp_usize_desc,algo_cmp_isize,algo_cmp_isize_desc,algo_cmp_f32,algo_cmp_f32_desc,algo_cmp_f64,algo_cmp_f64_desc
+frama-c -wp -wp-rte \
+  -wp-model Typed+Cast \
+  -wp-prover alt-ergo,z3,cvc5 \
+  -wp-timeout 120 \
+  -wp-split \
+  -inline-calls "$C" -remove-inlined "$C" \
+  -cpp-extra-args=" \
+    -I core/primitives \
+    -I core \
+    -I . \
+    -DCANON_NO_REQUIRE \
+    -DNDEBUG" \
+  vmacros/vdrivers/compare_order_verify.h
+```
+
+Expected output: `Proved goals: 3156 / 3156` with 0 timeouts.
 
 ---
 

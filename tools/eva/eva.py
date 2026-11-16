@@ -87,6 +87,7 @@ PROGRAMS = {
     'checked': 'frama-c-checked',
     'bits': 'frama-c-bits',
     'compare': 'frama-c-compare',
+    'compare_order': 'frama-c-compare-order',
     'ptr': 'frama-c-ptr',
     'slice': 'frama-c-slice',
     'memory': 'frama-c-memory',
@@ -139,9 +140,11 @@ COMMON = ['-eva', '-eva-precision', '3', '-eva-split-return', 'full']
 # proves (\result < align), in place of its body.
 USE_SPEC = {'core/primitives/ptr.h': ['-eva-use-spec', 'ptr_align_padding']}
 
-# compare.c sorts a NaN, which the float comparators order last: Eva is told
-# that a NaN is a value here, not an error (-warn-special-float none).
-OPTIONS = {'compare': ['-warn-special-float', 'none']}
+# compare.c sorts a NaN, which the float comparators order last, and
+# compare_order.c compares NaNs and infinities: Eva is told that they are
+# values here, not errors (-warn-special-float none).
+OPTIONS = {'compare': ['-warn-special-float', 'none'],
+           'compare_order': ['-warn-special-float', 'none']}
 
 # The property kinds of contracts and annotations in Frama-C's Report: every
 # other kind is an alarm, a runtime error Eva could not exclude.
