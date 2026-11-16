@@ -15,19 +15,21 @@ each a job of the probe's matrix in probes.yml:
 
   main            each case of MAIN: Aorai, then WP on main alone
                   (-wp-fct main), the callees' contracts taken as given,
-                  with WP's smoke tests. Since run 2, MAIN is
-                  hashmap_stale_checks.c with hashmap_iteration.ya and
-                  without an automaton, and hashmap_stale_bytes.c and
-                  hashmap_ok_bytes.c, the same programs with their buffer
-                  declared as bytes. Runs 1 and 1b ran aorai.py's CASES
-                  (1b, the checks file after them)
+                  with WP's smoke tests. Since run 2b, MAIN is
+                  hashmap_stale_checks.c with hashmap_iteration.ya, and
+                  hashmap_stale_bytes.c and hashmap_ok_bytes.c, the same
+                  programs with their buffer declared as bytes; WP runs
+                  without -wp-rte and with a 10 s timeout. Run 2 ran the
+                  first also without an automaton; runs 1 and 1b ran
+                  aorai.py's CASES (1b, the checks file after them)
   lib-hashmap     hashmap_ok.c with hashmap_iteration.ya, WP on every
   lib-stringbuf   function; stringbuf_ok.c with stringbuf_views.ya;
   lib-bitset      bitset_ok.c with bitset_views.ya
 
 WP runs with the options of the unit whose program the case is
 preprocessed as (tools/agreement/agreement.py's UNITS and EXTRA): its
-model, -wp-rte, -wp-split, Alt-Ergo, Z3 and CVC5, 120 s. Aorai's
+model, -wp-rte, -wp-split, Alt-Ergo, Z3 and CVC5, 120 s; in the part
+main, since run 2b, without -wp-rte and with 10 s (MAIN_TIMEOUT). Aorai's
 properties are those that name its state (aorai_), as for aorai.py. Each
 part posts notices: WP's summary, Aorai's properties by status, and for a
 case that breaks its rule, the status of Aorai's precondition at the call
@@ -40,8 +42,8 @@ breaks its rule every property of main at the marked call and Aorai's of
 main; for a lib part, Aorai's properties neither valid nor ignored (never
 tried, as a behavior's assumption or an assigns clause's \\from). It never
 fails on what it measures: a part fails only if a WP run gives no summary
-or no table, or is stopped at its limit (30 minutes a case of main, 230 a
-lib part).
+or no table, or is stopped at its limit (90 minutes a case of main, since
+run 2b, 30 before; 230 a lib part).
 
 The file steps, next to this script, names the parts that run; a part it
 does not name posts that it did not run. Without the file, every part
@@ -75,17 +77,23 @@ PROBE = 'tools/probes/verify-085/'
 # refused call.
 CHECKS = PROBE + 'hashmap_stale_checks.c'
 # The part main's cases, as aorai.py's CASES: (case, source, the Eva
-# program whose preprocessing it takes, automaton or None, verdict). Run 2:
-# WP proved every check of \false in the checks file; with and without
-# Aorai, and with the buffer declared as bytes.
+# program whose preprocessing it takes, automaton or None, verdict). Run 2
+# ran the checks file with and without Aorai, and the two programs whose
+# buffer is declared as bytes, which were stopped at 30 minutes. Run 2b:
+# the checks file with Aorai, as a control at the new settings, and the
+# two programs of bytes.
 MAIN = [
     ('hashmap_stale_checks', CHECKS, 'hashmap', 'hashmap_iteration', 'breaks'),
-    ('hashmap_stale_checks_plain', CHECKS, 'hashmap', None, 'breaks'),
     ('hashmap_stale_bytes', PROBE + 'hashmap_stale_bytes.c', 'hashmap', 'hashmap_iteration', 'breaks'),
     ('hashmap_ok_bytes', PROBE + 'hashmap_ok_bytes.c', 'hashmap', 'hashmap_iteration', 'follows'),
 ]
+# Run 2b: in the part main, WP without -wp-rte and with a 10 s timeout a
+# prover. In run 2, without the contradiction, every goal WP did not prove,
+# and every smoke test that passed, took the unit's 120 s a prover, and
+# -wp-rte's overflow checks were among them.
+MAIN_TIMEOUT = '10'
 PARTS = ['main'] + list(LIBS)
-LIMITS = {'main': 30 * 60, 'lib': 230 * 60}
+LIMITS = {'main': 90 * 60, 'lib': 230 * 60}
 CUT = 4000   # the runner cuts an annotation at 4096 characters
 SHOWN = 10   # main's properties not valid, in a notice
 NOT_VALID = ('Valid', 'Ignored', 'Considered valid')
@@ -124,9 +132,11 @@ def command(tools, case, scope, csv_path):
     cmd = ['frama-c', f'-cpp-extra-args={ev.cpp_of(program)}', source]
     if auto:   # run 2: a case without an automaton is WP on the program alone
         cmd += ['-aorai-automata', aorai.automaton(auto), '-then-last']
-    # The unit's job's options (proofs-*.yml), at its model, x86_64.
-    cmd += (['-wp', '-wp-rte', '-wp-model', model, '-wp-prover', 'alt-ergo,z3,cvc5',
-             '-wp-timeout', '120', '-wp-split'] + agreement.EXTRA.get(name, []))
+    # The unit's job's options (proofs-*.yml), at its model, x86_64; in the
+    # part main, since run 2b, without -wp-rte and with MAIN_TIMEOUT.
+    rte, timeout = ([], MAIN_TIMEOUT) if scope == 'main' else (['-wp-rte'], '120')
+    cmd += (['-wp'] + rte + ['-wp-model', model, '-wp-prover', 'alt-ergo,z3,cvc5',
+                             '-wp-timeout', timeout, '-wp-split'] + agreement.EXTRA.get(name, []))
     if scope == 'main':
         # Since run 1b: smoke tests, which try to prove that a call's
         # contract or a precondition leaves the code after it unreachable

@@ -16,19 +16,20 @@ other function's, that it moves the state as its contract says.
 
 | part | what |
 |------|------|
-| `main` | each case of the probe's `MAIN`: Aorai, then WP on `main` alone (`-wp-fct main`), the callees' contracts taken as given, with WP's smoke tests (since run 1b). Since run 2, four cases of its own (below); in runs 1 and 1b, `tools/aorai/aorai.py`'s `CASES`, and in 1b `hashmap_stale_checks.c` after them |
+| `main` | each case of the probe's `MAIN`: Aorai, then WP on `main` alone (`-wp-fct main`), the callees' contracts taken as given, with WP's smoke tests (since run 1b). Since run 2, cases of its own (below); in runs 1 and 1b, `tools/aorai/aorai.py`'s `CASES`, and in 1b `hashmap_stale_checks.c` after them |
 | `lib-hashmap`, `lib-stringbuf`, `lib-bitset` | `hashmap_ok.c`, `stringbuf_ok.c` and `bitset_ok.c`, each with its automaton, and WP on every function |
 
 WP runs with the options of the unit whose program the case is
 preprocessed as (`tools/agreement/agreement.py`'s `UNITS` and `EXTRA`):
-its model, `-wp-rte`, `-wp-split`, Alt-Ergo, Z3 and CVC5, 120 s.
-Report's table, with `-report-untried`, then gives each property its
+its model, `-wp-rte`, `-wp-split`, Alt-Ergo, Z3 and CVC5, 120 s (in the
+part `main`, since run 2b, without `-wp-rte` and with 10 s). Report's table, with `-report-untried`, then gives each property its
 status; Aorai's are those that name its state (`aorai_`), as for
 `aorai.py`. Each part posts WP's summary, Aorai's properties by status,
 and, for a case that breaks its rule, the status of Aorai's precondition
 at the call marked `/* refused */`. It never fails on what it measures: a
 part fails only if a WP run gives no summary or no table, or is stopped
-at its limit (30 minutes a case of `main`, 230 minutes a lib part).
+at its limit (a case of `main` at 90 minutes since run 2b, 30 before;
+230 minutes a lib part).
 
 **Run 1b.** In run 1, WP proved the precondition of the call
 `hashmap_stale.c` marks refused, which Eva finds invalid. So the part
@@ -68,6 +69,17 @@ names, and `main`'s other properties neither valid nor ignored, which its
 log lists in full with `main`'s assertions and checks. Built with gcc, the
 two programs of bytes return 0, and Eva with Aorai (Frama-C 25) gives them
 the verdicts and counts of the programs they copy.
+
+**Run 2b.** Run 2 named the goal: `bytes_from`'s precondition at line 19,
+the only property of `main` WP left unproved, with the automaton and
+without it. The two programs of bytes were stopped at 30 minutes: without
+the contradiction, every goal WP does not prove, and every smoke test
+that passes, takes the timeout, 120 s a prover. The part `main` now runs
+`hashmap_stale_checks`, as a control, `hashmap_stale_bytes` and
+`hashmap_ok_bytes`, with WP without `-wp-rte` (its overflow checks were
+among the slow goals) and with a 10 s timeout (`MAIN_TIMEOUT`), each case
+stopped at 90 minutes. A goal not proved in 10 s may be proved in 120 s;
+a contradiction like run 1b's is found in milliseconds.
 
 The file `steps` names the parts that run; a part it does not name posts
 that it did not run. Each part's files, `aorai_wp_out/PART/`, are its
