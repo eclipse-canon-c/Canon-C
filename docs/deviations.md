@@ -37761,9 +37761,9 @@ ten of ten. What it shows:
 | **Date**       | 2026-11-16 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
 | **Baseline**   | 663269c (VERIFY-084's close): `1`, `3`, `4`, `5` and `6` #68, `2 · Platforms` #96, `9 · Probes` #30 and `14 · Eva` #21 (ba0ebd2); `8 · Records` #111 (663269c). |
-| **Scope**      | Run 1: `tools/aorai/` (new: the automata `hashmap_iteration.ya`, `stringbuf_views.ya` and `bitset_views.ya`, `aorai.py`, `programs/`, `README.md`); `.github/workflows/eva.yml`, the job `aorai`, its header and its paths; `tools/probes/verify-085/` (new: `aorai_wp_probe.py`, `steps`, `README.md`); `.github/workflows/probes.yml`, the job `aorai-probe`, its filter, its paths and its header; the workflow map's rows 9 and 14. Run 1b: the views automata's guard; `aorai.py`'s listings; the probe's smoke tests and `hashmap_stale_checks.c` (new). Run 2: `ENFORCE` in `aorai.py`, the job's comment in `eva.yml` and the workflow map's row 14; the probe's part main, its four cases (`hashmap_stale_bytes.c` and `hashmap_ok_bytes.c`, new), its notices and listings, `steps` and its README. Run 2b: the probe's part main, three cases, WP without `-wp-rte` and with a 10 s timeout, a case stopped at 90 minutes; its README. |
+| **Scope**      | Run 1: `tools/aorai/` (new: the automata `hashmap_iteration.ya`, `stringbuf_views.ya` and `bitset_views.ya`, `aorai.py`, `programs/`, `README.md`); `.github/workflows/eva.yml`, the job `aorai`, its header and its paths; `tools/probes/verify-085/` (new: `aorai_wp_probe.py`, `steps`, `README.md`); `.github/workflows/probes.yml`, the job `aorai-probe`, its filter, its paths and its header; the workflow map's rows 9 and 14. Run 1b: the views automata's guard; `aorai.py`'s listings; the probe's smoke tests and `hashmap_stale_checks.c` (new). Run 2: `ENFORCE` in `aorai.py`, the job's comment in `eva.yml` and the workflow map's row 14; the probe's part main, its four cases (`hashmap_stale_bytes.c` and `hashmap_ok_bytes.c`, new), its notices and listings, `steps` and its README. Run 2b: the probe's part main, three cases, WP without `-wp-rte` and with a 10 s timeout, a case stopped at 90 minutes; its README. Close: `docs/verification.md`'s section on the rules; the README's badge "Frama-C Aorai"; `tools/aorai/README.md`; the probe's `steps`, naming no part, and its README; the workflow map's row 9. |
 | **Category**   | The to-do list's item 6, Frama-C's plug-ins, group 2, its second part. The author decided on 2026-11-16: of the call-order rules, hashmap's iteration and the views of a closed buffer or bitset; checked by Eva, enforced after a report-only run, and measured under WP by a probe. |
-| **Status update** | 2026-11-16 — Run 1 scored: A1, A2, A4 and A5 MATCH; A3 and A6 to A12 MISS. Frama-C 29's Aorai refused the views automata's guard, `b != 0`, a pointer compared with an integer, which Frama-C 25's reads: the eight views cases had no table, in 14 and in the probe, and three of the probe's four parts failed. The three hashmap cases went as measured here, Eva's counts of Aorai's properties the same as Frama-C 25's. WP proved the precondition of the call `hashmap_stale.c` marks refused, which Eva finds invalid. Run 1b, pre-registered below, guards each read on `b == b`, and has the probe's part main look for why WP proved it. Run 1b scored: B1 to B6 and B9 MATCH; B7, B8 and B10 to B12 MISS. With `b == b`, Frama-C 29's Aorai read the three automata, and the 11 cases went as `CASES` says, with Frama-C 25's counts. WP proved every check of `\false` in `hashmap_stale_checks.c`: on the hashmap programs its hypotheses contradict each other from the init's line on, and what it proved there, run 1's refused precondition among it, it proved of nothing. The likely cause, which the run does not name: `bytes_from`'s precondition, a `u64` array read as 512 bytes, false in WP's typed model, and taken as a hypothesis after the call. On the four views controls WP left the refused precondition unproved. Run 2, pre-registered below, enforces the Eva check, and has the probe test that cause. Run 2 scored: C1 to C3, C5 and C6 MATCH; C4 and C7 to C9 MISS. The Eva check is enforced, its results run 1b's. The probe named the cause: the one property of `main` WP leaves unproved is `bytes_from`'s precondition, with the automaton and without it. The two programs whose buffer is declared as bytes were stopped at 30 minutes, no longer contradictory and so slow, each goal WP does not prove taking its 120 s. Run 2b, pre-registered below, runs them again with a 10 s timeout. The Status above is the record as committed. |
+| **Status update** | 2026-11-16 — Run 1 scored: A1, A2, A4 and A5 MATCH; A3 and A6 to A12 MISS. Frama-C 29's Aorai refused the views automata's guard, `b != 0`, a pointer compared with an integer, which Frama-C 25's reads: the eight views cases had no table, in 14 and in the probe, and three of the probe's four parts failed. The three hashmap cases went as measured here, Eva's counts of Aorai's properties the same as Frama-C 25's. WP proved the precondition of the call `hashmap_stale.c` marks refused, which Eva finds invalid. Run 1b, pre-registered below, guards each read on `b == b`, and has the probe's part main look for why WP proved it. Run 1b scored: B1 to B6 and B9 MATCH; B7, B8 and B10 to B12 MISS. With `b == b`, Frama-C 29's Aorai read the three automata, and the 11 cases went as `CASES` says, with Frama-C 25's counts. WP proved every check of `\false` in `hashmap_stale_checks.c`: on the hashmap programs its hypotheses contradict each other from the init's line on, and what it proved there, run 1's refused precondition among it, it proved of nothing. The likely cause, which the run does not name: `bytes_from`'s precondition, a `u64` array read as 512 bytes, false in WP's typed model, and taken as a hypothesis after the call. On the four views controls WP left the refused precondition unproved. Run 2, pre-registered below, enforces the Eva check, and has the probe test that cause. Run 2 scored: C1 to C3, C5 and C6 MATCH; C4 and C7 to C9 MISS. The Eva check is enforced, its results run 1b's. The probe named the cause: the one property of `main` WP leaves unproved is `bytes_from`'s precondition, with the automaton and without it. The two programs whose buffer is declared as bytes were stopped at 30 minutes, no longer contradictory and so slow, each goal WP does not prove taking its 120 s. Run 2b, pre-registered below, runs them again with a 10 s timeout. Run 2b scored: D1 to D7 MATCH. With the buffer declared as bytes, WP leaves unproved the call the rule refuses, as Eva refutes it, and proves Aorai's other properties of `main` but one, a call the rule allows in a loop whose invariants Aorai writes of the state alone. CLOSED: `14 · Eva`'s job `aorai` checks three of the library's call-order rules with Eva on 11 cases, enforced; `docs/verification.md` describes the check and what it does not claim, the README has the badge "Frama-C Aorai", and the probe is closed ("Run 2b scored", below). The Status above is the record as committed. |
 
 ### What is missing
 
@@ -38304,3 +38304,86 @@ the probe's findings to the author, with D5 to D7's answer: whether WP,
 once the buffer is right, leaves unproved what the rule refuses and
 proves what it allows. A WP check of the rules, if the author wants one,
 is a record of its own.
+
+### Run 2b scored (2026-11-16)
+
+The push of 7b8ff7e and 8e96b3a started three workflows: `2` #100, `8`
+#115 and `9 · Probes` #34. Each was green at its first attempt.
+
+| # | scored |
+|---|--------|
+| D1 | **MATCH.** 2, 8 and 9 ran, and no other; in 9 the Aorai probe's four parts and the filter, the twelve other probes skipped. |
+| D2 | **MATCH.** 2's sixteen jobs gave #99's notices, times aside, its slowest header among them; 8's two jobs gave no notice. |
+| D3 | **MATCH.** 9 was green: main gave the data of its three cases, in 0.7, 3.9 and 3.9 minutes, and the lib parts each posted that it did not run. |
+| D4 | **MATCH.** hashmap_stale_checks: the five checks Valid; "doomed at lines 19, 20, 23, 25, 32, 36, 39, 41, 42"; "main's other properties not valid: 1 (19 precondition of bytes_from Unknown)" ("Proved goals 110 / 146", the goal now "Timeout 1"). |
+| D5 | **MATCH.** hashmap_stale_bytes: "checks: after_init (22) Unknown, after_loop (27) Unknown, after_first_next (33) Unknown, after_insert (37) Unknown, iter_zero (38) Unknown"; "at the call marked refused (line 39): Unknown, Valid", the log giving "Unknown: 39 precondition of hashmap_iter_next: aorai_CurStates ≡ idle ⇒ *iter ≡ 0" and "Valid: 39 precondition of hashmap_iter_next: aorai_CurStates ≡ idle"; `bytes_from`'s precondition at line 19 proved, not among main's properties not valid; "doomed at lines none". |
+| D6 | **MATCH.** hashmap_ok_bytes: "doomed at lines 38", `CHECK(hashmap_is_empty(&map))`'s failure branch; `bytes_from`'s precondition at line 16 proved. |
+| D7 | **MATCH.** hashmap_ok_bytes: "Aorai's properties of main: Unknown 1; Valid 34", the one "Unknown: 34 precondition of hashmap_iter_next: aorai_CurStates ≡ idle ⇒ *iter ≡ 0". |
+
+Seven of seven.
+
+**What the two programs of bytes leave unproved besides.** In each,
+`main`'s termination clause, `\true`, its loops having no variant; the
+precondition `map ≡ \null ∨ hashmap_inv_(map)` of the insert in the `for`
+loop (line 25 of `hashmap_stale_bytes.c`, 21 of `hashmap_ok_bytes.c`); and
+`hashmap_inv_read_(map)` of the `hashmap_iter_next` after that loop (32;
+27), and of the refused call (39) or the `while`'s (34). For the `for`
+loop, which has no `loop assigns`, WP warns "Missing assigns clause
+(assigns 'everything' instead)", and Aorai's invariants say nothing of the
+map. These are the library's preconditions, not Aorai's; Eva, run here
+on the same two programs (Frama-C 25), leaves them unknown too, at every
+one of those calls but the refused one.
+
+**Closed.** The job `aorai` of `14 · Eva` checks three of the library's
+call-order rules, written as automata for Frama-C's Aorai
+(`tools/aorai/`): an iteration of a hashmap does not go on after the map
+changed, and a view of a `StringBuf` or a `Bitset` is not read after the
+buffer was closed, until it is initialised again and a view taken from
+it. Eva checks them on 11 cases, the three programs of
+`tools/eva/programs/` that use the rules' functions and eight written to
+keep or break one rule; a case not as `CASES` says fails the job, and so
+does one of the eight programs whose run with `CANON_LIFETIME_DEBUG` is
+not as `LIFETIME_DEBUG` says. With this close, `docs/verification.md` has
+a section on the rules and what the check does not claim, the README the
+badge "Frama-C Aorai", and `tools/aorai/README.md` what WP made of the
+programs. The probe is closed: its `steps` names no part, and its README
+and the workflow map's row 9 say so. Its two programs of bytes stay in
+its directory. The close's push starts 2, 8, 9 and 14
+(`tools/which_workflows.py`): in 9 the Aorai probe, each part posting
+that it did not run; 14 because `tools/aorai/README.md` changes.
+
+The record scored 23 of its 40 predictions: run 1 four of twelve, run 1b
+seven of twelve, run 2 five of nine, run 2b seven of seven. What it shows:
+
+- **Eva checks the call-order rules the documentation states, of the
+  programs it is given.** Written as an automaton, a rule no contract can
+  state becomes a precondition Eva decides at each call: the five
+  programs that break a rule are refused at the call that breaks it, and
+  only there, and the six that keep theirs keep them. The automata know
+  calls, not objects; `tools/aorai/README.md` says where that falls short
+  of the rule.
+- **Two versions of Frama-C read one automaton differently.** Frama-C 29's
+  Aorai refused `b != 0`, a pointer compared with 0, which 25's reads;
+  `b == b` reads the same in both. Only Frama-C 25 runs here, and run 1's
+  predictions that rested on it missed.
+- **A proof can be of nothing, and WP's summary does not show it.** On the
+  hashmap programs WP proved the call the rule refuses (run 1) because a
+  precondition false in its model, 512 bytes of a `u64[64]`, was taken as
+  a hypothesis after its call: everything after it was proved, in
+  milliseconds. Smoke tests showed it, checks of `\false` placed it, and
+  the probe's listing named it. The same goal, VERIFY-039's byte-view
+  class, is harmless left unproved in the library's units, filed under a
+  written argument; in a caller, assumed, it voids the rest. Speed was a
+  sign: without the contradiction, the same program took minutes, and at
+  120 s a goal, more than 30.
+- **Without the contradiction, WP refutes what Eva refutes, and falls
+  short where Aorai's annotations stop.** With the buffer declared as
+  bytes WP leaves unproved the call the rule refuses, and proves Aorai's
+  other properties of `main` but one, a call the rule allows in a loop
+  whose invariants Aorai writes of the state alone. On the views programs
+  it did as much in run 1b, as they are. A WP check of the rules would need the
+  programs annotated (buffers declared as the bytes their callees read,
+  `loop assigns` and invariants), smoke tests on every run, and a budget:
+  the two views programs of `tools/eva/programs/` ran past 30 minutes with
+  smoke tests at 120 s. Whether one follows is the author's to decide, in
+  a record of its own.
