@@ -2,8 +2,8 @@ name: "9 · Probes (closed experiments)"
 # The probes of VERIFY-039 and VERIFY-040, merged into one workflow by
 # VERIFY-050: G4, G11, G13, G19, Count and Round 3; and VERIFY-057's pointer
 # probe, VERIFY-060's char probe, VERIFY-066's Eva error probe, VERIFY-073's
-# diag_push probe, VERIFY-079's vec_range probe and VERIFY-084's order probe,
-# added since. Each is an experiment, not a gate; its result is scored in
+# diag_push probe, VERIFY-079's vec_range probe, VERIFY-084's order probe
+# and VERIFY-085's Aorai probe, added since. Each is an experiment, not a gate; its result is scored in
 # docs/deviations.md. Each job still runs only when its own paths change, as
 # its workflow did: the `changes` job compares the push with the commit it
 # moved master from and sets one output per probe. A manual run runs them
@@ -51,6 +51,11 @@ on:
       - 'tools/eva/programs/diag.c'
       - 'tools/probes/verify-079/**'
       - 'tools/probes/verify-084/**'
+      - 'tools/probes/verify-085/**'
+      - 'tools/aorai/**'
+      - 'tools/eva/programs/hashmap.c'
+      - 'tools/eva/programs/stringbuf.c'
+      - 'tools/eva/programs/bitset.c'
       - 'tools/machdeps/machdep_cortex_m4.yaml'
       - 'tools/machdeps/machdep_rv64_lp64.yaml'
       - '.github/workflows/proofs-machdeps.yml'
@@ -84,6 +89,7 @@ jobs:
       diagpush: ${{ steps.f.outputs.diagpush }}
       vecrange: ${{ steps.f.outputs.vecrange }}
       order: ${{ steps.f.outputs.order }}
+      aorai: ${{ steps.f.outputs.aorai }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -92,7 +98,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
-          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/**", "semantics/**", "data/**", "vmacros/vdrivers/**"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"], "diagpush": ["tools/probes/verify-073/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/diag.c", "tools/eva/programs/eva_program.h"], "vecrange": ["tools/probes/verify-079/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py"], "order": ["tools/probes/verify-084/**", "vmacros/vdrivers/compare_order_verify.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/compare.h", "core/primitives/types.h", "tools/agreement/agreement.py", ".github/workflows/proofs-machdeps.yml", "tools/machdeps/machdep_cortex_m4.yaml", "tools/machdeps/machdep_rv64_lp64.yaml"]}'
+          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/**", "semantics/**", "data/**", "vmacros/vdrivers/**"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"], "diagpush": ["tools/probes/verify-073/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/diag.c", "tools/eva/programs/eva_program.h"], "vecrange": ["tools/probes/verify-079/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py"], "order": ["tools/probes/verify-084/**", "vmacros/vdrivers/compare_order_verify.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/compare.h", "core/primitives/types.h", "tools/agreement/agreement.py", ".github/workflows/proofs-machdeps.yml", "tools/machdeps/machdep_cortex_m4.yaml", "tools/machdeps/machdep_rv64_lp64.yaml"], "aorai": ["tools/probes/verify-085/**", "tools/aorai/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/hashmap.c", "tools/eva/programs/stringbuf.c", "tools/eva/programs/bitset.c", "tools/eva/programs/eva_program.h", "core/**", "semantics/**", "data/hashmap/**", "data/stringbuf.h", "data/bitset.h", "vmacros/vdrivers/hashmap_verify.h", "vmacros/vdrivers/bitset_verify.h"]}'
         run: |
           python3 - <<'PY'
           import json, os, subprocess, fnmatch
@@ -1117,3 +1123,67 @@ jobs:
           merge-multiple: true
       - name: "The parts compared (tools/probes/verify-084/order_probe.py report)"
         run: python3 tools/probes/verify-084/order_probe.py report order_out
+
+  # -------------------------------------------------------------------------
+  # Aorai probe (VERIFY-085, the library's call-order rules under WP)
+  #
+  # VERIFY-085: an experiment, not a gate. It runs when the probe, this
+  # file, the toolchain pins, tools/aorai/ (the automata, the programs, the
+  # cases), the three programs of tools/eva/programs/ it reads, what it reads
+  # of tools/eva/eva.py and tools/agreement/agreement.py, or the library's
+  # files the programs include change, and on demand.
+  #
+  # QUESTION: 14 · Eva's job aorai checks with Eva that the programs keep
+  # tools/aorai/'s three rules, and that the programs written to break them
+  # break them (tools/aorai/aorai.py). What does WP make of the same
+  # instrumented programs: does it prove Aorai's obligations of each main,
+  # leave unproved the precondition of each call a rule refuses, and prove
+  # Aorai's contracts on the library's functions, and at what cost?
+  #
+  # PROBE: tools/probes/verify-085/aorai_wp_probe.py runs one part a job of
+  # the matrix: main, Aorai then WP on each case's main alone; lib-hashmap,
+  # lib-stringbuf and lib-bitset, WP on every function of hashmap_ok.c,
+  # stringbuf_ok.c and bitset_ok.c, each with its automaton. WP runs with
+  # the options of the unit each program is preprocessed as; Report's table
+  # gives each of Aorai's properties its status. The file steps names the
+  # parts that run; a part it does not name skips Frama-C's setup and posts
+  # that it did not run. Report-only: a part fails only if a WP run gives
+  # no summary or no table, or is stopped at its limit. Each part's files
+  # are its artifact, aorai-probe-PART. Its predictions and their scores are
+  # VERIFY-085's, in docs/deviations.md.
+  # -------------------------------------------------------------------------
+  aorai-probe:
+    needs: changes
+    if: needs.changes.outputs.aorai == 'true'
+    # Pinned, not ubuntu-latest: see the runner note in
+    # ci.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    # A lib part's WP run is stopped after 230 minutes; setup can take 47
+    # minutes when its cache misses (VERIFY-060 run 1).
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [main, lib-hashmap, lib-stringbuf, lib-bitset]
+    steps:
+      - uses: actions/checkout@v6
+      - name: "Whether the file steps names the part"
+        id: named
+        run: python3 tools/probes/verify-085/aorai_wp_probe.py named "${{ matrix.part }}" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/framac-setup
+        if: ${{ steps.named.outputs.run == 'true' }}
+      - name: "Part ${{ matrix.part }} of tools/probes/verify-085/aorai_wp_probe.py"
+        run: |
+          if [ "${{ steps.named.outputs.run }}" = true ]; then
+            eval $(opam env --switch=frama-c)
+            frama-c -version
+          fi
+          python3 tools/probes/verify-085/aorai_wp_probe.py "${{ matrix.part }}"
+      - name: Upload the part's output (Aorai probe)
+        if: ${{ always() && steps.named.outputs.run == 'true' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: aorai-probe-${{ matrix.part }}
+          path: aorai_wp_out
+          if-no-files-found: warn
+          retention-days: 90

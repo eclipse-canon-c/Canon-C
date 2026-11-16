@@ -27,6 +27,12 @@ name: "14 · Eva: programs that use Canon-C"
 # E-ACSL, Frama-C's runtime assertion checker, makes each program check its
 # annotations as it runs: the e-acsl job instruments, compiles and runs the
 # 27 at x86_64, the host's model (tools/eva/eacsl.py, VERIFY-083).
+#
+# Aorai, Frama-C's plug-in for call-order rules, instruments a program with
+# an automaton, and Eva then says whether the program keeps the rule: the
+# aorai job checks three rules the library's documentation states, each
+# written in tools/aorai/, on the programs that use them and on programs
+# that keep and break each (tools/aorai/aorai.py, VERIFY-085).
 # ---------------------------------------------------------------------------
 
 on:
@@ -38,6 +44,7 @@ on:
       - 'data/**'
       - 'vmacros/vdrivers/**'
       - 'tools/eva/**'
+      - 'tools/aorai/**'
       - 'tools/agreement/agreement.py'
       - 'tools/machdeps/machdep_*.yaml'
       - '.github/actions/framac-setup/**'
@@ -104,6 +111,50 @@ jobs:
       - name: "Notices: E-ACSL"
         if: ${{ !cancelled() }}
         run: cat notices_eacsl.txt 2>/dev/null || true
+
+  # VERIFY-085: each case of tools/aorai/aorai.py, a program and one of the
+  # automata of tools/aorai/, instrumented by Aorai and run by Eva at x86_64
+  # with tools/eva/eva.py's options; a case follows its rule when none of
+  # Aorai's properties is invalid or unknown and the program reaches its
+  # END, and breaks it when the one call it marks refused violates one of
+  # Aorai's preconditions. And each program of tools/aorai/programs/
+  # compiled and run, and again with CANON_LIFETIME_DEBUG, whose run-time
+  # checks see the views rules. Report-only in run 1 (ENFORCE in
+  # tools/aorai/aorai.py).
+  aorai:
+    name: "Aorai: the call-order rules each program keeps"
+    runs-on: ubuntu-24.04
+    # Setup can take 47 minutes when its cache misses (VERIFY-060 run 1).
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+      - name: "The cases against the files"
+        run: python3 tools/aorai/aorai.py check
+      - name: "Each program compiled and run, and with CANON_LIFETIME_DEBUG"
+        run: |
+          gcc --version | head -1
+          python3 tools/aorai/aorai.py native
+      - uses: ./.github/actions/framac-setup
+      - name: "Aorai and Eva on each case"
+        run: |
+          eval $(opam env --switch=frama-c)
+          frama-c -version
+          python3 tools/aorai/aorai.py run
+      - name: Upload Frama-C's logs, Report's tables and the summaries
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: aorai
+          path: aorai_out
+          if-no-files-found: warn
+          retention-days: 30
+          overwrite: true
+      - name: "Notices: Aorai"
+        if: ${{ !cancelled() }}
+        run: cat notices_aorai.txt 2>/dev/null || true
+      - name: "Notice: the programs run"
+        if: ${{ !cancelled() }}
+        run: cat notices_aorai_native.txt 2>/dev/null || true
 
   eva:
     name: "eva @ ${{ matrix.model }}"

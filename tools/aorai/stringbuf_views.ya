@@ -1,0 +1,17 @@
+%init: open;
+%accept: open, closed, reopened;
+%deterministic;
+
+open     : { CALL(stringbuf_close) } -> closed
+         | other -> open;
+closed   : { CALL(borrowed_str_get) && borrowed_str_get().b != 0 } -> stale
+         | { CALL(borrowed_bytes_get) && borrowed_bytes_get().b != 0 } -> stale
+         | { CALL(stringbuf_init_arena) || CALL(stringbuf_init_buffer) } -> reopened
+         | other -> closed;
+reopened : { CALL(borrowed_str_get) && borrowed_str_get().b != 0 } -> stale
+         | { CALL(borrowed_bytes_get) && borrowed_bytes_get().b != 0 } -> stale
+         | { CALL(stringbuf_as_borrowed_str) || CALL(stringbuf_as_borrowed_bytes)
+             || CALL(stringbuf_buffer_as_borrowed_bytes) } -> open
+         | { CALL(stringbuf_close) } -> closed
+         | other -> reopened;
+stale    : { false } -> stale;

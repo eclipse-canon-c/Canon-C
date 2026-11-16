@@ -1,0 +1,11 @@
+%init: idle;
+%accept: idle, iterating;
+%deterministic;
+
+idle      : { CALL(hashmap_iter_next) && *hashmap_iter_next().iter == 0 } -> iterating
+          | { CALL(hashmap_iter_next) && *hashmap_iter_next().iter != 0 } -> stale
+          | other -> idle;
+iterating : { CALL(hashmap_init) || CALL(hashmap_insert) || CALL(hashmap_remove)
+              || CALL(hashmap_clear) } -> idle
+          | other -> iterating;
+stale     : { false } -> stale;

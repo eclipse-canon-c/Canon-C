@@ -1,0 +1,14 @@
+%init: open;
+%accept: open, closed, reopened;
+%deterministic;
+
+open     : { CALL(bitset_close) } -> closed
+         | other -> open;
+closed   : { CALL(borrowed_bytes_get) && borrowed_bytes_get().b != 0 } -> stale
+         | { CALL(bitset_init) } -> reopened
+         | other -> closed;
+reopened : { CALL(borrowed_bytes_get) && borrowed_bytes_get().b != 0 } -> stale
+         | { CALL(bitset_as_borrowed_bytes) } -> open
+         | { CALL(bitset_close) } -> closed
+         | other -> reopened;
+stale    : { false } -> stale;
