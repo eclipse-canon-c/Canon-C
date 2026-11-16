@@ -5,7 +5,8 @@ name: "8 · Records"
 # agreement's units checked against the proof jobs (VERIFY-065), Eva's
 # programs checked against the units (VERIFY-066), the misra job's pins
 # checked against their records (VERIFY-068), the size pins checked
-# (VERIFY-070) and the workflow-size guard. Map: .github/workflows/README.md.
+# (VERIFY-070), MetAcsl's units checked against the proof units
+# (VERIFY-086) and the workflow-size guard. Map: .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -21,6 +22,7 @@ on:
       - 'tools/misra/**'
       - 'tools/size/**'
       - 'tools/metrics/**'
+      - 'tools/metacsl/**'
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
@@ -71,6 +73,10 @@ jobs:
         # which includes the unit's file, and Eva's machine models are the
         # proofs' and eva.yml's matrix.
         run: python3 tools/eva/eva.py check
+      - name: "MetAcsl's units are the proof units (VERIFY-086)"
+        # Every unit of agreement.py has its part in tools/metacsl/metacsl.py,
+        # and the rules it names are in tools/metacsl/rules/.
+        run: python3 tools/metacsl/metacsl.py check
       - name: "The misra job's pins name their records (VERIFY-068)"
         # Each line of tools/misra/pins.txt pins the real findings of one
         # file and rule, and names the record in docs/deviations.md that

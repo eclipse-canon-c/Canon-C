@@ -1,0 +1,92 @@
+name: "15 · MetAcsl: the library's rules across its functions"
+
+# ---------------------------------------------------------------------------
+# VERIFY-086 (docs/deviations.md). Map: .github/workflows/README.md.
+#
+# A contract speaks of one function. Some of the library's rules speak of
+# all of them: core/primitives/contract.h's handler, "the library's ONLY
+# global mutable object", is written "through contract_set_handler() only";
+# and only documented functions reach the heap. MetAcsl, a Frama-C plug-in,
+# takes such a rule as a meta-property and writes it as a check at each
+# point of each function where it must hold: each write, each call, each
+# return. WP proves the checks, on each of the 27 proof units, at the unit's
+# model (tools/metacsl/metacsl.py, the rules in tools/metacsl/rules/).
+#
+# MetAcsl is not in the Frama-C setup's opam switch: each job installs it,
+# frama-c-metacsl 0.7, the version for Frama-C 29, and removes it at the
+# end, so that a cache the setup saves is the setup's.
+#
+# Report-only in run 1 (ENFORCE in tools/metacsl/metacsl.py): a part fails
+# only when a run gives no table, or is stopped.
+# ---------------------------------------------------------------------------
+
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - 'core/**'
+      - 'semantics/**'
+      - 'data/**'
+      - 'vmacros/vdrivers/**'
+      - 'tools/metacsl/**'
+      - 'tools/agreement/agreement.py'
+      - '.github/actions/framac-setup/**'
+      - '.github/workflows/metacsl.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  metacsl:
+    name: "MetAcsl and WP: ${{ matrix.part }}"
+    # Pinned, not ubuntu-latest: see the runner note in
+    # ci.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    # Setup can take 47 minutes when its cache misses (VERIFY-060 run 1);
+    # the script starts no run past 240 minutes.
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [core, semantics, data]
+    steps:
+      - uses: actions/checkout@v6
+      - name: "The units and the rules"
+        run: python3 tools/metacsl/metacsl.py check
+      - uses: ./.github/actions/framac-setup
+      - name: "Install MetAcsl 0.7"
+        run: |
+          eval $(opam env --switch=frama-c)
+          if ! opam show frama-c-metacsl.0.7 >/dev/null 2>&1; then
+            echo "frama-c-metacsl.0.7 is not in the switch's index: updating it"
+            opam update -y default
+          fi
+          opam install -y --confirm-level=unsafe-yes frama-c-metacsl.0.7
+          frama-c -version
+          frama-c -plugins | grep -i -A1 meta
+      - name: "MetAcsl and WP on each unit of the part"
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/metacsl/metacsl.py run "${{ matrix.part }}"
+      - name: Upload the runs' logs, the rules' checks and the summary
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: metacsl-${{ matrix.part }}
+          path: metacsl_out
+          if-no-files-found: warn
+          retention-days: 30
+          overwrite: true
+      - name: "Notices: MetAcsl"
+        if: ${{ !cancelled() }}
+        run: cat "notices_metacsl_${{ matrix.part }}.txt" 2>/dev/null || true
+      - name: "Remove MetAcsl from the switch"
+        if: always()
+        run: |
+          eval $(opam env --switch=frama-c) || exit 0
+          opam remove -y frama-c-metacsl || true
