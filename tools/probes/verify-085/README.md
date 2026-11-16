@@ -1,5 +1,14 @@
 # VERIFY-085's probe: the call-order rules under WP
 
+Closed at VERIFY-085's close: its file `steps` names no part. With the
+buffer the hashmap programs pass declared as bytes, WP leaves unproved
+the call `hashmap_stale` makes after the map changed, as Eva refutes it,
+and proves Aorai's other properties of `hashmap_ok`'s `main` but one, a
+call the rule allows in a loop whose invariants Aorai writes of the state
+alone (`9 · Probes` #34). The check of the rules is Eva's, `14 · Eva`'s
+job `aorai`; a WP check would be a record of its own. Below, the probe as
+its runs ran it.
+
 `tools/aorai/` writes three of the library's call-order rules as automata
 for Frama-C's Aorai, and `14 · Eva`'s job `aorai` checks with Eva that the
 programs keep them, and that the programs written to break them break them

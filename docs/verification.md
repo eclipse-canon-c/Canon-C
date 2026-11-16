@@ -811,6 +811,50 @@ tiers.
 | `embedded` | Cortex-M, RV32, RV64 and AVR, bare metal | that the headers and tests compile there; nothing runs |
 | `lifetime-debug`, `lifetime-token-concurrency` | `CANON_LIFETIME_DEBUG`; the atomic levels, with ThreadSanitizer | the lifetime plumbing and the token generation, by tests |
 
+### Call-order rules (Aorai)
+
+A contract speaks of one call. Some of the library's rules are about the
+order of calls, and its documentation states them where no contract can.
+Three are written as automata for Frama-C's Aorai (`tools/aorai/`,
+VERIFY-085):
+
+| rule | stated in |
+|------|-----------|
+| an iteration does not go on after the map changed | `data/hashmap/hashmap.h` |
+| a view is not read after `stringbuf_close`, until the buffer is initialised again and a view taken from it | `data/stringbuf.h` |
+| the same of `bitset_close` | `data/bitset.h` |
+
+Aorai instruments a program with an automaton, and Eva says whether the
+program keeps the rule. The job `aorai` of `14 · Eva` checks the three
+programs of `tools/eva/programs/` that use the rules' functions, and eight
+of `tools/aorai/programs/`, each written to keep one rule or to break it in
+one way: 11 cases, of which six keep their rule and five break it, each
+at the call it marks refused and nowhere else. A case not as
+`tools/aorai/aorai.py`'s `CASES` says fails the job. The job also compiles
+and runs the eight programs, then with `CANON_LIFETIME_DEBUG`: built so, a
+program that breaks a views rule stops at the read; no run-time check sees
+the iteration rule.
+
+What it does not claim:
+
+- **Objects.** An automaton knows calls, not objects: it reads a program's
+  maps as one map, its iterators as one, its buffers and its views as one.
+  For a program that keeps one of each at a time it is the rule;
+  `tools/aorai/README.md` gives the cases where it is not.
+- **Every program.** The rules are checked of these programs. A program of
+  your own needs Aorai and Eva run on it, as `docs/using-eva.md` runs Eva.
+- **`core/region.h`.** Aorai stops at a call through a function pointer
+  without a `calls` clause, which `region_end`'s hooks are; no rule of
+  region.h is written.
+- **WP.** WP is not part of the check. VERIFY-085's probe measured it: on
+  the hashmap programs, which pass a `u64[64]` as 512 bytes, `bytes_from`'s
+  precondition is false in WP's typed model, and WP, which takes a call's
+  precondition as a hypothesis after the call, proves anything after it.
+  With the buffer declared as bytes, WP leaves unproved the call the rule
+  refuses, as Eva refutes it, and proves Aorai's other properties but one:
+  a call the rule allows, in a loop whose invariants Aorai writes of the
+  state alone. A WP check would need the programs annotated.
+
 ### Tools that are themselves verified
 
 A few tools come with a machine-checked proof of their own soundness, or

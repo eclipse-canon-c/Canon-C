@@ -122,7 +122,20 @@ contract violation of `lifetime_assert_valid`, as Aorai says it breaks
 the rule; `hashmap_stale.c` returns 0, as no run-time check sees the
 iteration rule.
 
-The job `aorai` of `14 · Eva` runs the three (`.github/workflows/eva.yml`).
-`9 · Probes` runs WP on the instrumented programs (VERIFY-085's probe,
-`tools/probes/verify-085/`). With Frama-C 25, `EVA_FRAMAC_ARGS='-c11
--kernel-warn-key annot-error=active'`, as for `eva.py`.
+The job `aorai` of `14 · Eva` runs the three (`.github/workflows/eva.yml`):
+a case not as `CASES` says, or a program not as `LIFETIME_DEBUG` says,
+fails it (`ENFORCE`, since VERIFY-085's run 2). With Frama-C 25,
+`EVA_FRAMAC_ARGS='-c11 -kernel-warn-key annot-error=active'`, as for
+`eva.py`.
+
+**WP.** VERIFY-085's probe (`tools/probes/verify-085/`, closed) measured
+WP on the instrumented programs. On the hashmap programs, which pass a
+`u64[64]` to `bytes_from` as 512 bytes, its precondition is false in WP's
+typed model, which counts the array in cells of its type, and WP, taking
+it as a hypothesis after the call, proves anything after it. With the
+buffer declared as bytes, WP leaves unproved the call the rule refuses,
+and proves Aorai's other properties but the precondition of the call in
+`hashmap_ok.c`'s `while`, whose first turn needs `iter` to be 0, which
+Aorai's loop invariants, of the state alone, do not say. The views
+programs gave WP no such trouble: it left each refused read unproved, and
+proved Aorai's properties of `stringbuf_ok.c` and `bitset_ok.c`.

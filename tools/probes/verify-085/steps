@@ -1,2 +1,4 @@
-# The parts of aorai_wp_probe.py that run (VERIFY-085 run 2: main; runs 1 and 1b: all four).
-main
+# The parts of aorai_wp_probe.py that run, any number a line; a part the
+# file does not name posts that it did not run. VERIFY-085 runs 1 and 1b:
+# all four; runs 2 and 2b: main. Closed: none. 14 · Eva's job aorai checks
+# the rules with Eva; a WP check would be a record of its own.
