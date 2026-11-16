@@ -37264,3 +37264,239 @@ nine; run 1c nine of nine; run 2 seven of seven. What it shows:
 - **The runtime has its own conditions.** The segment memory model needs
   the program's memory unrandomized; `--keep-going` leaves the exit status
   0 after a failed annotation, so the messages are what tell.
+
+---
+
+## VERIFY-084: Pre-registration — compare.h's 24 Comparators as Total Orders: Reflexive, Antisymmetric and Transitive, Proved of Their Code Through Wrappers Whose Calls Are Inlined; Run 1, a Probe
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-084 |
+| **Date**       | 2026-11-16 |
+| **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 4638aa9 (VERIFY-083's close); `2 · Platforms` #94 (3e28ddd) and `8 · Records` #108 (4638aa9); `9 · Probes` #27 (bb3a456) and #28 (8946d5a), each probe's last run. |
+| **Scope**      | Run 1: `tools/probes/verify-084/` (`gen_order.py`, `compare_order_verify.h`, `compare_order_false.h`, `order_probe.py`, `steps`, `README.md`); `.github/workflows/probes.yml`, the jobs `order-probe` and `order-probe-report`, their filter and push paths, and the header's list of probes; the workflow map's row 9. Run 2: the driver as a proof unit, pinned from run 1, and the corrections under "What the documentation says that is not so". |
+| **Category**   | The to-do list's item 6, Frama-C's plug-ins, group 2, its first part. The author decided on 2026-11-16: compare.h's antisymmetry first, then Aorai, then MetAcsl; and of the comparators, all three properties, reflexivity, antisymmetry and transitivity. |
+
+### What is missing
+
+`algo_cmp_fn`'s documentation in `core/primitives/compare.h` asks every
+comparator to be a total order:
+
+    cmp(a, a) == 0                                (reflexive)
+    cmp(a, b) < 0  implies  cmp(b, a) > 0         (antisymmetric)
+    cmp(a, b) < 0 && cmp(b, c) < 0
+      implies cmp(a, c) < 0                       (transitive)
+
+"Used by sort, priority_queue, binary search, and any ordered container",
+says the type's comment, and they rely on it. The contract of each of compare.h's 24
+comparators states that its result is `-1 <= \result <= 1`, and
+`frama-c-compare` proves those contracts, 208 / 208. Nothing proves the
+order: a contract speaks of one call, and each property relates two or
+three. `docs/for-future.md` ("Relational properties: Frama-C's RPP
+plug-in") says how such a property is to be proved here, since RPP's only
+release needs Frama-C 33 and CI runs 29: "through a wrapper function that
+makes both calls, with an ordinary contract."
+
+### What the documentation says that is not so
+
+Found while preparing this record. Run 2 corrects each, once.
+
+- **compare.h's header**, under "Formal verification": "Floating-point
+  comparators use \is_NaN from ACSL's floating-point logic to specify NaN
+  handling with complete and disjoint behaviors." They did until 71d3a43
+  (2026-04-18), which replaced every comparator's postconditions with
+  `-1 <= \result <= 1`. That commit left the sentence and added another:
+  the contracts "express functional properties using local variables
+  assigned inside the function body". No annotation in compare.h does.
+- **`docs/verification.md`, compare.h's section**: "28 of 28" functions,
+  and the range "on all 28 functions"; compare.h has had 24 since
+  2e2ea55, and 8 before. "Floating-point comparators (4 functions) have
+  behavioral specs ... using `\is_NaN`", as above. And it says that "all
+  60 non-Qed goals are closed by Alt-Ergo alone": of the 60, 36 are the
+  provers', and 24 are Terminating (12) and Unreachable (12), which WP
+  closes itself (`13 · Prover agreement` #11, c35260b).
+- **`proofs-core.yml`, the job `frama-c-compare`**: "All 28 comparator
+  functions are fully proved — functional correctness, RTE absence, and
+  assigns \nothing", and its PASS line, "All 28 comparators proved
+  correct".
+- **VERIFY-005**, its Scope and Mitigation: "all 28 comparator
+  functions", "All 28 comparators have 100% MC/DC coverage".
+
+The functional correctness they name is the range of the result, which is
+all the contracts state.
+
+### What is decided
+
+The author chose, on 2026-11-16, to prove all three properties of all 24
+comparators, first in item 6, through wrapper functions: RPP, which proves
+relational properties by self-composition, needs Frama-C 33.
+
+- **The properties.** For each comparator `cmp`, three functions call it
+  and assert, for any `a`, `b` and `c` that meet its precondition and any
+  `ctx`:
+
+  | function | assertion | states |
+  |----------|-----------|--------|
+  | `order_T_reflexive` | `reflexive` | `cmp(a, a) == 0` |
+  | `order_T_antisymmetric` | `antisymmetric` | `cmp(b, a) == -cmp(a, b)` |
+  | `order_T_transitive` | `transitive_lt` | `cmp(a, b) < 0 && cmp(b, c) < 0 ==> cmp(a, c) < 0` |
+  | | `transitive_eq` | `cmp(a, b) == 0 && cmp(b, c) == 0 ==> cmp(a, c) == 0` |
+
+  That is 72 functions and 96 assertions, in `compare_order_verify.h`.
+  `gen_order.py` writes it, so that each function is the same text with
+  only the comparator and its type changed. Antisymmetry is stated more
+  strongly than the documentation states it: with results in {-1, 0, 1},
+  `cmp(b, a) == -cmp(a, b)` gives the documentation's both ways, and that
+  `cmp(a, b) == 0` implies `cmp(b, a) == 0`. With it, the two transitive
+  assertions give the rest of what a sort needs: `cmp(a, b) > 0 &&
+  cmp(b, c) > 0` implies `cmp(a, c) > 0`, and when `cmp(a, b) == 0`,
+  `cmp(a, c)` and `cmp(b, c)` have the same sign. That step is argued on
+  paper here, not proved.
+- **Proved of the code, through inlining.** WP reads a call through the
+  callee's contract, and these contracts relate no two calls, so the
+  wrappers' calls are inlined. Frama-C's `-inline-calls` and
+  `-remove-inlined`, each given the 24 comparators' names, replace each
+  call by the comparator's body, and a `_desc` comparator's call to its
+  ascending one too. They take the comparators out of the unit, which
+  `frama-c-compare` proves. The kernel keeps each inlined body's contract
+  as a statement contract, which WP has not supported since Frama-C 23
+  (its manual, sections 1.6 and 2.1); the inlined bodies' reads are
+  checked by `-wp-rte`'s run-time checks, as in `frama-c-compare`.
+  Otherwise WP runs as `frama-c-compare` does (`Typed+Cast`, `-wp-rte`,
+  `-wp-split`, 120 s, its preprocessing). The other way, contracts that
+  state each comparator's result exactly, as compare.h's did before
+  71d3a43, would let WP derive the three from the contracts, and callers
+  could use them. But it changes the proofs of every unit that reads them:
+  `frama-c-priority-queue`, whose `calls` clause names the 24 comparators,
+  a job of about four hours; and the programs Eva and E-ACSL run.
+  Inlining changes no contract and no other unit's proof. The other way
+  stays open, for a record of its own.
+- **Two controls.** Without the inlining, WP should prove none of the 96
+  assertions. If it proved one, the property would follow from contracts
+  that state only the range, and the measurement would not show what this
+  record says it shows. With the inlining, WP should prove no false
+  assertion. `compare_order_false.h`, also written by `gen_order.py`,
+  asserts for each comparator `symmetric`, `cmp(b, a) == cmp(a, b)`, false
+  whenever `a` and `b` compare unequal; and for `f32` and `f64`,
+  `self_equal`, that C's `x == x` holds, false for a NaN. A proof of one
+  would mean hypotheses that contradict each other, or a model without
+  unequal values or without NaNs, and then the proofs of the 96 would say
+  nothing about those cases.
+- **The machine models.** The proofs run at x86_64. The probe also runs
+  the driver at one model of each class of `11 · Proofs: machine models`:
+  `cortex_m4` (ilp32), `rv64_lp64` (lp64) and `msvc_x86_64` (llp64), with
+  the model's arguments as `proofs-machdeps.yml` gives them.
+
+### Run 1, a probe
+
+WP runs only in CI, so a proof job's pins and its agreement pins would be
+written blind. `tools/probes/verify-084/order_probe.py`, in `9 · Probes`,
+report-only, runs one part a job of a matrix (`order-probe`), each part
+one WP run:
+
+- `together`: first the files: `gen_order.py --check` and, with Frama-C
+  but not WP, each driver as the inlining leaves it (its functions, its
+  assertions, its inlined bodies, that no comparator's name is left, and
+  whether `-inline-calls @all` leaves the functions the same); then the
+  driver with Alt-Ergo, Z3 and CVC5 together, as a proof job runs them;
+- `alt-ergo`, `z3`, `cvc5`: the driver with each prover alone, as
+  `13 · Prover agreement` runs them;
+- `contract`: the driver without the inlining, its four kinds of
+  assertion only (`-wp-prop`);
+- `false`: `compare_order_false.h` with the inlining, its two kinds of
+  assertion only;
+- `cortex_m4`, `rv64_lp64`, `msvc_x86_64`: the driver with the three
+  provers together at that model.
+
+A last job, `order-probe-report`, reads the parts' files and compares
+them: the goals one or two provers prove alone, as a pin file of 13 would
+list them (its lines in the log); each model against x86_64; the
+controls. Each part prints each goal's result and posts notices: its
+summary, the assertions' goals by property and by the comparators' type
+(integer or floating point), every goal by kind, the goals not proved,
+and the proofs over 10 s. A part fails only if its WP gives no summary or
+no report, or is stopped after 230 minutes; the report fails only if no
+part wrote a summary. The file `steps` names the parts that run: all nine
+in run 1.
+
+### Measured here
+
+With Frama-C 25.0 (no WP), gcc 13.3.0 and clang 18.1.3:
+
+- **The two drivers** are as `gen_order.py` writes them (`--check`), and
+  compile with gcc and clang, `-std=c99` and `-std=c11`, `-Wall -Wextra
+  -Werror -pedantic`.
+- **Frama-C 25 parses both** with `frama-c-compare`'s preprocessing. With
+  `-inline-calls` and `-remove-inlined` given the 24 names, its print has
+  72 functions and 96 assertions, and 26 and 26, with no comparator's name
+  left in either. Each inlined `_desc` body holds its ascending
+  comparator's body, and each inlined body has its comparator's contract
+  as a statement contract: 216 inlined bodies in the driver, 72 in the
+  control. `-inline-calls @all` leaves the 72 functions the same.
+  Frama-C 25's RTE plug-in on the inlined driver gives 288 run-time
+  checks, all `mem_access`: two for each of the 144 inlined ascending
+  bodies.
+- **Each property is true of the code**, run on it. Compiled with gcc and
+  clang at `-O0` and `-O2`, for each of the 24 comparators: every triple
+  of the 256 `u8` values and of the 256 `i8` values; every triple of 40
+  values of each wider integer type (its bounds, -1, 0, 1, 2 and random
+  values); and every triple of 44 floating-point values (NaNs, quiet and
+  signalling, of both signs, ±0, ±∞, subnormals, the extremes and random
+  values). That is 11,857,952 checks, none failed. The false assertions
+  are false there: `symmetric` in 293,528 pairs, `self_equal` for the 9
+  NaNs.
+- **The probe**, every part and the report, run against a stand-in for
+  `frama-c` that writes WP-shaped summaries and reports, the files' check
+  with Frama-C 25 itself: its notices, the report's comparisons and the
+  would-be pin lines.
+- **The changes job's filter**, run on this push's files: every probe
+  runs, since each watches `probes.yml`.
+- **Since each older probe's last run**, #27 at bb3a456 or, for the Eva
+  error and diag_push probes, #28 at 8946d5a, nothing any of them reads
+  has changed.
+- **From CI's notices**: `frama-c-compare` proved 208 / 208 in
+  `13 · Prover agreement` #11 (c35260b): 148 by Qed, 36 by a prover, and
+  Terminating 12 and Unreachable 12. Z3 alone fails ("Failed") parts 4 of
+  `algo_cmp_f32`'s and `algo_cmp_f64`'s postconditions, which Alt-Ergo
+  and CVC5 prove alone, as its pin file says.
+
+Not run here: WP, at all.
+
+### The workflows
+
+`tools/which_workflows.py`: 2, 8 and 9 run; 1, 3 to 7 and 10 to 14 do not.
+In 9 every probe runs, since each watches `probes.yml`; the order probe
+adds ten jobs, its nine parts and the report.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| P1 | **2, 8 and 9 run**, and no other; in 9, every probe. | another set | H |
+| P2 | **2 and 8 are green**, 2 with the notices of #94, times aside, and 8 with none. | a failure, or another notice | H: nothing they build or read changes. |
+| P3 | **The eleven older probes are green**, each with the notices of its last run, times aside: #27 for G4, G11, G13, G19, Count, Round 3, the pointer probe, the char probe and the vec_range probe, whose `steps` names no step; #28 for the Eva error probe and the diag_push probe. | a failure, or another notice | H: nothing they read has changed since. |
+| P4 | **The files**: both as `gen_order.py` writes them; the driver with 72 functions, 96 assertions, 216 inlined bodies and no comparator's name left; the control with 26, 26, 72 and none; and `-inline-calls @all` leaves the 72 functions the same. | `--check` failing, another count, a name left, or `@all` leaving a function otherwise | H for the counts, measured with Frama-C 25, whose inlining Frama-C 29 keeps; M for `@all`. |
+| P5 | **Together, every goal of the driver is proved**, with no Failed, Invalid or Stepout verdict. Of the assertions' goals, the integer comparators' are 80, one for each assertion, since their bodies have no branch; the floating-point comparators' are more than 16, WP splitting them on the NaN branches; all are proved. | a goal not proved; a Failed, Invalid or Stepout verdict; the integer comparators' assertions' goals other than 80, or the others 16 or fewer | M: the properties hold of the code (above), and WP proves compare.h's own floating-point goals; but transitivity over three floating-point values is new to these provers here, and how WP splits these goals is not measured. |
+| P6 | **No goal in the together part's report is a statement contract's**: none whose name says `requires` or `ensures`. | such a goal | M: the manual says WP does not support them; whether Frama-C 29 warns of them is printed, not predicted. |
+| P7 | **Each prover alone**: no goal is proved by none of them; each goal of an integer comparator's function is proved by WP itself or by all three alone; so the goals one or two provers prove alone are all floating-point comparators'. | a goal no prover proves alone, or an integer comparator's goal that one or two prove alone | M: so it is in `frama-c-compare`; how each prover does on the new floating-point goals is not known. |
+| P8 | **Without the inlining, none of the 96 assertions' goals is proved.** | any of them proved | H: the contracts state only each result's range. |
+| P9 | **The false control**: of its 26 functions, none has every part of its assertion proved, and `self_equal` is proved neither for `f32` nor for `f64`. | a function whose assertion is proved in every part | H for the integer comparators; M–H for the floating-point ones, since it tests WP's model of NaN. |
+| P10 | **At cortex_m4, rv64_lp64 and msvc_x86_64 every goal is proved, and the goals are x86_64's**, by name and number. | a goal not proved, or another set of goals | M: `usize` and `isize` have other widths at ilp32 and llp64, which changes no name; nothing else of the models enters. |
+| P11 | **Every part gives its summary and report**, none stopped at 230 minutes, and the report posts its comparisons. | a part without data, or no report | M–H |
+
+**What follows.** P1 to P11 scored. Then run 2, pre-registered from the
+probe's numbers:
+
+- If P4, P5, P8 and P9 hold, run 2 makes the driver a proof unit:
+  `vmacros/vdrivers/compare_order_verify.h`, which `gen_order.py` writes
+  there; a job `frama-c-compare-order` in `4 · Proofs: core/`, enforced on
+  run 1's numbers; its unit in `tools/agreement/agreement.py`, with the
+  inlining options as its extra options, which `check` must read, and its
+  pin file from the report's lines; and, if P10 holds, its nine models in
+  `11 · Proofs: machine models`. `8 · Records` asks every unit for an Eva
+  program (`eva.py check`), so run 2 gives the unit one or names it a unit
+  without, as its record decides. The corrections above go with it.
+- If P5 does not hold, a run 1b measures what is not proved before run 2.
+- If a control does not hold, the inlining does not show what this record
+  says it does; that is recorded, and the approach is reconsidered.
