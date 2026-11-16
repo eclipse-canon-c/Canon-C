@@ -12,9 +12,17 @@ Combined verification status across all annotated headers:
 |----------------------|--------------------------------------------------------------------------------|
 | **Headers verified** | 25 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h, stack.h, array.h, hashmap) — lifetime.h is a 25th unit of narrower scope, see VERIFY-021 |
 | **Functions**        | 512 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29 + vec_range.h's 1 + vec_fmt.h's 2 + stack.h's 14 + array.h's 20 + hashmap's 19; lifetime.h's 1 counted separately) |
-| **Total obligations**| 77142 (summed over the 25 verification units and the order of compare.h's comparators; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
-| **Proved automatic** | 76457 (99.11%)                                                                 |
+| **Total obligations**| 77146 (summed over the 25 verification units and the order of compare.h's comparators; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
+| **Proved automatic** | 76461 (99.11%)                                                                 |
 | **Unproved**         | 685 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+
+*Corrected 2026-11-16 (VERIFY-084's close).* VERIFY-079's run 2
+(14782ad) moved vec_range.h from 5179 / 5224 to 5183 / 5228, the four
+parts of its assertion `kept`, all proved, and left the card; the
+recomputation below added to the card as it stood. +4 obligations, +4
+proved. The card is again the sum of the units' pinned lines, which
+`13 · Prover agreement` #15 totals: 77150 / 76465 with lifetime.h's
+4 / 4. The card previously read 25 / 512 / 77142 / 76457 / 685.
 
 *Recomputed 2026-11-16 (VERIFY-084 run 2).* A unit of its own proves
 that each of compare.h's 24 comparators is a total order:
@@ -5098,12 +5106,12 @@ promise success.
 | **Status**             | Verified (with documented residuals)            |
 | **Baseline commit**    | 4d62cd8 (Canon-C CI #1384) → name-identical a78d00e (#1385) → enforced at 101b4a2 (#1386) |
 | **Functions**          | 1 (`vec_int_extend_from_range`, from `IMPL_VEC_EXTEND_FROM_RANGE`), contracted in the macro body |
-| **Proof obligations**  | 5179 / 5224 discharged automatically (99.14%) since VERIFY-059; 5167 / 5212 since VERIFY-058, 5159 / 5204 before |
+| **Proof obligations**  | 5183 / 5228 discharged automatically (99.14%) since VERIFY-079; 5179 / 5224 since VERIFY-059; 5167 / 5212 since VERIFY-058, 5159 / 5204 before |
 | **Unproved**           | 45 — all inherited or fresh (arena.h's 33 and range.h's 8, two shared, and result at (Bool, Error)'s 6), **0 own**; VERIFY-041; **0 Failed, 0 Invalid, 0 Stepout** |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast`, preprocessed with `-CC` |
-| **CI enforcement**     | Yes — pinned `5179 / 5224` (VERIFY-059) + zero Failed/Invalid + exact count 45 + by-name roll-call (set equality) |
+| **CI enforcement**     | Yes — pinned `5183 / 5228` (VERIFY-079) + zero Failed/Invalid + exact count 45 + by-name roll-call (set equality) |
 | **MC/DC coverage**     | 90.5% (38/42, measured from `vmacros/coverage/vec_range_cover.c`), 4 justified, each dead at a type — see MCDC-017 |
 | **CI artifact**        | `wp-proof-vec-range`                            |
 | **Job runtime**        | ~40 min                                          |
@@ -5532,7 +5540,7 @@ discipline) recorded for deque.
 | priority_queue.h | ✅ Verified | 4680/4718 | VERIFY-059's pin (+12, ptr.h's bounds checks' results, proved); VERIFY-058's (+23, the in_object calls of ptr.h and the queue, proved).  First in-place (Shape A) data/-layer module; its core operation calls a caller-supplied function pointer from inside its loops. Comparator proved as a **verified configuration**: a `calls` clause over compare.h's 24 built-ins makes `pq_cmp_`'s frame a theorem, not an axiom; caller-supplied comparators are outside the proof. Heap order NOT claimed (built-ins ensure only -1..1). 38 residuals at CI #1375: memory.h's 31 + result's 6, the run-time checks on the callbacks' pointers, + 1 own, the comparator's `\valid_function` check, the three copies between a caller's memory and the buffer proved since VERIFY-040 round 2, `regions_overlap` stated by `\separated`; 41 at CI #1373; 77 at VERIFY-035 (4521/4598); 71 when enforced (43 inherited + 22 result + 6 own), two of the six own being same-buffer slot goals, not pointer order, which VERIFY-039 G21 closed. Enforced at CI #1290, name-identical to #1289 (VERIFY-022). MC/DC 81/82, graduated to the per-line allowlist (MCDC-014). |
 | range.h      | ✅ Verified | 2644/2652 | Module 18 and the **first prospective test of the saturation claim** (VERIFY-028 pre-registered, VERIFY-029 scored runs 1–2 and pre-registered run 3, VERIFY-030 enforced at CI #1317, name-identical to #1315/#1316). Shape A in place; thin driver interposes a contracted `option_isize` (F3 guard). Exact `range_count` proved over the whole `isize` domain. 8 residuals at CI #1373, **all inherited** (option's 6 run-time checks + checked.h's 2), **0 own**; 36 when enforced (32 option + 2 handler + 2 checked), VERIFY-039 G11 and G14 closing 28. F1/F2a/F2b/F3/F4 found by reading before the prover ran; **F5** a buffer overflow in `vec_range.h` downstream of F1. P1 (zero new arguments) held; P6 failed at run 2 — closed by a no-wraparound rewrite + two proved lemmas. MC/DC 61/62, 1 justified (MCDC-015). |
 | stringbuf.h  | ✅ Verified | 4809/4846 | VERIFY-059's pin (+12, ptr.h's bounds checks' results, proved); VERIFY-058's (+8, ptr.h's and arena.h's in_object calls, proved).  Module 19 and the **second prospective test of the saturation claim** (VERIFY-031 pre-registered; VERIFY-032 scored run 2; VERIFY-033/034 closed A2 through arena.h's frame; VERIFY-035 enforced). 29 functions in place, Typed+Cast, no driver, first module with variadic definitions; 37 inherited at CI #1373 (arena.h 33 + borrow.h 4), **0 own**; 81 when enforced (arena.h 79 + borrow.h 2); zero new argument blocks; third trusted axiom (`vsnprintf`). Defects G1/G2/G3/G5/G6 fixed. MCDC-016 (136/138, two environmental rows). |
-| vec_range.h  | ✅ Verified | 5179/5224 | VERIFY-059's pin (+12, ptr.h's bounds checks' results, proved); VERIFY-058's (+8, proved).  Module 20 (VERIFY-041): in-place contracts under `-CC`, one clause in a driver; 45 unproved, none own. MCDC-017, 38/42. |
+| vec_range.h  | ✅ Verified | 5183/5228 | VERIFY-079's pin (+4, the assertion `kept`'s four parts, proved); VERIFY-059's (+12, ptr.h's bounds checks' results, proved); VERIFY-058's (+8, proved).  Module 20 (VERIFY-041): in-place contracts under `-CC`, one clause in a driver; 45 unproved, none own. MCDC-017, 38/42. |
 | vec_fmt.h    | ✅ Verified | 5259/5306 | VERIFY-059's pin (+12, ptr.h's bounds checks' results, proved); VERIFY-058's (+8, proved).  Module 21 (VERIFY-042): in-place contracts under `-CC`; 47 unproved, 4 own, filed under VERIFY-042's two blocks. MCDC-018, 26/26. |
 | stack.h      | ✅ Verified | 5742/5811 | VERIFY-062's pin (+8, vec's pointer NULL exactly when its capacity is 0, proved); VERIFY-059's (+12, ptr.h's bounds checks' results, proved); VERIFY-058's (+8, proved).  Module 22 (VERIFY-049): 14 macro-body contracts under `-CC`, enforced from run 3; 69 unproved, all cc-vec's, none own. MCDC-019, 5/6. |
 | array.h      | ✅ Verified | 2863/2887 | Module 23 (VERIFY-052): 20 macro-body contracts under `-CC`, enforced from run 3; 24 unproved, 16 inherited and 8 own, as predicted by name, filed under VERIFY-017's byte-view block and VERIFY-008 Category 3. MCDC-020, 42/46. |

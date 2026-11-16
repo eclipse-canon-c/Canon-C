@@ -1052,12 +1052,21 @@ and after the paragraphs below say where a reading here no longer holds.
 | priority_queue.h | 41  |              4718 | 4680 (99.19%) | 38       | VERIFY-022/40/58/59 |
 | range.h    | 15        |              2652 | 2644 (99.70%) | 8        | VERIFY-028/29/30 |
 | stringbuf.h | 29       |              4846 | 4809 (99.24%) | 37       | VERIFY-031..35, 58, 59 |
-| vec_range.h | 1        |              5224 | 5179 (99.14%) | 45       | VERIFY-041/58/59/62 |
+| vec_range.h | 1        |              5228 | 5183 (99.14%) | 45       | VERIFY-041/58/59/62/79 |
 | vec_fmt.h  | 2         |              5306 | 5259 (99.11%) | 47       | VERIFY-042/58/59/62 |
 | stack.h    | 14        |              5811 | 5742 (98.81%) | 69       | VERIFY-049/58/59/62 |
 | array.h    | 20        |              2887 | 2863 (99.17%) | 24       | VERIFY-052   |
 | hashmap    | 19        |              4784 | 4738 (99.04%) | 46       | VERIFY-054/55/56 |
-| **Total**  | **513**   | **73990**         | **73305 (99.07%)**| **685**  |              |
+| **Total**  | **513**   | **73994**         | **73309 (99.07%)**| **685**  |              |
+
+*Brought to the pins again 2026-11-16 (VERIFY-084's close).* One row
+moves: vec_range.h, 5224 obligations to 5228 and 5179 proved to 5183, its
+45 unproved as before. VERIFY-079 gave its loop an assertion, `kept`,
+whose four parts are proved (14782ad), and this table had not taken them
+in. The total is 73994 obligations, 73309 proved and 685 unproved, from
+73990, 73305 and 685. The order of compare.h's comparators (VERIFY-084),
+3156 / 3156, is a driver's 72 functions, not a header's:
+`docs/verification.md`'s card counts it, this table does not.
 
 *Brought to the pins again 2026-11-13 (VERIFY-073, run 2).* One row
 moves: diag.h, 3058 obligations to 3074, 3050 proved to 3073, 8 unproved to
