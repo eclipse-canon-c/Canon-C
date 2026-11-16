@@ -263,6 +263,15 @@ model. The difference is documented in the CI YAML and in this
 deviations record. All 28 comparators have 100% MC/DC coverage (8/8
 condition outcomes) and pass fuzzing.
 
+**Update (2026-11-16, VERIFY-084) — 24 comparators, not 28.** compare.h
+has had 24 comparators since 2e2ea55, and 8 before; no version had 28. The
+Scope's and the Mitigation's "28" are the record's as written. The
+contracts these proofs prove state the bytes each comparator reads, that
+its result is -1, 0 or 1, and `assigns \nothing`; since 71d3a43
+(2026-04-18), the day of this record, nothing more of the result. That
+each comparator is a total order is proved of its code by
+`frama-c-compare-order` (VERIFY-084).
+
 ---
 
 ## VERIFY-006: Manually Discharged Goals (ptr.h)
@@ -37274,6 +37283,7 @@ nine; run 1c nine of nine; run 2 seven of seven. What it shows:
 | **ID**         | VERIFY-084 |
 | **Date**       | 2026-11-16 |
 | **Status**     | PREDICTED. This record is committed before its probe, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-16 — Run 1 scored: P1, P2 and P4 to P11 MATCH, P3 MISS. WP proved the driver's 3156 goals, at x86_64 and at one model of each class; without the inlining it proved none of the 96 assertions, and with it none of the 26 false ones. P3 quoted the diag_push probe's notices whole, and their prover counts move between runs, as VERIFY-078 and VERIFY-080 found. Run 2, pre-registered below, makes the driver a proof unit, enforced: its job, its agreement pins, its nine models and its Eva program; and corrects what "What the documentation says that is not so" lists. The Status above is the record as committed. |
 | **Baseline**   | 4638aa9 (VERIFY-083's close); `2 · Platforms` #94 (3e28ddd) and `8 · Records` #108 (4638aa9); `9 · Probes` #27 (bb3a456) and #28 (8946d5a), each probe's last run. |
 | **Scope**      | Run 1: `tools/probes/verify-084/` (`gen_order.py`, `compare_order_verify.h`, `compare_order_false.h`, `order_probe.py`, `steps`, `README.md`); `.github/workflows/probes.yml`, the jobs `order-probe` and `order-probe-report`, their filter and push paths, and the header's list of probes; the workflow map's row 9. Run 2: the driver as a proof unit, pinned from run 1, and the corrections under "What the documentation says that is not so". |
 | **Category**   | The to-do list's item 6, Frama-C's plug-ins, group 2, its first part. The author decided on 2026-11-16: compare.h's antisymmetry first, then Aorai, then MetAcsl; and of the comparators, all three properties, reflexivity, antisymmetry and transitivity. |
@@ -37500,3 +37510,156 @@ probe's numbers:
 - If P5 does not hold, a run 1b measures what is not proved before run 2.
 - If a control does not hold, the inlining does not show what this record
   says it does; that is recorded, and the approach is reconsidered.
+
+### Run 1 scored (2026-11-16)
+
+The push of eb91180 and 62105e2 started `2 · Platforms` #95, `8 · Records`
+#109 and `9 · Probes` #29, each green at its first attempt. #29 took 96
+minutes, all but one of them for the probe's `contract` part.
+
+| # | scored |
+|---|--------|
+| P1 | **MATCH.** 2, 8 and 9 ran, and no other; in 9 every probe: its 48 jobs, none skipped. |
+| P2 | **MATCH.** 2's 16 jobs gave #94's notices, times aside; 8's two, as #108's, gave none. |
+| P3 | **MISS.** The eleven older probes are green, and 36 of their 37 jobs gave their last runs' notices, times aside. The diag_push probe's did not, in counts that move between runs. Its agreement step: Z3 alone 3039 / 3074 where #28 read 3037 (Failed 5 and Timeout 29, where 3 and 33), so three provers 385 and two 29, where 383 and 31, and slow 3 where 4. Its WP step's one goal not proved, `diag_init`'s `memset`: "(Unknown 1)", where #28 read "(Timeout 1)". Between #27 and #28 the same counts moved (two 30, then 31). The prediction quoted the notices whole, as VERIFY-080's U3 did, which missed the same way; VERIFY-078's scoring and U3's said to predict of that step only its count by none. Nothing the probe reads had changed. |
+| P4 | **MATCH.** "files: as gen_order.py writes them. verify: 72 functions, 96 assertions, 216 inlined bodies with a statement contract, 0 comparator name(s) left; false: 26 functions, 26 assertions, 72 inlined bodies with a statement contract, 0 comparator name(s) left. @all leaves the 72 functions as the 24 names do". |
+| P5 | **MATCH.** "Proved goals 3156 / 3156 (Terminating 72; Unreachable 72; Qed 2780; Alt-Ergo 2.6.3 220; CVC5 1.2.1 4; Z3 4.15.2 8)", no verdict other than Valid, in 3 minutes, the slowest proof 0.4 s. The assertions' goals: the integer comparators' 80, one for each assertion; the floating-point comparators' 592, 4 parts for each `reflexive`, 16 for each `antisymmetric`, 64 for each transitive one. |
+| P6 | **MATCH.** The report's 3012 goals are the assertions' 672, `-wp-rte`'s 744 (all `mem_access`), and 1596 parts of the 72 functions' own `assigns \nothing`: none names `requires` or `ensures`. WP warned 46 times. 22 are at the lines where `frama-c-compare`'s own run warns "Cast with incompatible pointers types". The other 24 are at the first line of each comparator's body, where its inlined copies' statement contracts begin. The log shows the lines naming a warning, not their text, which is on the next line. |
+| P7 | **MATCH.** Alt-Ergo alone 3156 / 3156, CVC5 alone 3156 / 3156, Z3 alone 3140 / 3156 ("Failed 16"). Of the 3012 goals: by WP itself 2780, three provers 216, two 16 (Alt-Ergo+CVC5), one 0, none 0, the same as those not proved together. The 16 are floating-point comparators': each assertion's last part (part4, part16 or part64). Each alone run took 2 minutes, no proof over 30 s. |
+| P8 | **MATCH.** Without the inlining, "Proved goals 0 / 96 (Qed 0; Timeout 96)": each assertion timed out at 120 s with the three provers, neither proved nor refuted; the part took 95 minutes. |
+| P9 | **MATCH.** "Proved goals 52 / 86 (Qed 52; Timeout 18; Unknown 16)", and of the 26 functions none has every part proved. Each integer comparator's `symmetric`: 0 / 1. Each floating-point comparator's: 13 / 16, the three not proved its parts 7, 10 and 16, the paths on which the two values can compare unequal (one a NaN and the other a number, either way, or both numbers); the 13 proved are WP's own, both NaN and the 12 combinations whose paths contradict. `self_equal`: 0 / 1 for `f32` and for `f64`. |
+| P10 | **MATCH.** At `cortex_m4`, `rv64_lp64` and `msvc_x86_64`: "Proved goals 3156 / 3156", the same 3012 goals by name as x86_64's, none not proved; Qed 2780 at each, the provers' shares a few goals apart; 3 minutes each. |
+| P11 | **MATCH.** Every part gave its summary and report, the longest, `contract`, in 95 minutes; the report posted its comparisons. |
+
+Ten of eleven.
+
+**The parts' numbering.** The false control shows how WP numbers a
+floating-point assertion's parts: by the paths of each inlined body in
+turn, both values NaN first, then one NaN either way, then both numbers.
+So the last part, which Z3 alone fails in every floating-point assertion,
+is the path on which every value compared is a number: as in
+`frama-c-compare`, where Z3 alone fails part 4 of `algo_cmp_f32`'s and
+`algo_cmp_f64`'s postconditions.
+
+**What run 1 shows.**
+
+- **WP proves the three of every comparator, of its code.** All 3156
+  goals, at x86_64 and at one model of each other class, in 3 minutes,
+  no proof over half a second. The order the documentation asks for holds
+  for the 24, NaNs included.
+- **The proof is the code's, and says something.** Without the inlining,
+  none of the 96 is proved: the contracts give only each result's range.
+  With it, no false assertion is proved, and every path on which two
+  values can compare unequal stays unproved in `symmetric`; `x == x` is not
+  proved for a float, so WP's model has NaNs, and the proofs cover them.
+- **Two provers prove every goal alone.** Alt-Ergo and CVC5 each prove
+  the 3156; Z3 fails on the 16 paths where all the floating-point values
+  are numbers, where it fails compare.h's own.
+- **A lesson twice recorded was not applied.** P3 quoted a probe's
+  notices whole, prover counts and all, as VERIFY-080's U3 did.
+
+### Run 2: pre-registration (2026-11-16)
+
+**The change.** The driver becomes a proof unit, enforced on run 1's
+numbers, and the corrections this record lists are made.
+
+- **The driver** moves to `vmacros/vdrivers/compare_order_verify.h`:
+  `gen_order.py` writes it there, its code from `#ifndef` on run 1's byte
+  for byte, its header naming its job and its program. The false control
+  stays in the probe's directory.
+- **`4 · Proofs: core/`** gains the job `frama-c-compare-order`: the
+  probe's `together` command, the driver's path changed and no report
+  file, with `frama-c-compare`'s gates. The Proved line is pinned at
+  "3156 / 3156", with no goal unproved and no Failed, Invalid or Stepout
+  verdict.
+- **`13 · Prover agreement`**: the unit `frama-c-compare-order` in
+  `tools/agreement/agreement.py`, its extra options `-inline-calls` and
+  `-remove-inlined`, each given the 24 names, which `job_command` now
+  reads from the job, so that `check` compares them. Its pin file holds
+  the report's 16 lines, `two Alt-Ergo+CVC5`. A change to `agreement.py`
+  runs every unit.
+- **`11 · Proofs: machine models`** gains the unit `compare-order`: a
+  field `extra` for each unit's extra options, empty for the ten, and nine
+  jobs. Its pins at the three classes are "proved 3156 / 3156", what the
+  probe gave at one model of each; `check_pins.py` reads 33 files. The
+  workflow also runs when the driver changes.
+- **`14 · Eva`**: `tools/eva/programs/compare_order.c`, the unit's
+  program, which `eva.py check` asks of every unit. It calls each of the
+  72 functions on every value, pair and triple of a few values of its type
+  (an integer type's bounds, 0, 1 and -1; for `f32` and `f64` a NaN, the
+  infinities, -1, -0, +0 and 1), the comparators called, not inlined.
+  Eva checks the 96 assertions at those values, `-warn-special-float none`
+  as for `compare.c`, and E-ACSL as the program runs. Its block in each of
+  the ten pin files, and its line in `eacsl_pins.txt`, "runs".
+- **The probe** is closed: `steps` names no part, and a part it does not
+  name skips Frama-C's setup and posts that it did not run, and the report
+  that no part ran.
+- **The corrections**, each once: compare.h's header (the contracts state
+  the result's range; no `\is_NaN` behaviors; the order proved by VERIFY-084,
+  noted at `algo_cmp_fn`); `docs/verification.md`'s compare.h section (24,
+  the contracts, the 60 goals) and its card (+3156 obligations, +3156
+  proved), with a section on the order proofs; `frama-c-compare`'s comment
+  and PASS line in `proofs-core.yml`; an update to VERIFY-005.
+- **Elsewhere**: `docs/for-future.md`'s RPP note says what VERIFY-084 did;
+  the workflow map's rows 4, 9, 11 and 13; the README's two sentences on
+  the machine models and the formal verification; `tools/eva/README.md`,
+  27 programs; `eva.yml`'s counts, and its comment on the `e-acsl` job,
+  "Report-only in run 1", which VERIFY-083 left for this file's next
+  change.
+
+**Measured here.** With Frama-C 25.0, gcc 13.3.0, and the probe's numbers
+from CI:
+
+- `gen_order.py --check`; the driver's code from `#ifndef` on is run 1's.
+  The job's WP command is the probe's `together` command but for the
+  driver's path and the report; `agreement.py run`'s, the probe's alone
+  command but for the path.
+- `agreement.py check`: 27 units, 0 problems; `check_pins.py`: 33 files, 0
+  problems; `eva.py check`: 27 programs, 10 models, 0 problems; `eacsl.py
+  check`: 27 programs, runs 11; the MISRA, size and metrics checks, 0
+  problems; `record_coverage.py --strict --complete`; actionlint on every
+  workflow; pyflakes.
+- **Eva on `compare_order.c`**, through `eva.py run` at x86_64,
+  `msvc_x86_64` and `ppc_32`: "end reached, fails {0}; alarms 0; program
+  calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown;
+  preconditions 456/0/0; functions 97/97", as pinned, about 6 s each; the
+  96 assertions valid. The same at `gcc_x86_32` and `x86_32`. Frama-C 25
+  reads none of `tools/machdeps/`'s seven models, written for 29's format.
+  `compare.c` gives its pin here at x86_64.
+- **Natively**, `eva.py native`: the program compiles with gcc, `-Werror`,
+  and returns 0 under ASan and UBSan.
+- **E-ACSL**, through VERIFY-083's stand-in for its script: `compare_order`
+  instruments, compiles and runs to its end, 313 checks, none failing;
+  E-ACSL does not translate its 96 `assigns` clauses. `compare` does not
+  instrument with Frama-C 25 ("typing was not performed on construct"),
+  where CI's 29 runs it: here is a weaker guide for E-ACSL than for Eva.
+- **The closed probe**: each part posts that it did not run, and the
+  report that no part ran, exit 0.
+
+Not run here: WP, at all; MdR.
+
+**The workflows.** `tools/which_workflows.py`: 1 to 11, 13 and 14 run;
+12 does not. In 13 all 27 units, since `agreement.py` changes; in 14
+every program, since `eva.py`, the pins and `eva.yml` change; in 9 every
+probe.
+
+**Baselines.** 1, 3, 4, 5 and 6 #67 (ba2f0b0); 2, 8 and 9 #95, #109 and
+#29 (62105e2); 7 #32 (14782ad); 10 #10 (d503201); 11 #13 (c35260b); 13
+#11 (c35260b), its last run of every unit; 14 #20 (3e28ddd). Nothing those
+runs read has changed since, but compare.h's comments.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Q1 | **1 to 11, 13 and 14 run**, and no other. | another set | H |
+| Q2 | **1, 2, 3, 5, 6, 7 and 10 are green**, each job with its baseline's notices, times aside, 2's slowest header among them. | a failure, or another notice | H: nothing they build or read changes, but compare.h's comments, which no pin counts. |
+| Q3 | **4 is green.** Its jobs give #67's notices, times aside, and `frama-c-compare-order`: "proved 3156 / 3156; unproved 0; failed/invalid/stepout 0". | a failure, another notice, or another line | M–H: the probe's command, measured in CI. |
+| Q4 | **8 is green**, with no notice. | a failure, or a notice | H |
+| Q5 | **9 is green.** The eleven older probes give #29's notices, times aside, but for the diag_push probe's counts that move between runs: of its agreement step only "none 1", and of its WP step only "Proved goals: 3073 / 3074". The order probe's nine parts each post that they did not run, and its report that no part ran. | a failure, or another notice | H for the older probes; M–H for the order probe, whose closed path ran here, not in CI. |
+| Q6 | **11 is green, 99 jobs.** The 90 give #13's notices, times aside; the nine of `frama-c-compare-order` each "proved 3156 / 3156 (pin 3156 / 3156, CLASS); unproved 0; failed/invalid/stepout 0". | a failure, or another notice | M–H: the probe measured one model of each class. |
+| Q7 | **13 is green, every unit as its pins**: the goals no prover proves alone are each job's pinned names, and those one or two prove the unit's pins, as since VERIFY-065. `frama-c-compare-order`: by WP itself 2780, three provers 216, two 16 (Alt-Ergo+CVC5), one 0, none 0. The other units' counts besides the pinned ones are not predicted. | a unit not as pinned, or the new unit's counts otherwise | M–H: the new unit's, as the probe measured; the others, as their last runs. |
+| Q8 | **14's native and model jobs are green**, each model's job with #20's notices, one a program, times aside, and one more: `compare_order`'s, as pinned. In the total job, each model's line as #20's but for the new program: "27 programs; 27 reach their end, 17 with every check confirmed; alarms 3; program calls 0 invalid, 60 unknown; library calls 0 invalid, 13 unknown; 27 as pinned", and at x86_64 "64 unknown" program calls, as #20's. | a failure, or another line | M: Eva 25 here at three models; at the other seven, as `compare.c`'s results, the same at every model, suggest. |
+| Q9 | **14's total job is green**: "MdR's SARIF for 270 of 270 runs (27 programs at 10 machine models)", open 30 and of level error 6880 as at #20, its other counts not predicted; "mdr pins", "mdr upload" (84 results) and "mdr others" as #20's. | a failure, another upload, or the pins, upload or others otherwise | M: MdR is not run here; `compare_order` leaves nothing open, so it uploads nothing. |
+| Q10 | **14's e-acsl job is green**: "11 of 27 programs as E-ACSL runs them: instrumented 11, compiled 11, run to their end 11; annotations failed 0, verdicts unsound 0, CHECKs failed 0"; its pins "as pinned, 27 programs: runs 11, stops: mkBinOp 6, stops: does not finish 10"; its checks more than 1624, in 11 programs; its stopped as #20's. | a failure, or another notice | M: E-ACSL 25 through a stand-in, which does not run `compare`, as 29 does. |
+
+**What follows.** Q1 to Q10 scored. If they hold, the record closes. A
+pin missed is measured, and a run 2b re-pins it, with a reason.
