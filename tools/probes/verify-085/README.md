@@ -16,7 +16,7 @@ other function's, that it moves the state as its contract says.
 
 | part | what |
 |------|------|
-| `main` | each case of `tools/aorai/aorai.py`'s `CASES`: Aorai, then WP on `main` alone (`-wp-fct main`), the callees' contracts taken as given, with WP's smoke tests (since run 1b); then `hashmap_stale_checks.c`, here (run 1b) |
+| `main` | each case of the probe's `MAIN`: Aorai, then WP on `main` alone (`-wp-fct main`), the callees' contracts taken as given, with WP's smoke tests (since run 1b). Since run 2, four cases of its own (below); in runs 1 and 1b, `tools/aorai/aorai.py`'s `CASES`, and in 1b `hashmap_stale_checks.c` after them |
 | `lib-hashmap`, `lib-stringbuf`, `lib-bitset` | `hashmap_ok.c`, `stringbuf_ok.c` and `bitset_ok.c`, each with its automaton, and WP on every function |
 
 WP runs with the options of the unit whose program the case is
@@ -40,9 +40,34 @@ after the loop, after the first `hashmap_iter_next` and after the insert,
 and of `iter == 0` before the refused call. A check of `\false` proved
 marks a point WP reaches with hypotheses that contradict each other;
 `iter_zero` proved would mean WP takes `iter` to be 0 there. The part's
-log lists, for each case that breaks its rule, every property of `main`
+log listed, for each case that breaks its rule, every property of `main`
 at the marked call and Aorai's of `main`, and for every case Aorai's
 properties neither valid nor ignored.
+
+**Run 2.** In run 1b WP proved every check of `\false` in
+`hashmap_stale_checks.c`, from the first, after the init, and its smoke
+tests found the code of every hashmap program unreachable from the init's
+line on: WP's hypotheses there contradict each other, and what it proved
+after them it proved of nothing. The likely cause, which the run did not
+name: `backing` is a `u64[64]`, and `bytes_from` requires
+`\valid((u8 *)ptr + (0 .. len - 1))`, 512 bytes; WP's typed model counts
+an array in cells of its type, 64 here, so in its model that precondition
+is false, and WP takes a call's precondition as a hypothesis after the
+call. The part `main` now runs four cases:
+
+| case | program | automaton |
+|------|---------|-----------|
+| `hashmap_stale_checks` | `hashmap_stale_checks.c`, as in run 1b | `hashmap_iteration` |
+| `hashmap_stale_checks_plain` | the same | none: WP on the program alone |
+| `hashmap_stale_bytes` | `hashmap_stale_bytes.c`: the same, its buffer a `u8[512]` aligned for the slots | `hashmap_iteration` |
+| `hashmap_ok_bytes` | `hashmap_ok_bytes.c`: `tools/aorai/programs/hashmap_ok.c`, its buffer the same | `hashmap_iteration` |
+
+Each case's notice also gives the lines WP's smoke tests find unreachable
+(its warnings "Failed smoke-test"), the status of each check the program
+names, and `main`'s other properties neither valid nor ignored, which its
+log lists in full with `main`'s assertions and checks. Built with gcc, the
+two programs of bytes return 0, and Eva with Aorai (Frama-C 25) gives them
+the verdicts and counts of the programs they copy.
 
 The file `steps` names the parts that run; a part it does not name posts
 that it did not run. Each part's files, `aorai_wp_out/PART/`, are its

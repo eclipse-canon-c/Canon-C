@@ -119,8 +119,9 @@ jobs:
   # END, and breaks it when the one call it marks refused violates one of
   # Aorai's preconditions. And each program of tools/aorai/programs/
   # compiled and run, and again with CANON_LIFETIME_DEBUG, whose run-time
-  # checks see the views rules. Report-only in run 1 (ENFORCE in
-  # tools/aorai/aorai.py).
+  # checks see the views rules. Since run 2 (ENFORCE in tools/aorai/aorai.py),
+  # a case not as CASES says, or a program not as LIFETIME_DEBUG says, fails
+  # the job; report-only in runs 1 and 1b.
   aorai:
     name: "Aorai: the call-order rules each program keeps"
     runs-on: ubuntu-24.04

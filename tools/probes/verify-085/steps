@@ -1,2 +1,2 @@
-# The parts of aorai_wp_probe.py that run (VERIFY-085 run 1: all four).
-main lib-hashmap lib-stringbuf lib-bitset
+# The parts of aorai_wp_probe.py that run (VERIFY-085 run 2: main; runs 1 and 1b: all four).
+main

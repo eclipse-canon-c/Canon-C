@@ -13,13 +13,14 @@ obligations, among them each call's precondition on the state, and each
 other function's, that it moves the state as its contract says. The parts,
 each a job of the probe's matrix in probes.yml:
 
-  main            each case of aorai.py's CASES: Aorai, then WP on main
-                  alone (-wp-fct main), the callees' contracts taken as
-                  given, with WP's smoke tests (since run 1b); Report's
-                  table then gives each of main's properties its status.
-                  Then hashmap_stale_checks.c, here: hashmap_stale.c with
-                  ACSL checks, of \false at four points and of iter == 0
-                  before the refused call (run 1b)
+  main            each case of MAIN: Aorai, then WP on main alone
+                  (-wp-fct main), the callees' contracts taken as given,
+                  with WP's smoke tests. Since run 2, MAIN is
+                  hashmap_stale_checks.c with hashmap_iteration.ya and
+                  without an automaton, and hashmap_stale_bytes.c and
+                  hashmap_ok_bytes.c, the same programs with their buffer
+                  declared as bytes. Runs 1 and 1b ran aorai.py's CASES
+                  (1b, the checks file after them)
   lib-hashmap     hashmap_ok.c with hashmap_iteration.ya, WP on every
   lib-stringbuf   function; stringbuf_ok.c with stringbuf_views.ya;
   lib-bitset      bitset_ok.c with bitset_views.ya
@@ -30,13 +31,17 @@ model, -wp-rte, -wp-split, Alt-Ergo, Z3 and CVC5, 120 s. Aorai's
 properties are those that name its state (aorai_), as for aorai.py. Each
 part posts notices: WP's summary, Aorai's properties by status, and for a
 case that breaks its rule, the status of Aorai's precondition at the call
-marked refused. Its log lists Aorai's properties neither valid nor
-ignored (never tried, as a behavior's assumption or an assigns clause's
-\from), WP's lines on smoke tests, and for a case that breaks its rule
-every property of main at the marked call and Aorai's of main; for the
-checks, their statuses. It never fails on what it measures: a part fails
-only if a WP run gives no summary or no table, or is stopped at its limit
-(30 minutes a case of main, 230 a lib part).
+marked refused. In main, a notice a case, which also gives the lines WP's
+smoke tests find unreachable (its warnings "Failed smoke-test"), the
+status of each check the program names, and main's other properties
+neither valid nor ignored. The log lists them all: main's properties
+neither valid nor ignored, its assertions and checks, and for a case that
+breaks its rule every property of main at the marked call and Aorai's of
+main; for a lib part, Aorai's properties neither valid nor ignored (never
+tried, as a behavior's assumption or an assigns clause's \\from). It never
+fails on what it measures: a part fails only if a WP run gives no summary
+or no table, or is stopped at its limit (30 minutes a case of main, 230 a
+lib part).
 
 The file steps, next to this script, names the parts that run; a part it
 does not name posts that it did not run. Without the file, every part
@@ -51,6 +56,7 @@ import csv
 import importlib.util
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -63,12 +69,26 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 STEPS = os.path.join(HERE, 'steps')
 OUT = os.path.abspath('aorai_wp_out')
 LIBS = {'lib-hashmap': 'hashmap_ok', 'lib-stringbuf': 'stringbuf_ok', 'lib-bitset': 'bitset_ok'}
-# Run 1b: hashmap_stale.c with checks of \false and of iter == 0 before the
-# refused call, a case of the part main after aorai.py's.
-CHECKS = 'tools/probes/verify-085/hashmap_stale_checks.c'
+PROBE = 'tools/probes/verify-085/'
+# Run 1b: hashmap_stale.c with checks of \false after the init, the loop,
+# the first hashmap_iter_next and the insert, and of iter == 0 before the
+# refused call.
+CHECKS = PROBE + 'hashmap_stale_checks.c'
+# The part main's cases, as aorai.py's CASES: (case, source, the Eva
+# program whose preprocessing it takes, automaton or None, verdict). Run 2:
+# WP proved every check of \false in the checks file; with and without
+# Aorai, and with the buffer declared as bytes.
+MAIN = [
+    ('hashmap_stale_checks', CHECKS, 'hashmap', 'hashmap_iteration', 'breaks'),
+    ('hashmap_stale_checks_plain', CHECKS, 'hashmap', None, 'breaks'),
+    ('hashmap_stale_bytes', PROBE + 'hashmap_stale_bytes.c', 'hashmap', 'hashmap_iteration', 'breaks'),
+    ('hashmap_ok_bytes', PROBE + 'hashmap_ok_bytes.c', 'hashmap', 'hashmap_iteration', 'follows'),
+]
 PARTS = ['main'] + list(LIBS)
 LIMITS = {'main': 30 * 60, 'lib': 230 * 60}
 CUT = 4000   # the runner cuts an annotation at 4096 characters
+SHOWN = 10   # main's properties not valid, in a notice
+NOT_VALID = ('Valid', 'Ignored', 'Considered valid')
 
 
 def load(name, path):
@@ -101,19 +121,21 @@ def command(tools, case, scope, csv_path):
     _, source, program, auto, _ = case
     name = ev.PROGRAMS[program]
     model = agreement.UNITS[name][1]
+    cmd = ['frama-c', f'-cpp-extra-args={ev.cpp_of(program)}', source]
+    if auto:   # run 2: a case without an automaton is WP on the program alone
+        cmd += ['-aorai-automata', aorai.automaton(auto), '-then-last']
     # The unit's job's options (proofs-*.yml), at its model, x86_64.
-    cmd = (['frama-c', f'-cpp-extra-args={ev.cpp_of(program)}', source,
-            '-aorai-automata', aorai.automaton(auto), '-then-last',
-            '-wp', '-wp-rte', '-wp-model', model, '-wp-prover', 'alt-ergo,z3,cvc5',
-            '-wp-timeout', '120', '-wp-split'] + agreement.EXTRA.get(name, []))
+    cmd += (['-wp', '-wp-rte', '-wp-model', model, '-wp-prover', 'alt-ergo,z3,cvc5',
+             '-wp-timeout', '120', '-wp-split'] + agreement.EXTRA.get(name, []))
     if scope == 'main':
-        # Run 1b: smoke tests, which try to prove that a call's contract or
-        # a precondition leaves the code after it unreachable (VERIFY-085's
-        # run 1: WP proved the precondition of the call hashmap_stale.c's
-        # rule refuses, which Eva finds invalid).
+        # Since run 1b: smoke tests, which try to prove that a call's
+        # contract or a precondition leaves the code after it unreachable
+        # (VERIFY-085's run 1: WP proved the precondition of the call
+        # hashmap_stale.c's rule refuses, which Eva finds invalid).
         cmd += ['-wp-fct', 'main', '-wp-smoke-tests']
-    # -report-untried: a property WP did not try is in the table too.
-    return cmd + ['-then-last', '-report-untried', '-report-csv', csv_path], name
+    # -report-untried: a property WP did not try is in the table too. Without
+    # Aorai no project was made, and -then-last would find none.
+    return cmd + ['-then-last' if auto else '-then', '-report-untried', '-report-csv', csv_path], name
 
 
 def run(cmd, d, limit):
@@ -149,11 +171,33 @@ def statuses(rows):
     return '; '.join(f'{k} {v}' for k, v in sorted(out.items())) or 'none'
 
 
+def doomed(text, source):
+    """The lines of source at which WP's smoke tests find the code
+    unreachable: its warnings "Failed smoke-test", which name the line."""
+    pattern = re.escape(source) + r':(\d+): Warning:\s*Failed smoke-test'
+    return sorted({int(m.group(1)) for m in re.finditer(pattern, text)})
+
+
+def named_checks(source):
+    """{line: name} of the ACSL checks source names (check NAME: ...)."""
+    out = {}
+    with open(os.path.join(ROOT, source), encoding='utf-8') as f:
+        for n, line in enumerate(f, 1):
+            m = re.search(r'/\*@\s*check\s+(\w+)\s*:', line)
+            if m:
+                out[n] = m.group(1)
+    return out
+
+
+def asserted(r):
+    return 'check' in r['property kind'] or 'assert' in r['property kind']
+
+
 def one(tools, case, scope, limit):
-    """WP on one case: (line for the notice, summary dict), or raises."""
+    """WP on one case: the line for its notice, or raises."""
     aorai, ev, agreement = tools
     name, source = case[0], case[1]
-    d = os.path.join(OUT, scope if scope != 'main' else 'main', name)
+    d = os.path.join(OUT, scope, name)
     csv_path = os.path.join(d, 'report.csv')
     if os.path.exists(csv_path):
         os.remove(csv_path)
@@ -166,6 +210,7 @@ def one(tools, case, scope, limit):
         why = (f'stopped after {limit // 60} minutes' if code is None
                else f'frama-c exit {code}, no summary' if s is None else 'no table')
         raise RuntimeError(f'{name}: {why}')
+    base = os.path.basename(source)
     mine = [r for r in rows if 'aorai_' in (r.get('property') or '')]
     if scope == 'main':
         mine = [r for r in mine if r.get('function') == 'main']
@@ -174,38 +219,55 @@ def one(tools, case, scope, limit):
             f'{" of main" if scope == "main" else ""}: {statuses(mine)}')
     marks = aorai.marked_lines(source)
     if marks:
-        base = os.path.basename(source)
         at = [r['status'] for r in mine if r['file'] == base and int(r['line']) == marks[0]
               and r['property kind'].startswith('precondition of')]
         line += f'; at the call marked refused (line {marks[0]}): {", ".join(at) or "no property"}'
-    # Ignored: never tried, as WP does not prove a behavior's assumption or
-    # an assigns clause's \from; the rest not valid are listed.
-    unproved = [f'{r["status"]}: {r["function"]}:{r["line"]} {r["property kind"]}: {r["property"][:160]}'
-                for r in mine if not r['status'].startswith('Valid') and r['status'] != 'Ignored']
-    smoke = [ln for ln in text.splitlines() if 'moke' in ln or 'oomed' in ln]
+    summary = {'case': name, 'unit': unit, 'automaton': case[3], 'summary': s[:2],
+               'cats': s[2], 'aorai': statuses(mine)}
     if scope == 'main':
-        line += f'; smoke-test lines {len(smoke)}, doomed {sum("oomed" in ln for ln in smoke)}'
-    line += f'; {minutes:.1f} minutes'
-    print(line)
-    if unproved:
-        print(f'--- {name}: Aorai\'s properties neither valid nor ignored ({len(unproved)}) ---')
-        shown('\n'.join(unproved[:200]))
-    if smoke:
-        print(f'--- {name}: WP\'s lines on smoke tests ({len(smoke)}) ---')
-        shown('\n'.join(smoke[:80]))
-    checks = [r for r in rows if r.get('function') == 'main'
-              and ('check' in r['property kind'] or 'assert' in r['property kind'])
-              and os.path.basename(source) == r['file']]
-    if source == CHECKS:
-        line += '; checks: ' + ', '.join(f'{r["property"][:60]} {r["status"]}' for r in checks)
+        ofmain = [r for r in rows if r.get('function') == 'main' and r['file'] == base]
+        dl = doomed(text, source)
+        line += '; doomed at lines ' + (', '.join(map(str, dl)) or 'none')
+        checks = named_checks(source)
+        got = []
+        for n, nm in sorted(checks.items()):
+            st = [r['status'] for r in ofmain if int(r['line']) == n and asserted(r)]
+            got.append(f'{nm} ({n}) {", ".join(st) or "no property"}')
+        if got:
+            line += '; checks: ' + ', '.join(got)
+        other = [r for r in ofmain if not asserted(r) and r['status'] not in NOT_VALID]
+        line += f'; main\'s other properties not valid: {len(other)}'
+        if other:
+            line += ' (' + ', '.join(f'{r["line"]} {r["property kind"]} {r["status"]}'
+                                     for r in other[:SHOWN])
+            line += f', and {len(other) - SHOWN} more)' if len(other) > SHOWN else ')'
+        print(f'--- {name}: main\'s properties neither valid nor ignored, but its assertions '
+              f'and checks ({len(other)}) ---')
+        shown('\n'.join(f'{r["status"]}: {r["line"]} {r["property kind"]}: {r["property"][:200]}'
+                        for r in other))
+        print(f'--- {name}: main\'s assertions and checks, smoke tests among them ---')
+        shown('\n'.join(f'{r["line"]} {r["property kind"]}: {r["status"]}: {r["property"][:120]}'
+                        for r in ofmain if asserted(r)))
+        summary.update({'doomed': dl, 'checks': got,
+                        'not_valid': [f'{r["status"]}: {r["line"]} {r["property kind"]}: '
+                                      f'{r["property"]}' for r in other]})
+    else:
+        # Ignored: never tried, as WP does not prove a behavior's assumption
+        # or an assigns clause's \from; the rest not valid are listed.
+        unproved = [f'{r["status"]}: {r["function"]}:{r["line"]} {r["property kind"]}: '
+                    f'{r["property"][:160]}' for r in mine if r['status'] not in NOT_VALID]
+        if unproved:
+            print(f'--- {name}: Aorai\'s properties neither valid nor ignored ({len(unproved)}) ---')
+            shown('\n'.join(unproved[:200]))
+        summary['unproved'] = unproved
     if marks:
-        base = os.path.basename(source)
         print(f'--- {name}: every property of main at line {marks[0]}, and Aorai\'s of main ---')
         shown('\n'.join(f'{r["status"]}: {r["line"]} {r["property kind"]}: {r["property"][:200]}'
-                         for r in rows if r.get('function') == 'main' and r['file'] == base
-                         and (int(r['line']) == marks[0] or 'aorai_' in (r.get('property') or ''))))
-    summary = {'case': name, 'unit': unit, 'summary': s[:2], 'cats': s[2],
-               'aorai': statuses(mine), 'unproved': unproved, 'minutes': round(minutes, 1)}
+                        for r in rows if r.get('function') == 'main' and r['file'] == base
+                        and (int(r['line']) == marks[0] or 'aorai_' in (r.get('property') or ''))))
+    line += f'; {minutes:.1f} minutes'
+    print(line)
+    summary['minutes'] = round(minutes, 1)
     with open(os.path.join(d, 'summary.json'), 'w') as f:
         json.dump(summary, f, indent=1)
     return line
@@ -230,16 +292,13 @@ def main(argv):
     cases = {c[0]: c for c in tools[0].CASES}
     failed = []
     if part == 'main':
-        lines = {}
-        extra = ('hashmap_stale_checks', CHECKS, 'hashmap', 'hashmap_iteration', 'breaks')
-        for case in tools[0].CASES + [extra]:
+        for case in MAIN:
+            what = f'WP on main, {case[3] or "no automaton"}: '
             try:
-                lines.setdefault(case[3], []).append(one(tools, case, 'main', LIMITS['main']))
+                notice(f'aorai wp main {case[0]}', what + one(tools, case, 'main', LIMITS['main']))
             except RuntimeError as e:
                 failed.append(str(e))
-                lines.setdefault(case[3], []).append(f'{case[0]}: no data ({e})')
-        for auto, ls in lines.items():
-            notice(f'aorai wp main {auto}', f'WP on main, {auto}: ' + '; '.join(ls))
+                notice(f'aorai wp main {case[0]}', what + f'{case[0]}: no data ({e})')
     else:
         case = cases[LIBS[part]]
         try:

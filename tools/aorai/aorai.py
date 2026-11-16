@@ -64,7 +64,7 @@ START = os.getcwd()   # the outputs go here; Frama-C runs from ROOT
 OUT = os.path.join(START, 'aorai_out')
 MODEL = 'x86_64'
 SECONDS = 600
-ENFORCE = False   # VERIFY-085 run 1: report-only
+ENFORCE = True    # VERIFY-085 run 2 (report-only in runs 1 and 1b)
 
 # (case, source, the Eva program whose preprocessing and options it takes,
 #  automaton, verdict)
