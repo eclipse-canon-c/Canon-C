@@ -44,23 +44,46 @@ group them) and runs it three times: the two heap rules, `handler_kept`,
 run's rules, preprocessed with the unit's options. Then:
 
     frama-c -cpp-extra-args=CPP unit.c EXTRA -meta -meta-checks -meta-list-targets
-            -meta-warn-key unknown-func=inactive -then-last
-            -wp -wp-model MODEL -wp-prop=@check -wp-prover alt-ergo,z3,cvc5 -wp-timeout 10
+            -meta-warn-key unknown-func=inactive [META_EXTRA] -then-last
+            -wp -wp-model MODEL -wp-prop=@check -wp-prover alt-ergo,z3,cvc5 -wp-timeout 120
             -then-last -report-untried -report-csv report.csv
 
 MetAcsl writes checks (`-meta-checks`), and WP proves the checks alone: no
-unit has checks of its own. Report's table gives each its status; the
-run's directory keeps the rules' rows (`checks.csv`) and Frama-C's log,
-`metacsl_out/summary_PART.json` the counts. Each part posts a notice for
-each rule, its checks by unit and how many are proved, and one for the
-part. Report-only in run 1 (`ENFORCE`): a part fails only when a run gives
-no table or is stopped (60 minutes a run; no run starts past 240 minutes
-of a part).
+unit has checks of its own. The timeout is the proof jobs' (since run 1b;
+10 s in run 1). Report's table gives each its status; the run's directory
+keeps the rules' rows (`checks.csv`) and Frama-C's log,
+`metacsl_out/summary_PART.json` the counts.
+
+A check is proved when Report gives it "Valid", or "Partially proven":
+proved, with properties of the unit the run does not prove, its loop
+invariants and its callees' contracts, which the unit's proof job proves.
+
+`diag` takes `-meta-no-check-ext` (`META_EXTRA`). Its proof needs
+`-variadic-no-translation`, so that its calls of the trusted `snprintf`
+and `fprintf` keep their variable arguments (VERIFY-017's "Trusted stdio
+axioms"); at a call of a function without a body, MetAcsl's `\writing`
+context binds the formals to the arguments, and stops on more arguments
+than formals (run 1: `Invalid_argument("List.iter2")`). Without the
+option's check, diag's own writes are checked, and not those its stdio
+calls make, which by the axioms are the buffer they are given.
+
+**The pins.** `pins.txt` names, unit by unit and rule by rule, the
+functions whose checks WP does not prove, and why: each calls through a
+pointer its caller passed (`region_end` a cleanup hook, which may be
+`free`; option's and result's combinators and `vec_int_to_stringbuf_cb`
+the function they are given, which may call `contract_set_handler`). The
+library's own code calls neither. Each part posts a notice for each rule,
+its checks by unit and how many are proved, and one for the part with the
+differences from the pins. Report-only in runs 1 and 1b (`ENFORCE`): a
+part fails only when a run gives no table or is stopped (60 minutes a
+run; no run starts past 240 minutes of a part); enforced, a difference
+fails it too.
 
     python3 tools/metacsl/metacsl.py check
     python3 tools/metacsl/metacsl.py run PART [UNIT...]
 
 `15 · MetAcsl` runs the three parts (`.github/workflows/metacsl.yml`),
 each installing frama-c-metacsl 0.7, MetAcsl's version for Frama-C 29, in
-the Frama-C setup's switch, and removing it at the end. Frama-C 25 has no
+the Frama-C setup's switch (with `--assume-depexts`, as the setup), and
+removing it at the end. Frama-C 25 has no
 MetAcsl, and rejects a `meta` annotation.

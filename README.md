@@ -940,11 +940,17 @@ For what Canon-C intentionally omits, established C libraries exist:
 > `core/arena.h` and `core/pool.h` include `memory.h` but never call
 > `malloc` — they operate entirely on caller-supplied buffers. The heap
 > dependency is only active if your code calls `mem_alloc()`,
-> `mem_alloc_type()`, or `mem_alloc_array()` directly. Everything in
-> `data/convenience/` (dynvec, smallvec, dynstring) uses heap allocation
-> internally.
+> `mem_alloc_type()`, or `mem_alloc_array()` directly, or a function that
+> calls them: vec's heap constructor and destructor,
+> `vec_<type>_alloc()` and `vec_<type>_free()`, and `util/str/`'s
+> `str_alloc_copy()`, `str_alloc_concat()`, `str_alloc_sub()`,
+> `str_alloc_join()` and `str_free()`. Everything in `data/convenience/`
+> (dynvec, smallvec, dynstring) uses heap allocation internally. The
+> library calls the heap nowhere else; `region_end()` calls the cleanup
+> hooks you registered, which may be `free`. In the 27 proof units,
+> `15 · MetAcsl` checks this at every call (VERIFY-086).
 >
-> On bare-metal, if you avoid `mem_alloc()` and `data/convenience/`, no
+> On bare-metal, if you avoid those functions and `data/convenience/`, no
 > `malloc` is ever reached. If you do need heap allocation, `#define
 > malloc`, `realloc`, and `free` to your RTOS allocator (e.g. FreeRTOS's
 > `pvPortMalloc` / `pvPortReAlloc` / `vPortFree`) before including any

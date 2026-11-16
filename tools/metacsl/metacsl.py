@@ -30,16 +30,26 @@ handler's address and so runs alone. A handler rule runs only where the
 unit includes contract.h. Each run is a C file of its own, written to
 metacsl_out/UNIT/RUN/unit.c, that includes the unit's file and then the
 rules, preprocessed with the unit's options. MetAcsl writes checks
-(-meta-checks); WP, at the unit's model and with the unit's extra options,
-proves the checks alone (-wp-prop=@check: no unit has checks of its own),
-with Alt-Ergo, Z3 and CVC5 at 10 s; Report's table then gives each check
-its status.
+(-meta-checks); WP, at the unit's model and with the unit's extra options
+(and META_EXTRA's), proves the checks alone (-wp-prop=@check: no unit has
+checks of its own), with Alt-Ergo, Z3 and CVC5 at 120 s, the proof jobs'
+timeout (since run 1b; 10 s in run 1); Report's table then gives each
+check its status.
 
-Each part posts a notice for each rule, its checks by unit and status, and
-one for the part. Report-only in run 1 (ENFORCE): a part fails only when a
-run gives no table, or is stopped at its limit.
+A check is proved when Report gives it "Valid", or "Partially proven":
+proved, with properties of the unit that the run does not prove (its loop
+invariants, its callees' contracts), which the unit's proof job does. The
+functions whose checks are not proved are pinned, unit by unit and rule by
+rule, in tools/metacsl/pins.txt, with why.
 
-    python3 tools/metacsl/metacsl.py check        the units and the rules
+Each part posts a notice for each rule, its checks by unit and how many
+are proved, and one for the part, with the differences from the pins; the
+log lists each check not proved, and WP's lines on its goals not proved.
+Report-only in runs 1 and 1b (ENFORCE): a part fails only when a run gives
+no table, or is stopped at its limit; enforced, a difference from the pins
+fails it too.
+
+    python3 tools/metacsl/metacsl.py check        the units, the rules, the pins
     python3 tools/metacsl/metacsl.py run PART     core, semantics or data
     python3 tools/metacsl/metacsl.py run PART UNIT...
 
@@ -64,12 +74,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 START = os.getcwd()
 OUT = os.path.join(START, 'metacsl_out')
-ENFORCE = False   # VERIFY-086 run 1: report-only
+PINS = os.path.join(HERE, 'pins.txt')
+ENFORCE = False   # VERIFY-086 runs 1 and 1b: report-only
 LIMIT = 60 * 60   # seconds, a run
 BUDGET = 240 * 60  # seconds, a part: past it no run starts, so that the
                    # notices are written before the job's limit
-TIMEOUT = '10'    # seconds, a prover
+TIMEOUT = '120'   # seconds, a prover: the proof jobs' (run 1: 10)
 CUT = 4000        # the runner cuts an annotation at 4096 characters
+PROVED = ('Valid', 'Partially proven')
 
 # The rules: name, file, and how a row of Report's table is known to be one
 # of its checks, by the property's kind and text. No unit has checks of its
@@ -90,6 +102,16 @@ RUNS = [('heap', ['heap_raw', 'heap_wrappers'], False),
         ('kept', ['handler_kept'], True),
         ('written', ['handler_written'], True)]
 HANDLER = 'canon_contract_handler'
+
+# MetAcsl's options for a unit, besides the runs' (run 1b). diag's proof
+# needs -variadic-no-translation, so its calls of the trusted snprintf and
+# fprintf keep their variable arguments; at a call of a function without a
+# body MetAcsl's \writing context binds the formals to the arguments, and
+# stops on more arguments than formals (run 1: Invalid_argument
+# "List.iter2"). -meta-no-check-ext leaves those calls' writes unchecked:
+# diag's own writes are checked; its stdio calls write the buffer they are
+# given, by the trusted axioms (VERIFY-017's "Trusted stdio axioms").
+META_EXTRA = {'frama-c-diag': ['-meta-no-check-ext']}
 
 # The parts, a job each: the units of 4 · Proofs: core/, 5 · Proofs:
 # semantics/ and 6 · Proofs: data/.
@@ -126,6 +148,28 @@ def shown(text):
     sys.stdout.flush()
 
 
+def pins():
+    """{(unit, rule): set of functions} from pins.txt, and its problems."""
+    out, problems = {}, []
+    with open(PINS, encoding='utf-8') as f:
+        for n, line in enumerate(f, 1):
+            words = line.split('#', 1)[0].split()
+            if not words:
+                continue
+            if len(words) < 3:
+                problems.append(f'pins.txt:{n}: UNIT RULE FUNCTION... wanted')
+                continue
+            unit, rule, functions = words[0], words[1], words[2:]
+            if unit not in PART_OF:
+                problems.append(f'pins.txt:{n}: {unit} is not a unit')
+            if rule not in RULES:
+                problems.append(f'pins.txt:{n}: {rule} is not a rule')
+            if (unit, rule) in out:
+                problems.append(f'pins.txt:{n}: {unit} {rule} pinned twice')
+            out[(unit, rule)] = set(functions)
+    return out, problems
+
+
 def check():
     ag = agreement()
     problems = []
@@ -137,6 +181,9 @@ def check():
     for u, p in PART_OF.items():
         if p not in PARTS:
             problems.append(f'{u}: part {p} is not one of {PARTS}')
+    for u in META_EXTRA:
+        if u not in PART_OF:
+            problems.append(f'META_EXTRA: {u} is not a unit')
     for rule, (path, _) in RULES.items():
         if not os.path.exists(os.path.join(ROOT, path)):
             problems.append(f'{rule}: {path} missing')
@@ -148,10 +195,12 @@ def check():
     for word in ('#define CANON_CORE_PRIMITIVES_CONTRACT_H', HANDLER, 'contract_set_handler'):
         if word not in text:
             problems.append(f'contract.h: {word} not found, which the handler rules name')
+    pinned, bad = pins()
+    problems += bad
     for p in problems:
         print('problem:', p)
-    print(f'metacsl check: {len(units)} units in {len(PARTS)} parts, {len(RULES)} rules; '
-          f'{len(problems)} problem(s)')
+    print(f'metacsl check: {len(units)} units in {len(PARTS)} parts, {len(RULES)} rules, '
+          f'{sum(len(v) for v in pinned.values())} pinned functions; {len(problems)} problem(s)')
     return 1 if problems else 0
 
 
@@ -186,7 +235,8 @@ def meta_options():
 
 def command(ag, unit, path, csv_path):
     source, model, cpp = ag.UNITS[unit]
-    meta = ['-meta', '-meta-checks', '-meta-list-targets', '-meta-warn-key', 'unknown-func=inactive']
+    meta = (['-meta', '-meta-checks', '-meta-list-targets', '-meta-warn-key', 'unknown-func=inactive']
+            + META_EXTRA.get(unit, []))
     return (['frama-c', f'-cpp-extra-args={cpp}', path] + ag.EXTRA.get(unit, [])
             + meta + ['-then-last', '-wp', '-wp-model', model, '-wp-prop=@check',
                       '-wp-prover', 'alt-ergo,z3,cvc5', '-wp-timeout', TIMEOUT]
@@ -246,23 +296,30 @@ def one(ag, unit, run, rules, needs_handler, left):
         w.writerows(keep)
     os.remove(csv_path)
     s = ag.summary(text)
+    # WP's own lines on the goals it did not prove: a timeout, an unknown.
+    wp_lines = [ln for ln in text.splitlines()
+                if re.match(r'\[wp\] \[(Timeout|Unknown|Failed|Stepout|Error)\]', ln)]
     out = {}
     for r in rules:
         mine = [x for x in rows if RULES[r][1](x.get('property kind') or '', x.get('property') or '')]
         st = {}
         for x in mine:
             st[x['status']] = st.get(x['status'], 0) + 1
-        bad = [x for x in mine if x['status'] != 'Valid']
+        bad = [x for x in mine if x['status'] not in PROVED]
         out[r] = {'stated': True, 'checks': len(mine), 'statuses': st,
-                  'valid': st.get('Valid', 0),
-                  'not_valid': [f'{x["status"]}: {x["function"]}:{x["line"]} {x["property kind"]}: '
-                                f'{x["property"][:140]}' for x in bad],
+                  'proved': sum(st.get(p, 0) for p in PROVED),
+                  'hypotheses': st.get('Partially proven', 0),
+                  'not_proved': [f'{x["status"]}: {x["function"]}:{x["line"]} {x["property kind"]}: '
+                                 f'{x["property"][:140]}' for x in bad],
                   'functions': sorted({x['function'] for x in bad}),
                   'wp': s[:2] if s else None, 'minutes': round(minutes, 1)}
         wp = f'WP {s[0]} / {s[1]}' if s else 'no WP summary'
         print(f'--- {unit}, {r}: {len(mine)} checks, {st or "none"}; {wp}; {minutes:.1f} minutes')
         if bad:
-            shown('\n'.join(out[r]['not_valid'][:300]))
+            shown('\n'.join(out[r]['not_proved'][:300]))
+    if wp_lines:
+        print(f'--- {unit}, run {run}: WP\'s lines on goals not proved ({len(wp_lines)}) ---')
+        shown('\n'.join(wp_lines[:200]))
     return out
 
 
@@ -274,19 +331,34 @@ def describe(unit, s):
         return f'{name} no data ({s["error"]})'
     if not s['checks']:
         return f'{name} no check'
-    line = f'{name} {s["valid"]}/{s["checks"]}'
-    if s['not_valid']:
+    line = f'{name} {s["proved"]}/{s["checks"]}'
+    if s['functions']:
         line += f' (not proved in {", ".join(s["functions"][:8])}' + (
             f', and {len(s["functions"]) - 8} more)' if len(s['functions']) > 8 else ')')
     return line
 
 
-def notices(part, results, minutes):
+def differences(results):
+    """The functions not proved that the pins do not name, and the pinned
+    ones proved or without a check, for the units of results."""
+    pinned, _ = pins()
+    out = []
+    for unit in results:
+        for rule, s in results[unit].items():
+            if not s.get('stated') or 'error' in s:
+                continue
+            got, want = set(s['functions']), pinned.get((unit, rule), set())
+            out += [f'{unit} {rule} {f}: not proved, not pinned' for f in sorted(got - want)]
+            out += [f'{unit} {rule} {f}: pinned, proved or without a check' for f in sorted(want - got)]
+    return out
+
+
+def notices(part, results, diffs, minutes):
     lines = []
     errors = 0
     for rule in RULES:
         parts, unstated = [], []
-        total = valid = 0
+        total = proved = hyp = 0
         for unit in results:
             s = results[unit][rule]
             d = describe(unit, s)
@@ -298,13 +370,17 @@ def notices(part, results, minutes):
                 errors += 1
             else:
                 total += s['checks']
-                valid += s['valid']
-        msg = f'{rule}, {part}: checks {total}, proved {valid}; ' + '; '.join(parts)
+                proved += s['proved']
+                hyp += s['hypotheses']
+        msg = f'{rule}, {part}: checks {total}, proved {proved} ({hyp} under hypotheses); ' + '; '.join(parts)
         if unstated:
             msg += f'; not stated (no contract.h): {" ".join(unstated)}'
         lines.append(f'::notice title=metacsl {rule} {part}::{msg[:CUT]}')
-    lines.append(f'::notice title=metacsl {part}::{part}: {len(results)} units, '
-                 f'{sum(1 for _ in RULES)} rules; runs without data {errors}; {minutes:.1f} minutes')
+    msg = (f'{part}: {len(results)} units, {len(RULES)} rules; runs without data {errors}; '
+           f'differences from the pins {len(diffs)}')
+    if diffs:
+        msg += ': ' + '; '.join(diffs[:20]) + (f'; and {len(diffs) - 20} more' if len(diffs) > 20 else '')
+    lines.append(f'::notice title=metacsl {part}::{msg[:CUT - 40]}; {minutes:.1f} minutes')
     with open(os.path.join(START, f'notices_metacsl_{part}.txt'), 'w') as f:
         f.write('\n'.join(lines) + '\n')
     # The workflow's next step posts the file; here, the same lines, not
@@ -334,11 +410,16 @@ def run(part, only):
             results[unit].update(one(ag, unit, run_name, rules, needs_handler, left))
     with open(os.path.join(OUT, f'summary_{part}.json'), 'w') as f:
         json.dump(results, f, indent=1)
-    errors = notices(part, results, (time.time() - start) / 60)
-    unproved = sum(len(s.get('not_valid', [])) for u in results for s in results[u].values())
+    diffs = differences(results)
+    if diffs:
+        print(f'--- {part}: differences from the pins ({len(diffs)}) ---')
+        shown('\n'.join(diffs))
+    errors = notices(part, results, diffs, (time.time() - start) / 60)
     if errors:
         print(f'::error title=metacsl {part}::{errors} run(s) of a rule without data')
-    return 1 if errors or (ENFORCE and unproved) else 0
+    if ENFORCE and diffs:
+        print(f'::error title=metacsl {part}::{len(diffs)} difference(s) from tools/metacsl/pins.txt')
+    return 1 if errors or (ENFORCE and diffs) else 0
 
 
 def main(argv):

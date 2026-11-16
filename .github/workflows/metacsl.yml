@@ -14,10 +14,14 @@ name: "15 · MetAcsl: the library's rules across its functions"
 #
 # MetAcsl is not in the Frama-C setup's opam switch: each job installs it,
 # frama-c-metacsl 0.7, the version for Frama-C 29, and removes it at the
-# end, so that a cache the setup saves is the setup's.
+# end, so that a cache the setup saves is the setup's. It installs with
+# --assume-depexts, as the setup does: without it (run 1) opam installed
+# the GUI's system packages and rebuilt Frama-C in each job.
 #
-# Report-only in run 1 (ENFORCE in tools/metacsl/metacsl.py): a part fails
-# only when a run gives no table, or is stopped.
+# The functions whose checks WP does not prove are pinned,
+# tools/metacsl/pins.txt. Report-only in runs 1 and 1b (ENFORCE in
+# tools/metacsl/metacsl.py): a part fails only when a run gives no table,
+# or is stopped.
 # ---------------------------------------------------------------------------
 
 on:
@@ -66,7 +70,7 @@ jobs:
             echo "frama-c-metacsl.0.7 is not in the switch's index: updating it"
             opam update -y default
           fi
-          opam install -y --confirm-level=unsafe-yes frama-c-metacsl.0.7
+          opam install -y --confirm-level=unsafe-yes --assume-depexts frama-c-metacsl.0.7
           frama-c -version
           frama-c -plugins | grep -i -A1 meta
       - name: "MetAcsl and WP on each unit of the part"
