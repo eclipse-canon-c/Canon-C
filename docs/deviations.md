@@ -36887,7 +36887,7 @@ eight of nine, run 3 nine of nine. What it shows:
 | **ID**         | VERIFY-083 |
 | **Date**       | 2026-11-15 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-15 — Run 1 scored: D1 to D4 MATCH, D5 MISS, D6 to D9 not scored. E-ACSL instrumented no program: `e-acsl-gcc.sh` reads its arguments word by word, and the "-I" in each program's one `-E` took its file away ("no input files"). Run 1b, pre-registered below, gives each flag a `-E` of its own. Run 1b scored: E1 to E9 MATCH. 6 programs instrument, compile and run clean; 16 stop on an annotation error, the script reading the system's C headers, where `valid_read_string`, which Canon-C's contracts name, is not; 4 on E-ACSL's stack overflow. Run 1c, pre-registered below, reads Frama-C's C library (`-L`), as Eva does. Run 1c scored: F1 to F9 MATCH. 10 programs run, all their annotations holding, 1624 checks; 6 stop on E-ACSL's `mkBinOp`; 10 do not finish. Run 2, pre-registered below, pins the 26 results and enforces them. The Status above is the record as committed. |
+| **Status update** | 2026-11-15 — Run 1 scored: D1 to D4 MATCH, D5 MISS, D6 to D9 not scored. E-ACSL instrumented no program: `e-acsl-gcc.sh` reads its arguments word by word, and the "-I" in each program's one `-E` took its file away ("no input files"). Run 1b, pre-registered below, gives each flag a `-E` of its own. Run 1b scored: E1 to E9 MATCH. 6 programs instrument, compile and run clean; 16 stop on an annotation error, the script reading the system's C headers, where `valid_read_string`, which Canon-C's contracts name, is not; 4 on E-ACSL's stack overflow. Run 1c, pre-registered below, reads Frama-C's C library (`-L`), as Eva does. Run 1c scored: F1 to F9 MATCH. 10 programs run, all their annotations holding, 1624 checks; 6 stop on E-ACSL's `mkBinOp`; 10 do not finish. Run 2, pre-registered below, pins the 26 results and enforces them. CLOSED: run 2 matched G1 to G7. `14 · Eva`'s job `e-acsl` runs each of the 26 programs with E-ACSL's runtime checks: 10 run, their 1624 checks holding; 6 stop on E-ACSL's `mkBinOp`; 10 do not finish; a result not as `tools/eva/eacsl_pins.txt` pins it fails the job ("Run 2 scored", below). The Status above is the record as committed. |
 | **Baseline**   | 73d8d04 and VERIFY-082's close: `1`, `3`, `4`, `5` and `6` #66 (8946d5a), `2 · Platforms` #90 and `14 · Eva` #16 (511cb19), `8 · Records` #103 (73d8d04). |
 | **Scope**      | `tools/eva/eacsl.py` and `tools/eva/eacsl_markers.c` (new); `tools/eva/README.md`; `.github/workflows/eva.yml`, the job `e-acsl`, and its header, whose sentence on MdR VERIFY-082 left for this file's next change; the workflow map. |
 | **Category**   | The to-do list's item 5, Frama-C's plug-ins, group 1, its third part. The author decided on 2026-11-14: E-ACSL, on the 26 programs Eva analyses. |
@@ -37210,3 +37210,57 @@ sooner, may warn of fewer.
 **What follows.** G1 to G7 scored. If they hold, the record closes with
 the README's badge, in a push of the record and `README.md`, which starts
 8 alone.
+
+### Run 2 scored (2026-11-16)
+
+The push of eddec6b and 3e28ddd started `2 · Platforms` #94, `8 · Records`
+#107 and `14 · Eva` #20, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| G1 | **MATCH.** 2, 8 and 14 ran, and no other. |
+| G2 | **MATCH.** 2's 16 jobs and 8's two gave #93's and #106's notices, times aside. |
+| G3 | **MATCH.** 14's native job, ten Eva jobs and total job gave #19's notices, times aside. |
+| G4 | **MATCH.** The job is green, enforced: "e-acsl pins: as pinned, 26 programs: runs 10, stops: mkBinOp 6, stops: does not finish 10". |
+| G5 | **MATCH.** "10 of 26 programs as E-ACSL runs them: instrumented 10, compiled 10, run to their end 10; annotations failed 0, verdicts unsound 0, CHECKs failed 0". |
+| G6 | **MATCH.** "1624 inserted in the 10 instrumented programs". |
+| G7 | **MATCH.** The E-ACSL step took 9 min 34 s. |
+
+Seven of seven. `region` was "not done in 300 s" where run 1c's
+overflowed at 672 s: one result, as the pins hold it. The annotations not
+translated were 2006, as in run 1c.
+
+**Closed.** The job `e-acsl` of `14 · Eva` instruments each of the 26
+programs Eva analyses with E-ACSL, at x86_64, with Eva's preprocessing and
+Frama-C's C library, compiles it and runs it without address
+randomization. Each program's result is pinned in
+`tools/eva/eacsl_pins.txt`, and a result not as pinned fails the job:
+
+- 10 run to their END with every annotation E-ACSL translates holding,
+  1624 checks in all: `bits`, `borrow`, `checked`, `compare`, `diag`,
+  `error`, `lifetime`, `memory`, `ptr` and `slice`;
+- 6 stop on E-ACSL's `mkBinOp`, a C integer beside a GMP one: `arena`,
+  `pool`, `priority_queue`, `stack`, `stringbuf` and `vec`;
+- 10 do not finish, E-ACSL's recursion not ending: `array`, `bitset`,
+  `deque`, `hashmap`, `option`, `range`, `region`, `result`, `vec_fmt`
+  and `vec_range`.
+
+The README gains the badge "Frama-C E-ACSL: CI". `eva.yml`'s comment on
+the job, "Report-only in run 1", is left for that file's next change.
+
+The record scored 29 of the 30 predictions it could score, and left 4
+unscored: run 1 four of five, D6 to D9 holding of nothing; run 1b nine of
+nine; run 1c nine of nine; run 2 seven of seven. What it shows:
+
+- **Where E-ACSL runs, the contracts hold as the programs run.** No
+  annotation failed in the 10 programs, over 1624 checks, nor any CHECK.
+  E-ACSL's limits, not the code, stop the 16 others.
+- **The script is part of what is measured.** `e-acsl-gcc.sh` reads its
+  arguments word by word, so a "-I" inside one `-E` became its own option
+  (run 1); and it reads the system's C headers unless given `-L` (run 1b).
+  A stand-in that did the script's two steps showed neither; the
+  argument loop, read from the script's source and run alone, showed the
+  first.
+- **The runtime has its own conditions.** The segment memory model needs
+  the program's memory unrandomized; `--keep-going` leaves the exit status
+  0 after a failed annotation, so the messages are what tell.
