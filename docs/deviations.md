@@ -38880,3 +38880,159 @@ two of seven, run 1c six of seven, run 2 six of six. What it shows:
   VERIFY-017's axioms, not on the rule.
 - **No unit breaks a rule.** The check has been seen to hold; no program
   was written to break a rule, as VERIFY-085's were, and see it refused.
+
+---
+
+## VERIFY-087: Pre-registration — WP's Smoke Tests on the 27 Proof Units: Whether a Proof Rests on Hypotheses That Contradict Each Other, Where WP Proves Everything; Run 1, a Probe
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-087 |
+| **Date**       | 2026-11-17 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 9742da9 (VERIFY-086's close): `2 · Platforms` #105 (500e16d); `8 · Records` #121 (9742da9); `9 · Probes` #31 (434229c), the last run of every probe, since which nothing the other probes read has changed; the Aorai probe's `steps` names no part since its close. |
+| **Scope**      | Run 1: `tools/probes/verify-087/` (new: `smoke_probe.py`, `steps`, `README.md`); `.github/workflows/probes.yml`, the job `smoke-probe`, its filter, its output, its path and the header; the workflow map's row 9. |
+| **Category**   | The item the author added after item 6 at VERIFY-085's close, on 2026-11-16: a probe of WP's smoke tests over the 27 proof units, report-only, with a short timeout. |
+
+### What is missing
+
+WP's summary counts the goals it proves. It does not say whether a proof
+rests on hypotheses that contradict each other: past such a point WP
+proves every goal, the false with the true. VERIFY-085 met one in a
+program that uses the library: `bytes_from`'s precondition, asking for
+512 bytes of a `u64[64]`, is false in WP's typed model, which counts the
+array in cells of its type, 64, as VERIFY-085 read it; WP proves a call's
+precondition at the call and takes it as a hypothesis after it, and
+proved every goal after the call, in milliseconds. Its close: "The same
+goal, VERIFY-039's byte-view class, is harmless left unproved in the
+library's units, filed under a written argument; in a caller, assumed, it
+voids the rest."
+
+The units are callers too. Three functions in them call `memset` on a
+local object, `sizeof` bytes of it, and their preconditions are pinned
+unproved, "byte view" goals:
+
+- `array_int_8_zero` and `array_int_8_from_ptr` (`frama-c-array`, from
+  `data/array.h`'s `DEFINE_ARRAY`): `memset(a.items, 0, sizeof(a.items))`,
+  32 bytes of an `int[8]`, 8 cells
+  (`typed_cast_array_int_8_zero_call_memset_requires_valid_s`, and
+  `from_ptr`'s);
+- `diag_init` (`frama-c-diag`, `semantics/diag.h`): `memset(&d, 0,
+  sizeof(d))`, 1288 bytes of a `Diag`, 1057 cells
+  (`typed_cast_diag_init_call_memset_requires_valid_s`).
+
+Past the first two, the array unit's job proves what WP's typed model
+cannot reach by itself: `array_int_8_zero`'s postcondition, every element
+0, and `array_int_8_from_ptr`'s, the elements copied from `src` or 0,
+which follow from a `memset` and a `memcpy` of bytes, writes the model
+keeps apart from the `int` elements (`diag_init`'s own comment: "byte-
+level reinterpretation of the memset, which the Typed memory model cannot
+do"); and `from_ptr`'s `memcpy` precondition, which asks for up to 32
+bytes of the same 8 cells. None is among the job's unproved names. Nothing
+has checked whether these proofs, or any others in the units, are of
+nothing.
+
+WP's smoke tests look for such points. With `-wp-smoke-tests` WP adds
+goals of `\false`: at each function's entry, under its requires and each
+behavior's assumes; after each call; at each loop; in code its analysis
+does not find reachable. It tries each with `-wp-smoke-timeout`, 2 s by
+default. A smoke test whose `\false` a prover proves has failed, "[Failed]
+(Doomed)", and WP warns "Failed smoke-test" at the place: its hypotheses
+there contradict each other. One that no prover proves has passed: a
+test, not a proof that the point is reachable. Their authors (Blanchard
+et al., TAP 2024, with Frama-C 29) found no failure more at 3, 5 or 10 s
+than at 2.
+
+### What is decided
+
+- **The probe**, `tools/probes/verify-087/smoke_probe.py`, a job of
+  `9 · Probes` for each unit of `tools/agreement/agreement.py`'s `UNITS`
+  (27), each running WP twice with the unit's options, as its proof job:
+  its model, `-wp-rte`, `-wp-split`, Alt-Ergo, Z3 and CVC5, its extra
+  options, and `-wp-smoke-tests -wp-smoke-timeout 2`:
+  - `smoke-only`, with `-wp-prop=smoke`: the smoke tests alone, as WP
+    selects them by the name it gives them;
+  - `full`, every goal of the unit and the smoke tests: the smoke tests
+    WP makes for the unit's proof. The unit's own goals have a 1 s timeout
+    a prover, and their results are not read: a smoke test takes
+    `-wp-smoke-timeout`, not `-wp-timeout`.
+- **What it posts.** For each run, the smoke tests, how many passed,
+  those that failed by kind (a behavior's requires or assumes, a call, a
+  loop, dead code) and function, the places WP warns of, and WP's summary;
+  for each unit, the two runs compared. The log lists the smoke tests that
+  failed or gave no result, and, from WP's JSON report, every smoke test
+  by kind and status.
+- **Report-only.** A unit fails only if a run is stopped at its limit,
+  120 minutes, Frama-C exits with an error, or the full run gives no
+  summary. The file `steps` names the units that run; run 1: `all`.
+
+### Measured here
+
+With Frama-C 25.0 (no WP) and gcc 13.3.0:
+
+- **WP does not run here.** What the probe relies on is read from
+  Frama-C 29.0's WP source: `wp_parameters.ml`, `-wp-smoke-tests`,
+  `-wp-smoke-timeout` (2), the dead-assumes, dead-call, dead-code and
+  dead-loop tests on and the dead-local-init test off; `VCS.ml`, a smoke
+  test's timeout is `-wp-smoke-timeout`; `register.ml`, "[Failed]
+  (Doomed)" for a smoke test a prover proved, "[Passed]" otherwise, the
+  summary's "Smoke Tests: passed / total", the warning "Failed
+  smoke-test" at the place; `wpPropId.ml`, a smoke test's names include
+  "smoke", which `-wp-prop` matches; `cfgAnnot.ml`, the tests' names
+  (`default_requires` or a behavior's, `_assumes`, `dead_call`,
+  `dead_code`, `dead_loop`); `cfgCalculus.ml`, a smoke test at every call
+  of the default behavior; `cfgInfos.ml`, with `-wp-prop` naming none of a
+  function's properties, WP takes the function up only for its requires
+  clauses.
+- **The three calls.** `sizeof(Diag)` is 1288 bytes (gcc, x86_64): eight
+  frames of two pointers, a `usize`, an `Error` and 128 `char`s, and the
+  depth; 1057 scalars, the cells as VERIFY-085 read the model. `diag_init`
+  is in `frama-c-diag` alone, and the two array functions in
+  `frama-c-array` alone (each unit preprocessed with its options). The
+  units' other byte-level calls (`core/memory.h`'s wrappers, `slice.h`'s
+  and `borrow.h`'s `memcmp`, `diag_push`'s `memcpy`, `array_int_8_equal`'s
+  `memcmp`, the byte views) are on objects reached through pointers, but
+  `mem_swap`'s `u8 tmp[...]`, whose cells are its bytes.
+- **The array unit's proof.** `6 · Proofs: data/` #74, `frama-c-array`:
+  2863 / 2887, the 24 goals unproved the pinned ones, the two `memset`
+  preconditions among them; the postconditions and `memcpy` precondition
+  of "What is missing" not.
+- **`smoke_probe.py`** against a stand-in for Frama-C 29's WP, which
+  parses the unit with Frama-C 25 and prints WP-shaped smoke output and a
+  JSON report: the notices, the two runs compared, the report by kind and
+  status; a unit whose runs exit with an error, and one whose runs are
+  stopped at the limit, fail; a smoke-only run with no goal is data;
+  `steps` naming units, `all` or none; `named`; `check`, "27 units, the
+  matrix 27; 0 problem(s)". End to end on four units: `frama-c-diag` and
+  `frama-c-compare-order` with their extra options, `frama-c-vec-range`
+  under `-CC`; `frama-c-priority-queue`, which Frama-C 25 does not parse
+  (its `calls` clause, as in VERIFY-086), exits with an error.
+- pyflakes; actionlint on `probes.yml`; `record_coverage.py --strict
+  --complete`.
+
+Not here: WP; its smoke tests.
+
+### The workflows
+
+`tools/which_workflows.py`: 2, 8 and 9 run, and no other: 2 because the
+workflow map changes; in 9 every probe, since each watches `probes.yml`.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| K1 | **2, 8 and 9 run**, and no other. | another set | H |
+| K2 | **2 is green**, each job with #105's notices, times aside, its slowest header among them; **8 is green**, with no notice. | a failure, or another notice | H |
+| K3 | **9's older probes give #31's notices**, times aside, but for the diag_push probe's counts that move between runs (of its agreement step only "none 1", of its WP step only "Proved goals: 3073 / 3074"); the order probe's nine parts and the Aorai probe's four post that they did not run, and the order probe's report that no part ran. | a failure, or another notice | H: nothing they read has changed since #31, and the Aorai probe is closed. |
+| K4 | **The smoke probe's 27 jobs are green**: in each run WP ends, and the full run gives its summary and its smoke tests. | a job fails, or a full run without smoke tests | M: WP 29's smoke tests have not run on these units, and `-wp-prop=smoke` is read from the source. |
+| K5 | **In the full run, smoke tests fail in `array_int_8_zero` and `array_int_8_from_ptr` (`frama-c-array`) and in `diag_init` (`frama-c-diag`)**: each of the `memset`'s call, or of code after it. | one of the three without a failed smoke test | M–H: the array unit proves goals past the call that the model cannot reach; whether a prover proves `\false` in 2 s is not measured. |
+| K6 | **In the full run, no smoke test fails at a requires or assumes clause, or at a loop.** | one does | M–H: no contract is known to contradict itself, and the proof jobs prove the loops' invariants where they hold. |
+| K7 | **Beyond K5's three functions, no smoke test of the full run fails at a call.** | one does | M: of the units' calls whose preconditions stay unproved, those three alone write a local object, whose size WP knows; the rest reach objects through pointers, of a size no hypothesis bounds. |
+| K8 | **The smoke-only run has no smoke test in `array_int_8_zero` or `diag_init`**, which have no requires clause, **and has `array_int_8_from_ptr`'s failure.** | a smoke test in either, or `from_ptr`'s failure missing | L–M: WP's selection is read from its source. |
+| K9 | **Each unit's two runs end within 60 minutes together.** | a unit past it | M: the unit's goals at 1 s, the smoke tests at 2 s, against the proof jobs' 120 s. |
+
+**What follows.** K1 to K9 scored. Where smoke tests fail, the record
+says which proofs past them are of nothing; the author decides whether
+the code changes (a typed store, as `diag_init` writes its depth), and
+whether smoke tests join the proof jobs, in the smoke-only run if it
+finds what the full run finds.
