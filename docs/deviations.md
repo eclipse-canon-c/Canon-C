@@ -38397,9 +38397,9 @@ seven of twelve, run 2 five of nine, run 2b seven of seven. What it shows:
 | **ID**         | VERIFY-086 |
 | **Date**       | 2026-11-16 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-17 — Run 1 scored: G1, G2, G3 and G5 MATCH; G4, G6 and G7 MISS. MetAcsl 0.7 read the four rules, and WP proved, in minutes, every check of `handler_written` it ran and all but 101 of `handler_kept`'s 2407, each of those in a function that calls through a pointer its caller passed, but one, `vec_int_fill`, at 10 s; the heap rules' two checks, at `region_end`'s hook, it did not. MetAcsl stopped on diag's `handler_written` run. Run 1b, pre-registered below, gives diag `-meta-no-check-ext` and WP the proof jobs' 120 s, pins the functions not proved, and corrects the README's note on the heap. Run 1b scored: H1 and H2 MATCH; H3 to H7 MISS. With `--assume-depexts`, opam still took the GUI's packages for changed and rebuilt them, without their system packages, and failed: 15's three jobs stopped at the install, and nothing of MetAcsl's was measured. Run 1c, pre-registered below, installs MetAcsl with `--no-depexts`, falling back to run 1's way, and changes nothing else. The Status above is the record as committed. |
+| **Status update** | 2026-11-17 — Run 1 scored: G1, G2, G3 and G5 MATCH; G4, G6 and G7 MISS. MetAcsl 0.7 read the four rules, and WP proved, in minutes, every check of `handler_written` it ran and all but 101 of `handler_kept`'s 2407, each of those in a function that calls through a pointer its caller passed, but one, `vec_int_fill`, at 10 s; the heap rules' two checks, at `region_end`'s hook, it did not. MetAcsl stopped on diag's `handler_written` run. Run 1b, pre-registered below, gives diag `-meta-no-check-ext` and WP the proof jobs' 120 s, pins the functions not proved, and corrects the README's note on the heap. Run 1b scored: H1 and H2 MATCH; H3 to H7 MISS. With `--assume-depexts`, opam still took the GUI's packages for changed and rebuilt them, without their system packages, and failed: 15's three jobs stopped at the install, and nothing of MetAcsl's was measured. Run 1c, pre-registered below, installs MetAcsl with `--no-depexts`, falling back to run 1's way, and changes nothing else. Run 1c scored: I1 to I4, I6 and I7 MATCH; I5 MISS. opam installed MetAcsl alone, in seconds, and every run of every unit gave its table; diag's 11 `handler_written` checks are proved, and every other check has run 1's status. The one difference from the pins is `vec_int_fill` in the vec unit: the provers give up on its check, at 120 s as at 10 s. That unit is preprocessed without `-CC`, and fill's loop, in vec's macro, loses its annotations there, its `loop assigns` among them; the stack unit keeps them, and proves the check under them. Run 2, pre-registered below, pins it and sets `ENFORCE`. The Status above is the record as committed. |
 | **Baseline**   | 107f51d (VERIFY-085's close): `1`, `3`, `4`, `5` and `6` #70 (6cabb94); `2 · Platforms` #101 and `8 · Records` #116 (107f51d). |
-| **Scope**      | Run 1: `tools/metacsl/` (new: `rules/handler_written.h`, `rules/handler_kept.h`, `rules/heap_raw.h`, `rules/heap_wrappers.h`, `metacsl.py`, `README.md`); `.github/workflows/metacsl.yml` (new, `15 · MetAcsl`); `.github/workflows/records.yml`, a step and a path; the workflow map's row 15. Run 1b: `metacsl.py` (`META_EXTRA`, the timeout, the pins, the notices), `tools/metacsl/pins.txt` (new), its README; `metacsl.yml`'s install; the README's note on the heap; the workflow map's row 15. Run 1c: `metacsl.yml`'s install; the runs named report-only in `metacsl.py`, `metacsl.yml`, its README and the map's row 15. |
+| **Scope**      | Run 1: `tools/metacsl/` (new: `rules/handler_written.h`, `rules/handler_kept.h`, `rules/heap_raw.h`, `rules/heap_wrappers.h`, `metacsl.py`, `README.md`); `.github/workflows/metacsl.yml` (new, `15 · MetAcsl`); `.github/workflows/records.yml`, a step and a path; the workflow map's row 15. Run 1b: `metacsl.py` (`META_EXTRA`, the timeout, the pins, the notices), `tools/metacsl/pins.txt` (new), its README; `metacsl.yml`'s install; the README's note on the heap; the workflow map's row 15. Run 1c: `metacsl.yml`'s install; the runs named report-only in `metacsl.py`, `metacsl.yml`, its README and the map's row 15. Run 2: `pins.txt`, `vec_int_fill` in the vec unit; `metacsl.py`'s `ENFORCE`; the enforcement named in `metacsl.py`, `metacsl.yml`, its README and the map's row 15. |
 | **Category**   | The to-do list's item 6, Frama-C's plug-ins, group 2, its third part. The author decided on 2026-11-16: of the cross-cutting rules, the contract handler's integrity and the heap called only where documented; proved by WP on every unit. |
 
 ### What is missing
@@ -38701,3 +38701,111 @@ no other.
 `ENFORCE`, and changes nothing else; then the record closes with the
 README's badge "Frama-C MetAcsl" and `docs/verification.md`'s section on
 the rules.
+
+### Run 1c scored (2026-11-17)
+
+The push of 472cb17 and 236bb9c started eight workflows: `1` to `6` #73
+(2 #104), `8` #119 and `15 · MetAcsl` #3. Each was green at its first
+attempt.
+
+| # | scored |
+|---|--------|
+| I1 | **MATCH.** 1 to 6, 8 and 15 ran, and no other. |
+| I2 | **MATCH.** Each of 1 to 6's jobs gave #72's notices (2's #103's), times aside, 2's slowest header among them, and 8's two gave none: 81 jobs, no difference. |
+| I3 | **MATCH.** In each of 15's three jobs, opam's one action was "install frama-c-metacsl 0.7", retrieved from opam's cache; no system package, no rebuild, and the step said "MetAcsl installed with --no-depexts". It took 11 to 19 s, against run 1's 115 to 187. |
+| I4 | **MATCH.** 15 is green: in each part every run of every unit gave its table ("runs without data 0"), diag's `handler_written` too. The parts took 2.8, 3.4 and 26.7 minutes. |
+| I5 | **MISS.** One difference from the pins, in the part data: `vec_int_fill` in the vec unit, its `handler_kept` check not proved. WP's own line gives its goal "[Unknown]", where it gives the goals it ran out of time on "[Timeout]" (`region_end`'s two, `vec_int_to_stringbuf_cb`'s): the provers gave up on it, at 120 s as at 10 s. |
+| I6 | **MATCH.** diag's 11 `handler_written` checks are all proved, 3 "Valid" and 8 "Partially proven". |
+| I7 | **MATCH.** The checks are run 1's, rule by rule and part by part: `handler_written` 278, 46 (run 1's 35 and diag's 11) and 713; `handler_kept` 578, 130 and 1699; one of each heap rule, in core. Unit by unit, every run but diag's `handler_written` gave run 1's counts and statuses. |
+
+Six of seven.
+
+**What run 1c shows.**
+
+- **With `--no-depexts`, opam installs MetAcsl alone.** It leaves the
+  system's packages out of its state, and does not take the GUI's
+  packages for changed.
+- **diag keeps the handler.** With `-meta-no-check-ext`, MetAcsl checks
+  diag's own writes, 11, and WP proves them all.
+- **`vec_int_fill`'s check wants its loop's annotations, not time.** The
+  vec unit is preprocessed without `-CC`, as a user compiles the library.
+  vec's functions are macros, and an annotation inside a macro is a
+  comment, which the preprocessor drops: fill's loop, vec's one loop,
+  keeps neither its invariants nor its `loop assigns` there. Frama-C 25,
+  given each unit's preprocessing, prints the vec unit's loop bare and
+  the stack unit's with its four clauses. Without a `loop assigns`, WP
+  cannot bound what the loop writes, the handler with it. 6 · Proofs:
+  data/ pins this loop's goals in the vec unit for the same reason (its
+  "fill macro-body-loop cluster"), and 7 · Proofs: -CC, which
+  preprocesses vec with `-CC`, proves them (VERIFY-040's round 3).
+  In the stack unit, under `-CC`, the check is "Partially proven":
+  proved under hypotheses, and fill calls nothing, so they are its
+  loop's.
+- **The 120 s changed no status.** Every check has the status it had at
+  10 s, in run 1. The checks not proved now run to the limit: the parts
+  took 2.8, 3.4 and 26.7 minutes, against run 1's 1.1, 0.9 and 6.9. The
+  limit stays the proof jobs': enforced, a check that a slower runner
+  proves near a short limit would fail its part.
+
+**Correction to run 1's scoring.** G6 gives `vec_int_fill`'s check in the
+stack unit "Valid": it is "Partially proven", proved under its loop's
+annotations. And "What run 1 shows" read the vec unit's "Unknown" as a
+matter of time, "at 10 s", from which run 1b gave WP the proof jobs' 120
+s: run 1's log had no line of WP's own on the goal, which run 1b's script
+added. Run 1c's shows the provers giving up on it, not running out of
+time.
+
+### Run 2: pre-registration (2026-11-17)
+
+**What changes.**
+
+- **The pin.** `pins.txt` adds `vec_int_fill` to the vec unit's
+  `handler_kept`, and says why: the vec unit drops its loop's
+  annotations, and the stack unit proves the check under them. 103
+  pinned functions.
+- **Enforced.** `metacsl.py`'s `ENFORCE` is `True`: a part fails when a
+  run gives no table or is stopped, as before, and when it differs from
+  the pins, a function not proved that they do not name or one they name
+  proved. The script, the workflow, its README and the map's row 15 say
+  so.
+
+Nothing else changes: the rules, the units, their options, the install
+and the timeout are run 1c's.
+
+**Measured here.**
+
+- **`metacsl.py check`**: "27 units in 3 parts, 4 rules, 103 pinned
+  functions; 0 problem(s)".
+- **The pins against run 1c's logs.** Read from each of 15's three job
+  logs (the script's line for each run of a rule, and the checks not
+  proved under it), the functions not proved, 2 in core, 11 in semantics
+  and 90 in data, are the pins', by `metacsl.py`'s own comparison: no
+  difference. Against run 1c's pins, data's one, `vec_int_fill`, as its
+  notice gave.
+- **Enforced, a difference fails the part.** Against the stand-in for
+  MetAcsl and WP (Frama-C 25, which writes no check), `metacsl.py run
+  core region` finds region's two pins without a check, prints
+  "::error title=metacsl core::2 difference(s) from
+  tools/metacsl/pins.txt" and exits 1.
+- **fill's loop in each unit**, printed by Frama-C 25 with the unit's
+  preprocessing: in the vec unit, no annotation; in the stack unit, the
+  two invariants, the `loop assigns` and the variant.
+- pyflakes; actionlint; `record_coverage.py --strict --complete`.
+
+Not here: MetAcsl; WP.
+
+**The workflows.** `tools/which_workflows.py`: 1 to 6, 8 and 15 run, and
+no other; 1 to 6 because `metacsl.yml` changes.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| J1 | **1 to 6, 8 and 15 run**, and no other. | another set | H |
+| J2 | **1 to 6 are green**, each job with #73's notices, 2's with #104's, times aside, 2's slowest header among them; **8 is green**, with no notice. | a failure, or another notice | H |
+| J3 | **Each of 15's jobs installs MetAcsl as in run 1c**: with `--no-depexts`, frama-c-metacsl 0.7 alone. | the fallback taken, or another action | H |
+| J4 | **15 is green, enforced**: in each part every run of every unit gives its table, and the part's notice says "differences from the pins 0". | a part fails | H: run 1c's functions not proved are the pins, and its proved checks were proved at 10 s in run 1. |
+| J5 | **The checks and their statuses are run 1c's**, unit by unit and rule by rule: `handler_written` 278, 46 and 713, all proved (9, 8 and 34 under hypotheses); `handler_kept` 578, 130 and 1699, proved 578, 119 and 1609 (9, 4 and 47 under hypotheses); the heap rules' two checks, in core, not proved. | another count or status | H: nothing that MetAcsl or WP reads changes. |
+| J6 | **The parts take run 1c's time, within a quarter**: 2.8, 3.4 and 26.7 minutes. | a part outside it | M: the checks not proved run to the 120 s limit, which does not vary; the rest runs on runners whose speed does. |
+
+**What follows.** J1 to J6 scored. If J4 holds, the record closes with
+the README's badge "Frama-C MetAcsl" and `docs/verification.md`'s section
+on the rules; the close changes no code.
