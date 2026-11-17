@@ -855,6 +855,57 @@ What it does not claim:
   a call the rule allows, in a loop whose invariants Aorai writes of the
   state alone. A WP check would need the programs annotated.
 
+### Cross-cutting rules (MetAcsl)
+
+A contract speaks of one function. Some of the library's rules speak of
+all of them, and its documentation states them where no contract can. Two
+are written as meta-properties for Frama-C's MetAcsl (`tools/metacsl/`,
+VERIFY-086), which writes a rule as a check at each point of each
+function where it must hold:
+
+| rule | checked at | stated in |
+|------|------------|-----------|
+| the contract handler, the library's only global mutable object, is written by `contract_set_handler` alone | each write of every other function, and each of their returns | `core/primitives/contract.h` |
+| `malloc`, `calloc`, `realloc` and `free` are called by `mem_alloc` and `mem_free` alone, and those wrappers by `mem_alloc_array_checked` and vec's heap constructor and destructor alone | each call | the README's note on `malloc` / `free`; `data/vec/vec.h` |
+
+`tools/metacsl/README.md` gives each rule's meta-properties and checks.
+
+`15 · MetAcsl` runs MetAcsl on each of the 27 proof units, and WP proves
+the checks at the unit's model: 3446 checks, all but 103 proved. Each of
+the 103 is in a function that `tools/metacsl/pins.txt` names, with why. A
+function not proved and not pinned, or pinned and proved, fails the
+workflow, as does a unit whose run gives no result.
+
+What it does not claim:
+
+- **Calls through a pointer the caller passed.** WP cannot know what the
+  function pointed to does, and 102 of the pinned functions call one:
+  `region_end` the cleanup hooks registered on the region, which may be
+  `free`; option's and result's combinators and vec_fmt's
+  `vec_<T>_to_stringbuf_cb` the function they are given, which may call
+  `contract_set_handler`. The library's own code passes neither; yours
+  may. At such a call, MetAcsl's check of writes takes the callee to
+  write nothing.
+- **fill in the vec unit.** That unit is preprocessed without `-CC`, and
+  the loop of `vec_<T>_fill`, inside vec's macro, loses its annotations
+  there: WP cannot bound what the loop writes, and does not prove that
+  fill keeps the handler. The stack unit, preprocessed with `-CC`, proves
+  it.
+- **Every function of the library.** The rules are checked of the 27
+  units, at the types each instantiates, in the proof configuration
+  (`-DCANON_NO_REQUIRE -DNDEBUG`). `util/str/` and `data/convenience/`,
+  which allocate, are not proof units.
+- **A broken rule.** No unit breaks a rule, and none was written to: the
+  check has been seen to hold, not to refuse a write of the handler or a
+  call of `malloc` where the rule forbids it.
+- **Proofs without hypotheses.** A check "Partially proven" is proved
+  with properties of its unit that the run does not prove, its loop
+  invariants and its callees' contracts, which the unit's proof job
+  proves.
+- **diag's stdio calls.** diag's own writes are checked; not those of its
+  calls of `snprintf` and `fprintf`, which VERIFY-017's trusted axioms say
+  write the buffer each is given.
+
 ### Tools that are themselves verified
 
 A few tools come with a machine-checked proof of their own soundness, or
