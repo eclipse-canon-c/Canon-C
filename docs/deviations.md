@@ -38397,9 +38397,9 @@ seven of twelve, run 2 five of nine, run 2b seven of seven. What it shows:
 | **ID**         | VERIFY-086 |
 | **Date**       | 2026-11-16 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-17 — Run 1 scored: G1, G2, G3 and G5 MATCH; G4, G6 and G7 MISS. MetAcsl 0.7 read the four rules, and WP proved, in minutes, every check of `handler_written` it ran and all but 101 of `handler_kept`'s 2407, each of those in a function that calls through a pointer its caller passed, but one, `vec_int_fill`, at 10 s; the heap rules' two checks, at `region_end`'s hook, it did not. MetAcsl stopped on diag's `handler_written` run. Run 1b, pre-registered below, gives diag `-meta-no-check-ext` and WP the proof jobs' 120 s, pins the functions not proved, and corrects the README's note on the heap. The Status above is the record as committed. |
+| **Status update** | 2026-11-17 — Run 1 scored: G1, G2, G3 and G5 MATCH; G4, G6 and G7 MISS. MetAcsl 0.7 read the four rules, and WP proved, in minutes, every check of `handler_written` it ran and all but 101 of `handler_kept`'s 2407, each of those in a function that calls through a pointer its caller passed, but one, `vec_int_fill`, at 10 s; the heap rules' two checks, at `region_end`'s hook, it did not. MetAcsl stopped on diag's `handler_written` run. Run 1b, pre-registered below, gives diag `-meta-no-check-ext` and WP the proof jobs' 120 s, pins the functions not proved, and corrects the README's note on the heap. Run 1b scored: H1 and H2 MATCH; H3 to H7 MISS. With `--assume-depexts`, opam still took the GUI's packages for changed and rebuilt them, without their system packages, and failed: 15's three jobs stopped at the install, and nothing of MetAcsl's was measured. Run 1c, pre-registered below, installs MetAcsl with `--no-depexts`, falling back to run 1's way, and changes nothing else. The Status above is the record as committed. |
 | **Baseline**   | 107f51d (VERIFY-085's close): `1`, `3`, `4`, `5` and `6` #70 (6cabb94); `2 · Platforms` #101 and `8 · Records` #116 (107f51d). |
-| **Scope**      | Run 1: `tools/metacsl/` (new: `rules/handler_written.h`, `rules/handler_kept.h`, `rules/heap_raw.h`, `rules/heap_wrappers.h`, `metacsl.py`, `README.md`); `.github/workflows/metacsl.yml` (new, `15 · MetAcsl`); `.github/workflows/records.yml`, a step and a path; the workflow map's row 15. Run 1b: `metacsl.py` (`META_EXTRA`, the timeout, the pins, the notices), `tools/metacsl/pins.txt` (new), its README; `metacsl.yml`'s install; the README's note on the heap; the workflow map's row 15. |
+| **Scope**      | Run 1: `tools/metacsl/` (new: `rules/handler_written.h`, `rules/handler_kept.h`, `rules/heap_raw.h`, `rules/heap_wrappers.h`, `metacsl.py`, `README.md`); `.github/workflows/metacsl.yml` (new, `15 · MetAcsl`); `.github/workflows/records.yml`, a step and a path; the workflow map's row 15. Run 1b: `metacsl.py` (`META_EXTRA`, the timeout, the pins, the notices), `tools/metacsl/pins.txt` (new), its README; `metacsl.yml`'s install; the README's note on the heap; the workflow map's row 15. Run 1c: `metacsl.yml`'s install; the runs named report-only in `metacsl.py`, `metacsl.yml`, its README and the map's row 15. |
 | **Category**   | The to-do list's item 6, Frama-C's plug-ins, group 2, its third part. The author decided on 2026-11-16: of the cross-cutting rules, the contract handler's integrity and the heap called only where documented; proved by WP on every unit. |
 
 ### What is missing
@@ -38640,6 +38640,64 @@ no other; 1 to 6 because `metacsl.yml` changes.
 | H7 | **The checks are run 1's**, rule by rule and part by part (`handler_written` 278, 35 and 713; `handler_kept` 578, 130 and 1699; one of each heap rule, in core), but for diag's `handler_written`, now measured. | another count | M–H: the rules and the units are run 1's. |
 
 **What follows.** H1 to H7 scored. If H4 and H5 hold, run 2 sets
+`ENFORCE`, and changes nothing else; then the record closes with the
+README's badge "Frama-C MetAcsl" and `docs/verification.md`'s section on
+the rules.
+
+### Run 1b scored (2026-11-17)
+
+The push of 6f90714 and 866a2e0 started eight workflows: `1` to `6` #72
+(2 #103), `8` #118 and `15 · MetAcsl` #2. Each was green at its first
+attempt but 15, whose three jobs failed at the install of MetAcsl.
+
+| # | scored |
+|---|--------|
+| H1 | **MATCH.** 1 to 6, 8 and 15 ran, and no other. |
+| H2 | **MATCH.** Each of 1 to 6's jobs gave #71's notices (2's #102's), times aside, 2's slowest header among them, and 8's two gave none: 81 jobs, no difference. |
+| H3 | **MISS.** With `--assume-depexts` opam still warned that conf-cairo, conf-graphviz, conf-gtk3 and conf-gtksourceview3 "depend on the following system packages that are no longer installed", and planned run 1's eight rebuilds, Frama-C among them; it did not install the system packages, and the first rebuilds failed ("The compilation of conf-cairo.1 failed at "pkg-config cairo""; conf-graphviz: ""dot": command not found"). "No changes have been performed"; exit 31, in each of the three jobs. |
+| H4 | **MISS.** 15 failed: no part ran a unit. |
+| H5 | **MISS.** Not measured. |
+| H6 | **MISS.** Not measured. |
+| H7 | **MISS.** Not measured. |
+
+Two of seven.
+
+**What run 1b shows.** A setup with a cache hit installs opam alone, not
+the GUI's system packages (VERIFY-060: their download stalled the Ubuntu
+mirror). opam then takes the packages built on them for changed, and any
+install rebuilds them: with the system's packages, opam installs them with
+apt and rebuilds (run 1); with `--assume-depexts`, it rebuilds without them
+and fails. `--assume-depexts` is what the setup's own install takes, on a
+cache miss, when apt has just installed the full list. The rest of run 1b,
+diag's option, the timeout and the pins, is not measured.
+
+### Run 1c: pre-registration (2026-11-17)
+
+**What changes.** `metacsl.yml`'s install alone. opam installs
+frama-c-metacsl 0.7 with `--no-depexts`, which leaves the system's packages
+out of its state; if that fails, the step installs it as run 1 did, apt
+and the rebuilds with it. Nothing else changes: run 1b's script, rules and
+pins run as pre-registered. The runs named report-only in the script, the
+workflow, the README and the map's row 15 are now "1 to 1c".
+
+**Measured here:** actionlint; pyflakes; `metacsl.py check`;
+`record_coverage.py --strict --complete`. Not here: opam, which this
+environment does not install; MetAcsl; WP.
+
+**The workflows.** `tools/which_workflows.py`: 1 to 6, 8 and 15 run, and
+no other.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| I1 | **1 to 6, 8 and 15 run**, and no other. | another set | H |
+| I2 | **1 to 6 are green**, each job with #72's notices, 2's with #103's, times aside, 2's slowest header among them; **8 is green**, with no notice. | a failure, or another notice | H |
+| I3 | **Each of 15's jobs installs MetAcsl with `--no-depexts`**: no apt, no package rebuilt, the step's fallback not taken. | the fallback taken, or a rebuild | M–L: that `--no-depexts` keeps opam from seeing the system's packages missing is read, not measured. |
+| I4 | **15 is green**: every run of every unit gives its table, diag's `handler_written` too. | a part fails | M: with the fallback, the install is run 1's at worst. |
+| I5 | **No difference from the pins**: the functions whose checks are not proved are pins.txt's 102, `vec_int_fill` proved in the vec unit. | a difference | M: `vec_int_fill`'s check proved in the stack unit at 10 s. |
+| I6 | **diag's `handler_written` checks are all proved.** | one not proved | M |
+| I7 | **The checks are run 1's**, rule by rule and part by part (`handler_written` 278, 35 and 713; `handler_kept` 578, 130 and 1699; one of each heap rule, in core), but for diag's `handler_written`, now measured. | another count | M–H |
+
+**What follows.** I1 to I7 scored. If I4 and I5 hold, run 2 sets
 `ENFORCE`, and changes nothing else; then the record closes with the
 README's badge "Frama-C MetAcsl" and `docs/verification.md`'s section on
 the rules.
