@@ -1,0 +1,4 @@
+# The parts of smoke_probe.py that run: units of tools/agreement/agreement.py's
+# UNITS, any number a line, or "all"; a part the file does not name posts
+# that it did not run. VERIFY-087 run 1: all.
+all

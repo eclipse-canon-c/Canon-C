@@ -3,7 +3,7 @@ name: "9 · Probes (closed experiments)"
 # VERIFY-050: G4, G11, G13, G19, Count and Round 3; and VERIFY-057's pointer
 # probe, VERIFY-060's char probe, VERIFY-066's Eva error probe, VERIFY-073's
 # diag_push probe, VERIFY-079's vec_range probe, VERIFY-084's order probe
-# and VERIFY-085's Aorai probe, added since. Each is an experiment, not a gate; its result is scored in
+# VERIFY-085's Aorai probe and VERIFY-087's smoke-test probe, added since. Each is an experiment, not a gate; its result is scored in
 # docs/deviations.md. Each job still runs only when its own paths change, as
 # its workflow did: the `changes` job compares the push with the commit it
 # moved master from and sets one output per probe. A manual run runs them
@@ -52,6 +52,7 @@ on:
       - 'tools/probes/verify-079/**'
       - 'tools/probes/verify-084/**'
       - 'tools/probes/verify-085/**'
+      - 'tools/probes/verify-087/**'
       - 'tools/aorai/**'
       - 'tools/eva/programs/hashmap.c'
       - 'tools/eva/programs/stringbuf.c'
@@ -90,6 +91,7 @@ jobs:
       vecrange: ${{ steps.f.outputs.vecrange }}
       order: ${{ steps.f.outputs.order }}
       aorai: ${{ steps.f.outputs.aorai }}
+      smoke: ${{ steps.f.outputs.smoke }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -98,7 +100,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
-          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/**", "semantics/**", "data/**", "vmacros/vdrivers/**"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"], "diagpush": ["tools/probes/verify-073/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/diag.c", "tools/eva/programs/eva_program.h"], "vecrange": ["tools/probes/verify-079/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py"], "order": ["tools/probes/verify-084/**", "vmacros/vdrivers/compare_order_verify.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/compare.h", "core/primitives/types.h", "tools/agreement/agreement.py", ".github/workflows/proofs-machdeps.yml", "tools/machdeps/machdep_cortex_m4.yaml", "tools/machdeps/machdep_rv64_lp64.yaml"], "aorai": ["tools/probes/verify-085/**", "tools/aorai/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/hashmap.c", "tools/eva/programs/stringbuf.c", "tools/eva/programs/bitset.c", "tools/eva/programs/eva_program.h", "core/**", "semantics/**", "data/hashmap/**", "data/stringbuf.h", "data/bitset.h", "vmacros/vdrivers/hashmap_verify.h", "vmacros/vdrivers/bitset_verify.h"]}'
+          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/**", "semantics/**", "data/**", "vmacros/vdrivers/**"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "evaerror": ["tools/probes/verify-066/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/arena.h", "tools/eva/eva.py", "tools/eva/programs/arena.c", "tools/eva/programs/eva_program.h", "tools/agreement/agreement.py"], "diagpush": ["tools/probes/verify-073/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/diag.c", "tools/eva/programs/eva_program.h"], "vecrange": ["tools/probes/verify-079/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py"], "order": ["tools/probes/verify-084/**", "vmacros/vdrivers/compare_order_verify.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/compare.h", "core/primitives/types.h", "tools/agreement/agreement.py", ".github/workflows/proofs-machdeps.yml", "tools/machdeps/machdep_cortex_m4.yaml", "tools/machdeps/machdep_rv64_lp64.yaml"], "aorai": ["tools/probes/verify-085/**", "tools/aorai/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "tools/eva/eva.py", "tools/eva/programs/hashmap.c", "tools/eva/programs/stringbuf.c", "tools/eva/programs/bitset.c", "tools/eva/programs/eva_program.h", "core/**", "semantics/**", "data/hashmap/**", "data/stringbuf.h", "data/bitset.h", "vmacros/vdrivers/hashmap_verify.h", "vmacros/vdrivers/bitset_verify.h"], "smoke": ["tools/probes/verify-087/**", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "tools/agreement/agreement.py", "core/**", "semantics/**", "data/**", "vmacros/vdrivers/**"]}'
         run: |
           python3 - <<'PY'
           import json, os, subprocess, fnmatch
@@ -1185,5 +1187,68 @@ jobs:
         with:
           name: aorai-probe-${{ matrix.part }}
           path: aorai_wp_out
+          if-no-files-found: warn
+          retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # Smoke-test probe (VERIFY-087)
+  #
+  # VERIFY-087: an experiment, not a gate. It runs when the probe, this
+  # file, the toolchain pins, what it reads of tools/agreement/agreement.py,
+  # or the library's files the units include change, and on demand.
+  #
+  # QUESTION: a proof is of nothing where WP's hypotheses contradict each
+  # other: from there on WP proves every goal (VERIFY-085: a precondition
+  # false in WP's typed model, taken as a hypothesis after its call). WP's
+  # smoke tests try to prove \false at each function's entry, after each
+  # call, at each loop and in code it does not find reachable. Does a smoke
+  # test fail anywhere in the 27 proof units?
+  #
+  # PROBE: tools/probes/verify-087/smoke_probe.py runs one unit a job of
+  # the matrix, twice: WP's smoke tests alone (-wp-prop=smoke), then every
+  # goal of the unit with them, the unit's own goals at 1 s a prover, their
+  # results not read. WP runs with the unit's options, the smoke tests at
+  # 2 s. The file steps names the units that run ("all": every one); a unit
+  # it does not name skips Frama-C's setup and posts that it did not run.
+  # Report-only: a unit fails only if a run is stopped at its limit,
+  # Frama-C exits with an error, or the full run gives no summary. Each
+  # unit's files are its artifact, smoke-probe-UNIT. Its predictions and
+  # their scores are VERIFY-087's, in docs/deviations.md.
+  # -------------------------------------------------------------------------
+  smoke-probe:
+    needs: changes
+    if: needs.changes.outputs.smoke == 'true'
+    # Pinned, not ubuntu-latest: see the runner note in
+    # ci.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    # Each of a unit's two runs is stopped after 120 minutes; setup can take
+    # 47 minutes when its cache misses (VERIFY-060 run 1).
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        # tools/agreement/agreement.py's units, in its ORDER, longest first
+        # (smoke_probe.py check).
+        unit: [frama-c-vec, frama-c-bitset, frama-c-stack, frama-c-vec-fmt, frama-c-hashmap, frama-c-vec-range, frama-c-region, frama-c-stringbuf, frama-c-pool, frama-c-priority-queue, frama-c-arena, frama-c-memory, frama-c-array, frama-c-borrow, frama-c-diag, frama-c-range, frama-c-bits, frama-c-deque, frama-c-slice, frama-c-ptr, frama-c-option, frama-c-result, frama-c-checked, frama-c-compare-order, frama-c-compare, frama-c-lifetime, frama-c-error]
+    steps:
+      - uses: actions/checkout@v6
+      - name: "Whether the file steps names the unit"
+        id: named
+        run: python3 tools/probes/verify-087/smoke_probe.py named "${{ matrix.unit }}" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/framac-setup
+        if: ${{ steps.named.outputs.run == 'true' }}
+      - name: "WP's smoke tests on ${{ matrix.unit }} (tools/probes/verify-087/smoke_probe.py)"
+        run: |
+          if [ "${{ steps.named.outputs.run }}" = true ]; then
+            eval $(opam env --switch=frama-c)
+            frama-c -version
+          fi
+          python3 tools/probes/verify-087/smoke_probe.py "${{ matrix.unit }}"
+      - name: Upload the unit's output (smoke-test probe)
+        if: ${{ always() && steps.named.outputs.run == 'true' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: smoke-probe-${{ matrix.unit }}
+          path: smoke_probe_out
           if-no-files-found: warn
           retention-days: 90
