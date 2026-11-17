@@ -45,9 +45,10 @@ rule, in tools/metacsl/pins.txt, with why.
 Each part posts a notice for each rule, its checks by unit and how many
 are proved, and one for the part, with the differences from the pins; the
 log lists each check not proved, and WP's lines on its goals not proved.
-Report-only in runs 1 to 1c (ENFORCE): a part fails only when a run gives
-no table, or is stopped at its limit; enforced, a difference from the pins
-fails it too.
+Enforced since run 2 (ENFORCE; report-only in runs 1 to 1c): a part fails
+when a run gives no table, or is stopped at its limit, and when it differs
+from the pins: a function not proved that they do not name, or one they
+name proved.
 
     python3 tools/metacsl/metacsl.py check        the units, the rules, the pins
     python3 tools/metacsl/metacsl.py run PART     core, semantics or data
@@ -75,7 +76,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 START = os.getcwd()
 OUT = os.path.join(START, 'metacsl_out')
 PINS = os.path.join(HERE, 'pins.txt')
-ENFORCE = False   # VERIFY-086 runs 1 to 1c: report-only
+ENFORCE = True    # VERIFY-086 run 2; report-only in runs 1 to 1c
 LIMIT = 60 * 60   # seconds, a run
 BUDGET = 240 * 60  # seconds, a part: past it no run starts, so that the
                    # notices are written before the job's limit

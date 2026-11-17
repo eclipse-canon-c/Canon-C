@@ -68,16 +68,21 @@ option's check, diag's own writes are checked, and not those its stdio
 calls make, which by the axioms are the buffer they are given.
 
 **The pins.** `pins.txt` names, unit by unit and rule by rule, the
-functions whose checks WP does not prove, and why: each calls through a
-pointer its caller passed (`region_end` a cleanup hook, which may be
-`free`; option's and result's combinators and `vec_int_to_stringbuf_cb`
-the function they are given, which may call `contract_set_handler`). The
-library's own code calls neither. Each part posts a notice for each rule,
-its checks by unit and how many are proved, and one for the part with the
-differences from the pins. Report-only in runs 1 to 1c (`ENFORCE`): a
-part fails only when a run gives no table or is stopped (60 minutes a
-run; no run starts past 240 minutes of a part); enforced, a difference
-fails it too.
+functions whose checks WP does not prove, and why. All but one call
+through a pointer their caller passed (`region_end` a cleanup hook, which
+may be `free`; option's and result's combinators and
+`vec_int_to_stringbuf_cb` the function they are given, which may call
+`contract_set_handler`); the library's own code calls neither. The one is
+`vec_int_fill` in the vec unit, which is preprocessed without `-CC`: fill's
+loop, in vec's macro, loses its annotations there, its `loop assigns`
+among them, and WP cannot bound what the loop writes. The stack unit,
+preprocessed with `-CC`, proves the check. Each part posts a notice for
+each rule, its checks by unit and how many are proved, and one for the
+part with the differences from the pins. Enforced since run 2 (`ENFORCE`;
+report-only in runs 1 to 1c): a part fails when a run gives no table or is
+stopped (60 minutes a run; no run starts past 240 minutes of a part), and
+when it differs from the pins, a function not proved that they do not
+name or one they name proved.
 
     python3 tools/metacsl/metacsl.py check
     python3 tools/metacsl/metacsl.py run PART [UNIT...]

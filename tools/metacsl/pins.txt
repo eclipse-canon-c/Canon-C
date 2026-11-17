@@ -4,8 +4,8 @@
 # with properties of the unit this run does not prove (its loop
 # invariants, its callees' contracts), which the unit's proof job does.
 #
-# Each function here calls through a pointer its caller passed, and WP
-# cannot know what the function pointed to does:
+# Each function here but one calls through a pointer its caller passed,
+# and WP cannot know what the function pointed to does:
 #   - region_end calls each cleanup hook registered on the region, which
 #     may be free (heap_raw) or call mem_free (heap_wrappers);
 #   - option's and result's combinators (and_then, combine_with, eq,
@@ -13,6 +13,13 @@
 #     and vec_int_to_stringbuf_cb its formatting callback: one may call
 #     contract_set_handler (handler_kept).
 # The library's own code calls neither; a caller's function may.
+#
+# The one is vec_int_fill in the vec unit (handler_kept; run 1c). That
+# unit is preprocessed without -CC, and fill's loop, in vec's macro, loses
+# its annotations, its loop assigns among them (6 · Proofs: data/'s "fill
+# macro-body-loop cluster"): WP then cannot bound what the loop writes.
+# The stack unit, preprocessed with -CC, keeps them, and proves the check
+# under them ("Partially proven").
 frama-c-array handler_kept option_int_and_then option_int_combine_with option_int_eq option_int_filter option_int_map option_int_or_else
 frama-c-bitset handler_kept option_usize_and_then option_usize_combine_with option_usize_eq option_usize_filter option_usize_map option_usize_or_else
 frama-c-deque handler_kept option_int_and_then option_int_combine_with option_int_eq option_int_filter option_int_map option_int_or_else result__Bool_Error_and_then result__Bool_Error_eq result__Bool_Error_map result__Bool_Error_map_err result__Bool_Error_or_else
@@ -24,6 +31,6 @@ frama-c-region heap_raw region_end
 frama-c-region heap_wrappers region_end
 frama-c-result handler_kept result_int_VErr_and_then result_int_VErr_eq result_int_VErr_map result_int_VErr_map_err result_int_VErr_or_else
 frama-c-stack handler_kept option_int_and_then option_int_combine_with option_int_eq option_int_filter option_int_map option_int_or_else result__Bool_Error_and_then result__Bool_Error_eq result__Bool_Error_map result__Bool_Error_map_err result__Bool_Error_or_else
-frama-c-vec handler_kept option_int_and_then option_int_combine_with option_int_eq option_int_filter option_int_map option_int_or_else result__Bool_Error_and_then result__Bool_Error_eq result__Bool_Error_map result__Bool_Error_map_err result__Bool_Error_or_else
+frama-c-vec handler_kept option_int_and_then option_int_combine_with option_int_eq option_int_filter option_int_map option_int_or_else result__Bool_Error_and_then result__Bool_Error_eq result__Bool_Error_map result__Bool_Error_map_err result__Bool_Error_or_else vec_int_fill
 frama-c-vec-fmt handler_kept result__Bool_Error_and_then result__Bool_Error_eq result__Bool_Error_map result__Bool_Error_map_err result__Bool_Error_or_else vec_int_to_stringbuf_cb
 frama-c-vec-range handler_kept option_isize_and_then option_isize_combine_with option_isize_eq option_isize_filter option_isize_map option_isize_or_else result__Bool_Error_and_then result__Bool_Error_eq result__Bool_Error_map result__Bool_Error_map_err result__Bool_Error_or_else

@@ -24,9 +24,9 @@ name: "15 · MetAcsl: the library's rules across its functions"
 # as in run 1.
 #
 # The functions whose checks WP does not prove are pinned,
-# tools/metacsl/pins.txt. Report-only in runs 1 to 1c (ENFORCE in
-# tools/metacsl/metacsl.py): a part fails only when a run gives no table,
-# or is stopped.
+# tools/metacsl/pins.txt. Enforced since run 2 (ENFORCE in
+# tools/metacsl/metacsl.py; report-only in runs 1 to 1c): a part fails when
+# a run gives no table, or is stopped, and when it differs from the pins.
 # ---------------------------------------------------------------------------
 
 on:
