@@ -74,7 +74,7 @@ pointer its caller passed (`region_end` a cleanup hook, which may be
 the function they are given, which may call `contract_set_handler`). The
 library's own code calls neither. Each part posts a notice for each rule,
 its checks by unit and how many are proved, and one for the part with the
-differences from the pins. Report-only in runs 1 and 1b (`ENFORCE`): a
+differences from the pins. Report-only in runs 1 to 1c (`ENFORCE`): a
 part fails only when a run gives no table or is stopped (60 minutes a
 run; no run starts past 240 minutes of a part); enforced, a difference
 fails it too.
@@ -84,6 +84,6 @@ fails it too.
 
 `15 · MetAcsl` runs the three parts (`.github/workflows/metacsl.yml`),
 each installing frama-c-metacsl 0.7, MetAcsl's version for Frama-C 29, in
-the Frama-C setup's switch (with `--assume-depexts`, as the setup), and
-removing it at the end. Frama-C 25 has no
+the Frama-C setup's switch (with `--no-depexts`, since run 1c: see
+`metacsl.yml`), and removing it at the end. Frama-C 25 has no
 MetAcsl, and rejects a `meta` annotation.

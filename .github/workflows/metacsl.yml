@@ -14,12 +14,17 @@ name: "15 · MetAcsl: the library's rules across its functions"
 #
 # MetAcsl is not in the Frama-C setup's opam switch: each job installs it,
 # frama-c-metacsl 0.7, the version for Frama-C 29, and removes it at the
-# end, so that a cache the setup saves is the setup's. It installs with
-# --assume-depexts, as the setup does: without it (run 1) opam installed
-# the GUI's system packages and rebuilt Frama-C in each job.
+# end, so that a cache the setup saves is the setup's. A setup with a cache
+# hit does not install the GUI's system packages (VERIFY-060), and opam then
+# takes the packages built on them, Frama-C among their users, as changed:
+# on any install it rebuilds them. With the system's packages (run 1), opam
+# installed them with apt and rebuilt eight packages in each job; with
+# --assume-depexts (run 1b), the rebuild failed. Since run 1c, opam installs
+# MetAcsl with --no-depexts, which leaves the system out; if that fails,
+# as in run 1.
 #
 # The functions whose checks WP does not prove are pinned,
-# tools/metacsl/pins.txt. Report-only in runs 1 and 1b (ENFORCE in
+# tools/metacsl/pins.txt. Report-only in runs 1 to 1c (ENFORCE in
 # tools/metacsl/metacsl.py): a part fails only when a run gives no table,
 # or is stopped.
 # ---------------------------------------------------------------------------
@@ -70,7 +75,12 @@ jobs:
             echo "frama-c-metacsl.0.7 is not in the switch's index: updating it"
             opam update -y default
           fi
-          opam install -y --confirm-level=unsafe-yes --assume-depexts frama-c-metacsl.0.7
+          if opam install -y --confirm-level=unsafe-yes --no-depexts frama-c-metacsl.0.7; then
+            echo "MetAcsl installed with --no-depexts"
+          else
+            echo "with --no-depexts opam did not install MetAcsl: installing it as in run 1"
+            opam install -y --confirm-level=unsafe-yes frama-c-metacsl.0.7
+          fi
           frama-c -version
           frama-c -plugins | grep -i -A1 meta
       - name: "MetAcsl and WP on each unit of the part"
