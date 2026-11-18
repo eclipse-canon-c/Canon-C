@@ -39491,8 +39491,9 @@ sixteen of eighteen, run 3 seven of seven. What it shows:
 | **ID**         | VERIFY-088 |
 | **Date**       | 2026-11-18 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-18 — Run 1 scored: N1 to N7 MATCH. Every unit's smoke tests failed as pinned, 234 in 19 units, at a third measure of the 25 units' code and a second of array's; the 27 units' WP took 309.0 minutes, the longest 26.3. The notices give no slowest failure, and the log no time: the script read a smoke test's proof of `\false` as a goal's, a prover's success, where WP counts a success as "valid xor smoke". Run 2, pre-registered below, enforces the pins as they are and reads the times. |
 | **Baseline**   | dcc8d8b (VERIFY-087's close): `1`, `3` to `6` #76 and `2 · Platforms` #108 (de6d4df); `8 · Records` #125 (dcc8d8b). VERIFY-087's probe: `9 · Probes` #36 (e9f39de), its run 1, every unit; #37 (778a730), its run 2, `frama-c-array` and `frama-c-diag`. |
-| **Scope**      | Run 1: `tools/smoke/` (new: `smoke.py`, `pins/` with a file for each of the 27 units, `README.md`); `.github/workflows/smoke.yml` (new); `records.yml`, a step, its paths and the header; the paths-ignore of 1 to 6, `smoke.yml`; the workflow map, row 16 and its notes; `tools/which_workflows.py`, 16's units. |
+| **Scope**      | Run 1: `tools/smoke/` (new: `smoke.py`, `pins/` with a file for each of the 27 units, `README.md`); `.github/workflows/smoke.yml` (new); `records.yml`, a step, its paths and the header; the paths-ignore of 1 to 6, `smoke.yml`; the workflow map, row 16 and its notes; `tools/which_workflows.py`, 16's units. Run 2: `smoke.py`, `ENFORCE`, the reading of a failure's time and the slowest failure's record in the log; `smoke.yml`'s comment; `tools/smoke/README.md`; the workflow map's row 16. |
 | **Category**   | VERIFY-087's run 1, "What follows": the author decided on 2026-11-18 that smoke tests join the checks once K5's three functions are fixed, the branches no input reaches pinned. VERIFY-087's record and its probe's `steps` file name the proof jobs as the place; after VERIFY-087's close, the same day, the author chose a workflow of its own. |
 
 ### What is missing
@@ -39632,3 +39633,108 @@ are, unless a failure sits so near the 2 s that it could pass, which run 2
 decides first; a unit whose failures differ is read before anything is
 pinned. At the close, `docs/verification.md` says what the check does and
 does not claim.
+
+### Run 1 scored (2026-11-18)
+
+The push of c8133ae and ff4850b started eight workflows: `1`, `3` to `6`
+#77, `2` #109, `8` #126 and `16` #1. Each was green at its first attempt;
+16 took 27 minutes, its 27 units in parallel.
+
+| # | scored |
+|---|--------|
+| N1 | **MATCH.** 1 to 6, 8 and 16 ran, and no other; 16's first job posted "27 unit(s)", in `agreement.py`'s ORDER. |
+| N2 | **MATCH.** 1 to 6's 79 jobs gave #76's notices (2's #108), times aside, and 2's slowest header among them: `embedded`'s, `algo/any_all/any_all.h` in 0.24 s at #108, `util/str/str.h` in 0.13 s at #109. No other difference. |
+| N3 | **MATCH.** 8's two jobs are green; record-coverage took no name as pending from dcc8d8b, and the new step gave "smoke check: 27 units, 27 pin files, 234 smoke tests pinned to fail; 0 problem(s)". |
+| N4 | **MATCH.** 16's 28 jobs are green: in no unit was WP stopped or in error, and each run gave its summary and its JSON report. |
+| N5 | **MATCH.** Every unit "as pinned": 234 smoke tests failed in 19 units, by name and count the pins', and none in the other 8. |
+| N6 | **MATCH.** Each unit's smoke tests are the count predicted, 12289 in all, and each passed or failed: none without a result. |
+| N7 | **MATCH.** The longest unit, `frama-c-stack`, took 26.3 minutes of WP; the 27, 309.0 minutes. |
+
+Seven of seven.
+
+**What run 1 shows.**
+
+- **The pins held at a third measure.** The 216 failures of the 25 units
+  are those of VERIFY-087's run 1, at its smoke-only runs where those
+  reach them and at its full runs; `frama-c-array`'s 18, those of its run
+  2.
+- **No time was read.** In the log each failure's time is "?", and no
+  notice gives the slowest failure, which "What is decided" said it
+  would. The script took a proof of a smoke test's `\false` to be a
+  prover's entry with "success" 1, as in the records of goals that
+  `13 · Prover agreement` #16 printed. WP's manual says an entry's
+  "success" is the number of valid sub-goals the prover contributes to,
+  and Frama-C 29.0's documentation of `Wp.Stats`, whose statistics the
+  entries are, counts a success as "valid xor smoke": in a smoke test, a
+  proof of `\false` is valid, and so not a success. No failed smoke test
+  had an entry with a success and a time, and none was read. The stand-in
+  of "Measured here" gave the entries "success" 1: it tested the reading
+  against the assumption it was written from. Run 2 reads the entries
+  whose success is 0, and prints a record whole, so that the reading can
+  be checked against what WP writes.
+- **The cost.** The 27 jobs took 0.7 to 27.0 minutes, Frama-C's setup
+  from its cache; 16 took 27 minutes, and 6, the slowest of the eight,
+  84.
+
+**What follows.** As run 1's "What follows" says, run 2 sets `ENFORCE`
+with the pins as they are. Its condition, unless a failure sits so near
+the 2 s that it could pass, cannot be decided before the times are read,
+and run 2 is the run that reads them: it enforces and reads them (below).
+
+### Run 2: pre-registration (2026-11-18)
+
+**What is decided.** Run 2 enforces the pins as they are, without the
+times run 1 did not read. A failure passes only if no prover proves its
+`\false` in 2 s. The 25 units' 216 failed alike at three runs of their
+code, and array's 18 at two; and at VERIFY-087's run 1 WP's summaries
+counted its 247 failures 703 times, once for each prover that proved
+one: 2.85 a failure. The times come with run 2: a failure that sits near
+the 2 s is read at the close, which decides whether it stays pinned as it
+is, its unit's smoke tests are given more time, or the record says so.
+
+**The change.**
+
+- **`tools/smoke/smoke.py`.** `ENFORCE = True`. A failure's time is the
+  least of its provers' entries whose "success" is 0, with a time; the log
+  prints the record of the slowest failure whole, as read, or of the
+  first failure when none has a time. The docstring says why.
+- **`.github/workflows/smoke.yml`**: the header's gate, enforced since
+  run 2.
+- **`tools/smoke/README.md`**: the slowest failure's time, a smoke test's
+  "success", the runs.
+- **The workflow map**: row 16, "yes, since VERIFY-088's run 2".
+- The pins as they are.
+
+**Measured here**, with Frama-C 25.0-beta (no WP) and Python 3.13:
+
+- Against the stand-in with each failed smoke test's record given one
+  entry, "success" 0, as Frama-C 29.0's documentation has it: "the
+  slowest failure 0.75 s (Alt-Ergo:2.6.3) of 2", each failure's time in
+  the log, and the slowest failure's record printed whole. Enforced:
+  three differences, exit 1 and an error; as pinned, exit 0; a pin of 2
+  where 1 fails, "pinned 2, fails 1", exit 1; Frama-C's error, exit 1.
+- `smoke.py check` as at run 1; `record_coverage.py --strict
+  --complete`; actionlint; pyflakes.
+
+Not here: WP's own record of a failed smoke test; run 2 prints one.
+
+**The workflows.** `tools/which_workflows.py`: 2, 8 and 16 run; 1, 3 to
+7 and 9 to 15 do not. 2 because it does not ignore `tools/`; 16 takes all
+27 units, its script having changed.
+
+**Baselines.** 2 #109, 8 #126 and 16 #1 (ff4850b).
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| P1 | **2, 8 and 16 run**, and no other; 16's first job posts "27 unit(s)". | another set | H |
+| P2 | **2 is green**, each job with #109's notices, times aside, its slowest header among them. | a failure, or another notice | H: nothing it reads changes. |
+| P3 | **8 is green**: no name pending, and "smoke check: 27 units, 27 pin files, 234 smoke tests pinned to fail; 0 problem(s)". | a failure | H (run here) |
+| P4 | **16 is green, enforced**: every unit "as pinned", with run 1's counts, 12289 smoke tests and 234 failures in 19 units, none without a result. | a difference, a failure, or another count | M–H: run 1's code, options and pins. |
+| P5 | **Every failure has its time**: no "?" in a log, and the slowest failure in each of the 19 units' notices; the record printed has one prover's entry, its "success" 0, with a time. | a failure without a time, or another record | M: WP's documentation, and no record of a failed smoke test seen. |
+| P6 | **The slowest failure of all under 1 s**, half of the 2 s. | 1 s or more | M |
+| P7 | **The longest unit's WP under 35 minutes**, and the 27 under 6 hours together. | over | M–H: run 1's 26.3 and 309.0 minutes. |
+
+**What follows.** P1 to P7 scored. If P4 and P6 hold, the close:
+`docs/verification.md` says what the check does and does not claim, and
+the record closes. A difference, or a failure near the 2 s, is read
+before the close.
