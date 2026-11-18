@@ -39481,3 +39481,154 @@ sixteen of eighteen, run 3 seven of seven. What it shows:
   nothing as it should. Smoke tests are not yet a standing check: a new
   proof of nothing would pass every proof job today. VERIFY-088 makes
   them one, in the proof jobs, the branches no input reaches pinned.
+
+---
+
+## VERIFY-088: Pre-registration — WP's Smoke Tests Made a Check: `16 · Smoke tests` Runs Them on Each Unit a Push Can Affect, Against Pins of What Fails; Run 1, Report-Only
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-088 |
+| **Date**       | 2026-11-18 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | dcc8d8b (VERIFY-087's close): `1`, `3` to `6` #76 and `2 · Platforms` #108 (de6d4df); `8 · Records` #125 (dcc8d8b). VERIFY-087's probe: `9 · Probes` #36 (e9f39de), its run 1, every unit; #37 (778a730), its run 2, `frama-c-array` and `frama-c-diag`. |
+| **Scope**      | Run 1: `tools/smoke/` (new: `smoke.py`, `pins/` with a file for each of the 27 units, `README.md`); `.github/workflows/smoke.yml` (new); `records.yml`, a step, its paths and the header; the paths-ignore of 1 to 6, `smoke.yml`; the workflow map, row 16 and its notes; `tools/which_workflows.py`, 16's units. |
+| **Category**   | VERIFY-087's run 1, "What follows": the author decided on 2026-11-18 that smoke tests join the checks once K5's three functions are fixed, the branches no input reaches pinned. VERIFY-087's record and its probe's `steps` file name the proof jobs as the place; after VERIFY-087's close, the same day, the author chose a workflow of its own. |
+
+### What is missing
+
+VERIFY-087 found, with WP's smoke tests, twelve functions where WP proved
+goals of nothing past a call, and branches no execution reaches; it fixed
+three of the functions and documented nine (`docs/verification.md`, "Past
+`memcmp`'s call"). Nothing in CI looks for such points now: its probe is
+closed, and a proof job counts a goal proved past a false hypothesis as
+proved, as it counts any other. A new call whose precondition WP's model
+contradicts, or a contract that contradicts itself, would pass every proof
+job.
+
+### What is decided
+
+- **Where.** A workflow of its own, `16 · Smoke tests`, with a job for
+  each unit a push can affect, chosen as `13 · Prover agreement` chooses
+  its units: the author's choice ("Own workflow") over a step in each of
+  the 27 proof jobs. Those are untouched, and the cost is paid for the
+  units whose files change: VERIFY-087's full runs took 304.8 minutes of
+  WP on the 27 units.
+- **The check**, `tools/smoke/smoke.py UNIT`: WP on one unit of
+  `tools/agreement/agreement.py`'s `UNITS`, with the unit's options as its
+  proof job runs it (its model, `-wp-rte`, `-wp-split`, Alt-Ergo, Z3 and
+  CVC5, its extra options), every goal at 1 s a prover and the smoke tests
+  at 2 s: the command of VERIFY-087's full run, which alone reaches the
+  functions without a requires clause. The goals' results are not read.
+  The smoke tests are read from WP's JSON report, each once (VERIFY-087's
+  run 2); a failed one is one whose verdict is valid, a prover having
+  proved its `\false`.
+- **The pins**, `tools/smoke/pins/UNIT.txt`: each line a failed smoke
+  test's name as WP gives it, without its statement number, and how many
+  fail by that name. The statement numbers move with any change to a
+  unit's code (VERIFY-087's run 2: `size_bytes`'s point of code from s761
+  to s764); the name keeps the function and the kind, and a call's is the
+  function called, so that one more call of `memcmp` whose smoke test
+  fails is one more `typed_cast_memcmp_wp_smoke_dead_call`. A count other
+  than the pin's, a name the pins do not hold, or a smoke test with no
+  result is a difference. Run 1's pins are VERIFY-087's measure: its run
+  1's full runs for 25 units, whose code has not changed since (e9f39de),
+  and its run 2 for `frama-c-array` and `frama-c-diag`: 234 smoke tests in
+  19 units, under 139 names, and none in the other 8.
+- **What a notice says**: the smoke tests, how many passed and failed, the
+  failed by kind, "as pinned" or the differences, and the slowest failure:
+  the time the fastest prover took to prove its `\false`, of the 2 s it
+  had, which tells how near the limit a pinned failure sits. The log lists
+  the failed tests with their function and place, the places WP warns of,
+  the report by kind and status, and the pins as measured, for `smoke.py
+  pin UNIT` to write.
+- **The units**: `smoke.py affected`, `agreement.py`'s choice with this
+  check's files: the units that include a changed file, as the compiler
+  lists them; every unit for a change to `smoke.py`, `agreement.py`, the
+  workflow or the Frama-C setup, or to a header no unit includes; a unit
+  whose pin file changes.
+- **Report-only for run 1** (`ENFORCE = False`). A job fails only if WP is
+  stopped at 120 minutes, Frama-C exits with an error, or the run has no
+  summary or JSON report. Run 2 enforces, if run 1 gives the pins.
+- **Around it.** `8 · Records` runs `smoke.py check`: one pin file a unit,
+  each line well formed, every file a unit includes under `smoke.yml`'s
+  push paths. Workflows 1 to 6 ignore `smoke.yml`, which none of them
+  reads, as they ignore `probes.yml`; this push changes their lists, and
+  starts them once. The workflow map has row 16 and notes;
+  `tools/which_workflows.py` lists 16's units.
+
+**Not claimed.** A smoke test that passes is a test, not a proof that its
+point is reachable. A smoke test that starts to fail where another of the
+same name stops, in the same function's code or at a call of the same
+function anywhere in the unit, leaves the count as it was. The branches
+pinned are not argued here: VERIFY-087 read them.
+
+### Measured here
+
+With Frama-C 25.0-beta (no WP), gcc 13.3.0 and Python 3.13:
+
+- **WP does not run here.** The fields of WP's JSON report the script
+  reads ("goal", "verdict", "passed", "function", "file", "line",
+  "provers" with "prover", "time" and "success") are those of the two
+  records of `frama-c-diag`'s report that `13 · Prover agreement` #16
+  printed whole, goals both; a smoke test's verdict valid when it failed
+  and its "passed" true when it passed, as VERIFY-087's probe read them at
+  its two runs.
+- **The pins**, from VERIFY-087's logs. For the 25 units that include
+  neither `data/array.h` nor `semantics/diag.h`, the two headers changed
+  since e9f39de: the smoke tests its run 1's full runs failed, 216 of its
+  247, each once, the names its log lists, as many as its JSON reports'
+  table by kind and status, unit by unit. For `frama-c-array`, its run 2's
+  18; for `frama-c-diag`, its run 2's none. Without their statement
+  numbers: 139 names, 234 tests. Those runs' JSON reports hold 12289 smoke
+  tests.
+- **How stable they were**: at VERIFY-087's run 1, each smoke test that
+  failed in a unit's run of the smoke tests alone failed again in its full
+  run, in all 27 units.
+- **`smoke.py`** against VERIFY-087's stand-in for WP, given the report's
+  function, place and provers' times: "smoke tests 10, passed 7, failed 2
+  (call 1, dead code 1); no result 1; 3 difference(s) …; the slowest
+  failure 0.25 s (Alt-Ergo:2.6.3) of 2", the log's lists, exit 0
+  report-only; with `ENFORCE`, exit 1 and an error; Frama-C's error, exit
+  1. `pin` wrote the run's two names, and the run against them gave one
+  difference, the smoke test with no result.
+- **`affected`**: `data/array.h`, `frama-c-array`; `semantics/diag.h`,
+  `frama-c-diag`; diag's pin file, `frama-c-diag`; the README, no unit;
+  `smoke.py`, all 27; `--all`, 27.
+- **`check`**: "smoke check: 27 units, 27 pin files, 234 smoke tests
+  pinned to fail; 0 problem(s)"; and the other checks of `8 · Records`.
+- actionlint on the eight workflows; pyflakes; `record_coverage.py
+  --strict --complete`.
+
+Not here: WP; its smoke tests; the probe's artifacts, which hold the
+times of its failures (their download is refused from here), so that how
+near the 2 s a pinned failure sits is not known before run 1.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 6, 8 and 16 run; 7 and 9 to 15 do not.
+1 to 6 because their own files change; 16 takes all 27 units, its files
+being new.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| N1 | **1 to 6, 8 and 16 run**, and no other; 16's first job posts "27 unit(s)", in `agreement.py`'s ORDER. | another set | H |
+| N2 | **1 to 6 are green**, each job with #76's notices (2's #108), times aside, 2's slowest header among them. | a failure, or another notice | H: nothing they read changes but their own ignore lists. |
+| N3 | **8 is green**: record-coverage with no name pending from the push's base, and the new step's "smoke check: 27 units, 27 pin files, 234 smoke tests pinned to fail; 0 problem(s)". | a failure | H (run here) |
+| N4 | **16 is green**: in no unit is WP stopped or in error, and each run has its summary and JSON report. | a failure | M–H: VERIFY-087's probe ran each unit so, the longest in 25.7 minutes of its 120. |
+| N5 | **Every unit "as pinned"**: the smoke tests that fail are its pins, by name and count, 234 in 19 units and none in the other 8. | a difference in any unit | M–H: the code and options are those VERIFY-087 measured, and each failure of its runs of the smoke tests alone came again in its full runs; a `\false` proved near the 2 s could go either way. |
+| N6 | **The smoke tests are VERIFY-087's**: each unit's count its full run's, 12289 in all (vec 1021, bitset 911, stack 1089, vec-fmt 1000, hashmap 693, vec-range 891, region 661, stringbuf 890, pool 774, priority-queue 851, arena 621, memory 492, array 447, borrow 320, diag 119, range 299, bits 67, deque 304, slice 92, ptr 222, option 69, result 63, checked 142, compare-order 168, compare 56, lifetime 2, error 25), none without a result. | another count, or a smoke test with no result | M–H: the same code and options. |
+| N7 | **The longest unit's WP under 35 minutes**, and the 27 under 6 hours together (VERIFY-087's full runs: stack 25.7 minutes, 304.8 in all). | over | M: the runners' load. |
+
+The slowest failure in each unit is measured, not predicted: run 2 reads
+it.
+
+### What follows
+
+N1 to N7 scored. If N5 holds, run 2 sets `ENFORCE` with the pins as they
+are, unless a failure sits so near the 2 s that it could pass, which run 2
+decides first; a unit whose failures differ is read before anything is
+pinned. At the close, `docs/verification.md` says what the check does and
+does not claim.
