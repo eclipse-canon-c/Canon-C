@@ -39816,8 +39816,9 @@ six of seven. What it shows:
 | **ID**         | VERIFY-089 |
 | **Date**       | 2026-11-18 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-18 — Run 1 scored: Q1 to Q7 MATCH. On the runner every leg gave the outcomes measured here. The author decided the three measures of the library and its toolchains: a leg with the Arm GNU Toolchain first, on GCC 13.2's wrong code; `%zu` out of the library, in a record of its own; and `CANON_LIFETIME_NO_ATOMICS` documented and defined in the job. Run 2, pre-registered below, enforces Ubuntu's legs and measures the Arm GNU Toolchain 15.3.Rel2's, report-only. |
 | **Baseline**   | a0ce2f2 (VERIFY-088's close): `1`, `3` to `6` #77 (ff4850b); `2 · Platforms` #110 (3055981); `8 · Records` #128 (a0ce2f2). |
-| **Scope**      | Run 1: `tools/cortexm/` (new: `cortexm.py`, `toolchain.cmake`, `startup.c`, `cortexm.ld`, `pins.txt`, `README.md`); `platforms.yml`, the job `cortex-m` and the header; `records.yml`, a step, its paths and the header; the workflow map, row 2 and the note on a new test. |
+| **Scope**      | Run 1: `tools/cortexm/` (new: `cortexm.py`, `toolchain.cmake`, `startup.c`, `cortexm.ld`, `pins.txt`, `README.md`); `platforms.yml`, the job `cortex-m` and the header; `records.yml`, a step, its paths and the header; the workflow map, row 2 and the note on a new test. Run 2: `cortexm.py` (`ENFORCE`, the toolchain, report-only legs, the C library's line, `CANON_LIFETIME_NO_ATOMICS`), `pins.txt` and the tool's README; `platforms.yml`'s job, the Arm GNU Toolchain's legs; the README's bare-metal section; the workflow map's row 2. |
 | **Category**   | The author's list, item 7's first part (2026-11-12): the tests run on Cortex-M under QEMU, the M4 on mps2-an386 and the M0+ if it can be done, with newlib and picolibc through semihosting: soft float, short enums, strict alignment. A record of its own, report-only and then enforced; `docs/architectures.md`'s "Tested on" rows at its close. |
 
 ### What is missing
@@ -39992,3 +39993,112 @@ needs); and `CANON_LIFETIME_DEBUG`'s 64-bit atomic on targets without one
 enforces the pins as they then are. The close adds the Cortex-M rows to
 `docs/architectures.md`'s "Tested on", and the README's bare-metal
 section says the tests run there.
+
+### Run 1 scored (2026-11-18)
+
+The push of 2384e93 and d8f65ef started seven workflows: `1`, `3` to `6`
+#78, `2` #111 and `8` #129. Each was green at its first attempt; 2 took 7
+minutes, and 6, the slowest, 77.
+
+| # | scored |
+|---|--------|
+| Q1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| Q2 | **MATCH.** 1 and 3 to 6's 63 jobs gave #77's notices, and 2's sixteen jobs before `cortex-m` #110's, times aside; 2's slowest header was #110's too. |
+| Q3 | **MATCH.** The four `cortex-m` jobs are green, their sixteen notices as measured here, each "as pinned". |
+| Q4 | **MATCH.** The attribute lines of the sixteen builds are those measured here. |
+| Q5 | **MATCH.** `arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009`, `libnewlib-arm-none-eabi 4.4.0.20231231-2`, `picolibc-arm-none-eabi 1.8.6-2`, QEMU 8.2.2 (`1:8.2.2+ds-0ubuntu1.18`): the versions here. |
+| Q6 | **MATCH.** 8 is green; its new step: "cortexm check: 9 pins, 61 tests in CMakeLists.txt; 0 problem(s)". |
+| Q7 | **MATCH.** The four jobs took 0.8 to 1.2 minutes, the packages' install 0.3 to 0.5 of them. |
+
+Seven of seven.
+
+**What run 1 shows.**
+
+- **The measures hold on the runner**: the same outcomes as here, in all
+  sixteen builds, from the same packages; a leg takes a minute.
+- **Three of them are the library's or its toolchains'**, as "What
+  follows" said, and the author decided each on 2026-11-18:
+  - **GCC 13.2's wrong code** past `option_<T>_combine_with` at `-O2`
+    and `-Os`: a leg with a newer GCC first, the Arm GNU Toolchain,
+    fetched with its checksum pinned, to learn whether it is fixed
+    before it is documented.
+  - **`%zu` with a printf without C99's formats**: the library stops
+    using it, in its four format strings, in a record of its own with the
+    proofs and pins it moves.
+  - **`CANON_LIFETIME_DEBUG`'s 64-bit atomic** where there is no
+    lock-free one: the README's bare-metal section says to define
+    `CANON_LIFETIME_NO_ATOMICS` or to provide `__atomic_fetch_add_8`,
+    and the job defines `CANON_LIFETIME_NO_ATOMICS`, so that
+    `lifetime_test` runs there.
+
+### Run 2: pre-registration (2026-11-18)
+
+**What is decided.**
+
+- **Ubuntu's legs enforced** (`ENFORCE = True`), with run 1's pins but
+  `lifetime_test`'s: with `CANON_LIFETIME_NO_ATOMICS` defined for every
+  test, it builds and passes in all sixteen builds (measured here).
+- **The Arm GNU Toolchain 15.3.Rel2**, the newest release that
+  `arm-none-eabi-gcc-action`'s list of Arm's releases holds
+  (`src/gcc-versions.ts`, 2026-10-22): its GCC and its newlib (it has no
+  picolibc), on the Cortex-M0+ and the Cortex-M4, two legs. The job
+  fetches its x86_64 package from Arm (`gitlab.arm.com`) and checks its
+  SHA-256 against the one pinned in the workflow, which two records give
+  alike: that list, and Arm's own Yocto layer `meta-arm`
+  (`gcc-arm-none-eabi_15.3.rel2.bb`); the package is cached by it.
+  Report-only in run 2, their first measure: it is not run here, where
+  no downloaded toolchain is run.
+- **The script**: a toolchain column in the pins (`ubuntu`,
+  `arm-15.3.rel2`, `all`), whose eight lines are run 1's with
+  `lifetime_test`'s gone, all of them Ubuntu's; `--toolchain`, which
+  names a leg's notices but Ubuntu's; `--report-only`; and a log line
+  naming the C library and whether its printf has C99's formats
+  (`_WANT_IO_C99_FORMATS`).
+- **The README's bare-metal section**: the tests run on Cortex-M, and
+  the note on `CANON_LIFETIME_DEBUG`. GCC 13.2's defect is documented at
+  the close, from the Arm legs' measure; `%zu` is a record of its own.
+
+**Measured here**, as at run 1:
+
+- **The sixteen builds**, as pinned, `lifetime_test` passing in each:
+  newlib's Debug and Release "61 tests, 56 passed, 4 failed (diag_test
+  19, hashmap_test 1, impl_defined_test 5, file_test 1), 1 not built
+  (time_test)", RelWithDebInfo and MinSizeRel 55 passed and `option_test`
+  failing besides; picolibc's Debug and Release "58 passed, 0 failed, 3
+  not built (impl_defined_test, file_test, time_test)", RelWithDebInfo
+  and MinSizeRel 57 passed and `option_test` failing. The C library
+  lines: "newlib 4.4.0; C99 printf formats (_WANT_IO_C99_FORMATS): no",
+  "picolibc 1.8.6; C99 printf formats (_WANT_IO_C99_FORMATS): yes".
+- **The paths**, with Ubuntu's compiler under the Arm toolchain's name:
+  report-only, its five differences in the notice and exit 0; enforced,
+  "5 difference(s) from tools/cortexm/pins.txt" and exit 1; picolibc
+  with the Arm toolchain, the usage and exit 2. `check`: "cortexm check:
+  8 pins, 61 tests in CMakeLists.txt; 0 problem(s)". pyflakes;
+  actionlint; `record_coverage.py --strict --complete`.
+
+Not here: the Arm GNU Toolchain.
+
+**The workflows.** `tools/which_workflows.py`: 1 to 6 and 8 run; 7 and 9
+to 16 do not. 1 and 3 to 6 because `platforms.yml` changes, which they do
+not ignore (the list's item 14); 2 for it and for `tools/`.
+
+**Baselines.** 1, 3 to 6 #78; 2 #111; 8 #129 (d8f65ef).
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| R1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| R2 | **1 and 3 to 6 are green**, each job with #78's notices, and 2's sixteen jobs before `cortex-m` with #111's, times aside, its slowest header among them. | a failure, or another notice | H: nothing they read changes. |
+| R3 | **Ubuntu's four legs are green, enforced**, their sixteen notices as measured here, each "as pinned". | another count or name, a difference, or a failure | H: run 1's, `lifetime_test` aside, measured here. |
+| R4 | **The Arm legs fetch it**: the package's SHA-256 is the pinned one, and both legs are green, report-only, with four notices each, the log naming GCC 15.3 from the Arm GNU Toolchain 15.3.Rel2. | a checksum or fetch that fails, or a leg stopped | M: not run here. |
+| R5 | **GCC 15.3 compiles `option_test` right**: it passes at the four build types, on both CPUs. | a failure of it | M: GCC 13.3 on x86 and Clang compile the short program right; GCC 15.3 for Arm is what the legs measure. |
+| R6 | **Arm's newlib has C99's formats**: "C99 printf formats (_WANT_IO_C99_FORMATS): yes", and `diag_test` and `hashmap_test` pass. | "no", or either failing | M |
+| R7 | **Otherwise as Ubuntu's newlib**: `time_test` not built, `file_test` failing 1 and `impl_defined_test` 5 (semihosting's `rename`), and every other test passing. | another outcome | L–M: GCC 15 warns of more than GCC 13, and the build has `-Werror`. |
+| R8 | **8 is green**, its step "cortexm check: 8 pins, 61 tests in CMakeLists.txt; 0 problem(s)". | a failure | H (run here) |
+| R9 | **Ubuntu's legs under 15 minutes each, the Arm legs under 20.** | over | M: a mirror's or Arm's speed. |
+
+**What follows.** R1 to R9 scored. From the Arm legs, the close says in
+the README's bare-metal section and in `docs/architectures.md` which GCC
+compiles `option_test` wrong, and pins and enforces those legs as
+measured. The record on `%zu` changes the four format strings and the
+pins of `diag_test` and `hashmap_test`. The close adds the Cortex-M rows
+to `docs/architectures.md`'s "Tested on".
