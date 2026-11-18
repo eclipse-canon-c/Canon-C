@@ -38911,7 +38911,7 @@ two of seven, run 1c six of seven, run 2 six of six. What it shows:
 | **ID**         | VERIFY-087 |
 | **Date**       | 2026-11-17 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-18 — Run 1 scored: K1 to K6, K8 and K9 MATCH; K7 MISS. WP's smoke tests failed 247 times in 20 of the 27 units, never at a requires, an assumes or a loop. In twelve functions the code past a call is unreachable to WP and reachable in C, so that what WP proves there it proves of nothing: K5's three, past a `memset` on a local object, and the nine that call `memcmp`, past its precondition on dangling bytes. The other failures are branches no input reaches either. The smoke-only run misses every function without a requires clause, two of the twelve among them. The author decided on 2026-11-18: K5's three functions change; the nine stay as they are, and `docs/verification.md` says what WP proves past `memcmp`'s call; and smoke tests join the proof jobs once the three are fixed, a record of their own (VERIFY-088). Run 2, pre-registered below, makes the change: `array_int_8_zero`, `array_int_8_from_ptr` and `diag_init` store values of their types where they called `memset`, and `from_ptr` copies element by element where it called `memcpy`; the two units' proof jobs are report-only while WP's counts are measured. Run 2 scored: L1 to L8, L10, L11 and L13 to L18 MATCH; L9 and L12 MISS, two counts of goals estimated from the new code alone, where the calls it replaced had more. No smoke test fails in the three functions; `frama-c-diag` proves every goal, 3071, and `frama-c-array`'s unproved goals are its 22 pinned names. Run 3, pre-registered below, pins the two units' counts and enforces their jobs, restates VERIFY-017's block and VERIFY-052's filing, documents the nine in `docs/verification.md`, and closes the probe. The Status above is the record as committed. |
+| **Status update** | 2026-11-18 — Run 1 scored: K1 to K6, K8 and K9 MATCH; K7 MISS. WP's smoke tests failed 247 times in 20 of the 27 units, never at a requires, an assumes or a loop. In twelve functions the code past a call is unreachable to WP and reachable in C, so that what WP proves there it proves of nothing: K5's three, past a `memset` on a local object, and the nine that call `memcmp`, past its precondition on dangling bytes. The other failures are branches no input reaches either. The smoke-only run misses every function without a requires clause, two of the twelve among them. The author decided on 2026-11-18: K5's three functions change; the nine stay as they are, and `docs/verification.md` says what WP proves past `memcmp`'s call; and smoke tests join the proof jobs once the three are fixed, a record of their own (VERIFY-088). Run 2, pre-registered below, makes the change: `array_int_8_zero`, `array_int_8_from_ptr` and `diag_init` store values of their types where they called `memset`, and `from_ptr` copies element by element where it called `memcpy`; the two units' proof jobs are report-only while WP's counts are measured. Run 2 scored: L1 to L8, L10, L11 and L13 to L18 MATCH; L9 and L12 MISS, two counts of goals estimated from the new code alone, where the calls it replaced had more. No smoke test fails in the three functions; `frama-c-diag` proves every goal, 3071, and `frama-c-array`'s unproved goals are its 22 pinned names. Run 3, pre-registered below, pins the two units' counts and enforces their jobs, restates VERIFY-017's block and VERIFY-052's filing, documents the nine in `docs/verification.md`, and closes the probe. Run 3 scored: M1 to M7 MATCH. Enforced on run 2's counts, `frama-c-array` is green at 2856 / 2878 with its 22 names, and `frama-c-diag` at 3071 / 3071. CLOSED: WP's smoke tests found, in the 27 proof units, where WP proved goals of nothing past a call; the three past a `memset` on a local object are fixed, the nine past `memcmp`'s call are documented in `docs/verification.md`, and the rest are branches no execution reaches ("Run 3 scored", below). The Status above is the record as committed. |
 | **Baseline**   | 9742da9 (VERIFY-086's close): `2 · Platforms` #105 (500e16d); `8 · Records` #121 (9742da9); `9 · Probes` #31 (434229c), the last run of every probe, since which nothing the other probes read has changed; the Aorai probe's `steps` names no part since its close. |
 | **Scope**      | Run 1: `tools/probes/verify-087/` (new: `smoke_probe.py`, `steps`, `README.md`); `.github/workflows/probes.yml`, the job `smoke-probe`, its filter, its output, its path and the header; the workflow map's row 9. Run 2: `data/array.h`'s `zero` and `from_ptr` and `semantics/diag.h`'s `diag_init`, with their notes; `proofs-data.yml`'s `frama-c-array` and `proofs-semantics.yml`'s `frama-c-diag`, report-only, their pinned names and comments; the pins that read the two headers, `tools/size/pins.txt` with `docs/code-size.md`, and Eva's ten pin files; the comment of `analysis.yml`'s `array.h` coverage step; the probe's counts, its `steps` and its README. Run 3: the two jobs, enforced on run 2's counts; VERIFY-017's block and VERIFY-052's filing, restated; `docs/verification.md` (the card, a section on `memcmp`'s call, diag.h's and array.h's sections, their rows), `docs/traceability.md` (MCDC-020, the proof table) and `docs/vmacros.md`'s row; the probe's `steps` and README, and the workflow map's row 9. |
 | **Category**   | The item the author added after item 6 at VERIFY-085's close, on 2026-11-16: a probe of WP's smoke tests over the 27 proof units, report-only, with a short timeout. |
@@ -39418,3 +39418,66 @@ the smoke probe alone; 13 takes no unit, the pinned names being run 2's.
 **What follows.** M1 to M7 scored. If M3 and M4 hold, VERIFY-087 closes
 with the score: its push changes this record alone. Then VERIFY-088: WP's
 smoke tests in the proof jobs, the branches no input reaches pinned.
+
+### Run 3 scored (2026-11-18)
+
+The push of e3f5c93 and de6d4df started eight workflows: `1` to `6` #76
+(2 #108), `8` #124 and `9` #38. Each was green at its first attempt; 6
+took 88 minutes.
+
+| # | scored |
+|---|--------|
+| M1 | **MATCH.** 1 to 6, 8 and 9 ran, and no other; 9 started the smoke probe alone, the other probes' fourteen jobs skipped. |
+| M2 | **MATCH.** 1 to 4's 63 jobs gave run 2's notices, times aside, 2's slowest header among them (`algo/any_all/any_all.h`, where it was `util/file.h`). |
+| M3 | **MATCH.** `frama-c-array`, enforced: "proved 2856 / 2878 (pin 2856 / 2878); unproved 22: inherited 16, own 6; 0 difference(s)"; its log "PROVED SAME: 2856 / 2878" and "NAMES SAME: the 22 pinned names, exactly." |
+| M4 | **MATCH.** `frama-c-diag`, enforced: "wp_diag_output.txt: proved 3071 / 3071; unproved 0; failed/invalid/stepout 0"; its log "Own residuals observed: 0/0 (expected 0)" and "PASS: diag.h verified — 3071 / 3071 proved, no residual". |
+| M5 | **MATCH.** 5's four other jobs and 6's ten gave run 2's notices. |
+| M6 | **MATCH.** 8 is green: "pending from 778a730…: 0 names whose pins changed", and no problem. |
+| M7 | **MATCH.** The smoke probe's 27 parts are green, each "UNIT: not run; tools/probes/verify-087/steps names no unit"; no other probe started. |
+
+Seven of seven.
+
+**Closed.** WP's smoke tests ran on the 27 proof units with each unit's
+proof options (`tools/probes/verify-087/`, closed): they try to prove
+`\false` where WP's hypotheses should hold of some execution, and 247
+failed, in 20 units. Twelve functions had goals past a call that WP
+proved of nothing. Three, `array_<T>_<N>_zero`, `array_<T>_<N>_from_ptr`
+and `diag_init`, called `memset` on a local object, whose bytes WP's
+typed model does not count; they store values of their types now, and
+the two units' jobs are enforced on what that gives: `frama-c-array`
+2856 / 2878 with its 22 pinned names, `frama-c-diag` 3071 / 3071, diag.h's
+last residual gone. The nine that call `memcmp` keep it, by the author's
+decision, and `docs/verification.md` says, in "Past `memcmp`'s call",
+what WP proves of them and what it does not; with the close it says,
+as run 1 did, that the probe did not isolate `memcmp`'s cause from the
+rest of its contract. The other failures are branches no execution
+reaches. The close's push starts 8 alone (`tools/which_workflows.py`).
+
+The record scored 31 of its 34 predictions: run 1 eight of nine, run 2
+sixteen of eighteen, run 3 seven of seven. What it shows:
+
+- **A proof of nothing looks like a proof.** WP's summary counts a goal
+  proved past a false hypothesis as proved, like any other. Past the
+  twelve calls WP proved what followed, `from_ptr`'s `memcpy`
+  precondition among it, and nothing but a smoke test showed it. Before
+  run 2, `diag_init`'s `init_empty` and the elements of `zero` and
+  `from_ptr` were among the library's proved goals.
+- **The library's code was right; its proof was empty there.** Each
+  flaw is a C library contract against WP's model: a `memset` asks for
+  bytes the typed model does not hold, and `memcmp` that no byte dangle,
+  `non_escaping(s, n)`, which WP compiles as `n <= 0`. The calls did what
+  the C standard says; WP's hypotheses after them were false.
+- **Storing values removes both the flaw and goals.** The three
+  functions have 12 goals fewer and 3 unproved fewer, and their code is
+  smaller at `-Os`. A call is more goals than it looks: run 2's two
+  misses (L9, L12) counted the loop's goals and not the calls'.
+- **A smoke test fails once, whatever WP's summary says.** WP prints a
+  failed smoke test for each prover that proves its `\false`, and its
+  summary counts them so; the probe counts the tests of WP's JSON report
+  (run 2). The smoke-only run (`-wp-prop=smoke`) misses every function
+  without a requires clause: two of the twelve among them.
+- **What stays is known.** The nine functions past `memcmp`'s call, as
+  documented; the branches no execution reaches, where WP proves of
+  nothing as it should. Smoke tests are not yet a standing check: a new
+  proof of nothing would pass every proof job today. VERIFY-088 makes
+  them one, in the proof jobs, the branches no input reaches pinned.

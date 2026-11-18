@@ -952,7 +952,9 @@ before the call when its length is 0, and an array's is its size. So in
 WP's model the precondition is false at the call: WP leaves it unproved,
 in every unit that includes the function, where it is filed by name
 (VERIFY-008 Category 3, as VERIFY-039 G13 restated it), and after the
-call it contradicts the length. Each of the nine requires the same of
+call it contradicts the length. (VERIFY-087 did not isolate this cause
+from the rest of `memcmp`'s contract, whose other preconditions WP
+proves.) Each of the nine requires the same of
 its caller on the path that compares, in its own `\dangling`
 precondition, and that one contradicts nothing.
 
