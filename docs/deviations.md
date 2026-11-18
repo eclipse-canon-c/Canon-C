@@ -39491,7 +39491,7 @@ sixteen of eighteen, run 3 seven of seven. What it shows:
 | **ID**         | VERIFY-088 |
 | **Date**       | 2026-11-18 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-18 — Run 1 scored: N1 to N7 MATCH. Every unit's smoke tests failed as pinned, 234 in 19 units, at a third measure of the 25 units' code and a second of array's; the 27 units' WP took 309.0 minutes, the longest 26.3. The notices give no slowest failure, and the log no time: the script read a smoke test's proof of `\false` as a goal's, a prover's success, where WP counts a success as "valid xor smoke". Run 2, pre-registered below, enforces the pins as they are and reads the times. |
+| **Status update** | 2026-11-18 — Run 1 scored: N1 to N7 MATCH. Every unit's smoke tests failed as pinned, 234 in 19 units, at a third measure of the 25 units' code and a second of array's; the 27 units' WP took 309.0 minutes, the longest 26.3. The notices give no slowest failure, and the log no time: the script read a smoke test's proof of `\false` as a goal's, a prover's success, where WP counts a success as "valid xor smoke". Run 2, pre-registered below, enforces the pins as they are and reads the times. Run 2 scored: P1 to P4, P6 and P7 MATCH; P5 MISS. Enforced, every unit's smoke tests failed as pinned again; each of the 234 failures is proved by Qed, WP's simplifier, in at most 0.02 s, and the records printed have Qed's entry and, in 15 of 19, a prover's, where P5 predicted one. CLOSED: `16 · Smoke tests` runs WP's smoke tests on each unit a push can affect, enforced on 234 pinned failures in 19 units; `docs/verification.md` says what it does and does not claim ("Run 2 scored", below). The Status above is the record as committed. |
 | **Baseline**   | dcc8d8b (VERIFY-087's close): `1`, `3` to `6` #76 and `2 · Platforms` #108 (de6d4df); `8 · Records` #125 (dcc8d8b). VERIFY-087's probe: `9 · Probes` #36 (e9f39de), its run 1, every unit; #37 (778a730), its run 2, `frama-c-array` and `frama-c-diag`. |
 | **Scope**      | Run 1: `tools/smoke/` (new: `smoke.py`, `pins/` with a file for each of the 27 units, `README.md`); `.github/workflows/smoke.yml` (new); `records.yml`, a step, its paths and the header; the paths-ignore of 1 to 6, `smoke.yml`; the workflow map, row 16 and its notes; `tools/which_workflows.py`, 16's units. Run 2: `smoke.py`, `ENFORCE`, the reading of a failure's time and the slowest failure's record in the log; `smoke.yml`'s comment; `tools/smoke/README.md`; the workflow map's row 16. |
 | **Category**   | VERIFY-087's run 1, "What follows": the author decided on 2026-11-18 that smoke tests join the checks once K5's three functions are fixed, the branches no input reaches pinned. VERIFY-087's record and its probe's `steps` file name the proof jobs as the place; after VERIFY-087's close, the same day, the author chose a workflow of its own. |
@@ -39738,3 +39738,71 @@ Not here: WP's own record of a failed smoke test; run 2 prints one.
 `docs/verification.md` says what the check does and does not claim, and
 the record closes. A difference, or a failure near the 2 s, is read
 before the close.
+
+### Run 2 scored (2026-11-18)
+
+The push of 568ff7b and 3055981 started three workflows: `2` #110, `8`
+#127 and `16` #2. Each was green at its first attempt; 16 took 27
+minutes.
+
+| # | scored |
+|---|--------|
+| P1 | **MATCH.** 2, 8 and 16 ran, and no other; 16's first job posted "27 unit(s)". |
+| P2 | **MATCH.** 2's 16 jobs gave #109's notices, times aside, its slowest header among them (`algo/any_all/any_all.h` in 0.31 s, where it was `util/str/str.h` in 0.13 s). |
+| P3 | **MATCH.** 8 is green: "pending from ff4850b…: 0 names whose pins changed", and "smoke check: 27 units, 27 pin files, 234 smoke tests pinned to fail; 0 problem(s)". |
+| P4 | **MATCH.** 16 is green, enforced: every unit "as pinned", 12289 smoke tests and 234 failures in 19 units, none without a result. |
+| P5 | **MISS.** Every failure has its time, the 234 in the logs and none "?", and each of the 19 units' notices its slowest failure; but of the 19 records printed, 4 have one entry, Qed's, and 15 two, Qed's and Alt-Ergo's (10) or CVC5's (5), each "success" 0 with a time. The reading holds; the one entry, which P5 took from `Wp.Stats`'s "only the best prover result is kept", does not. |
+| P6 | **MATCH.** The slowest failure of all took 0.02 s, in `frama-c-vec-fmt` and `frama-c-arena`. |
+| P7 | **MATCH.** The longest unit, `frama-c-stack`, took 26.4 minutes of WP; the 27, 306.6 minutes. |
+
+Six of seven.
+
+**What run 2 shows.**
+
+- **Qed proves every pinned failure.** Each of the 234 has an entry of
+  Qed, WP's simplifier, with "success" 0: Qed proves its `\false`, in at
+  most 0.02 s, and no prover is needed. None sits near the 2 s a prover
+  has for a smoke test. In 15 of the 19 records printed a prover proved
+  it too, in 0.08 to 0.25 s.
+- **What a smoke test's record holds.** "smoke" true, "passed" false,
+  "verdict" valid, and "failed" 1 where a goal's record has "proved"; its
+  provers' entries "success" 0, a proof of `\false` not being a success.
+  Run 2's reading is what WP writes.
+- **The pins held at each measure.** The 25 units' 216 failures are
+  those of VERIFY-087's run 1, at its full runs and at its smoke-only runs
+  where those reach them, and of VERIFY-088's two runs;
+  `frama-c-array`'s 18, those of VERIFY-087's run 2 and VERIFY-088's
+  two.
+
+**Closed.** `16 · Smoke tests` runs WP's smoke tests, with each unit's
+proof options, on each proof unit a push can affect (`tools/smoke/`),
+and fails the push where the smoke tests that fail are not the unit's
+pins, by name without the statement number and by count: 234 in 19
+units, the nine functions past `memcmp`'s call in each unit that
+includes them, and the branches no execution reaches. A new point where
+WP's hypotheses contradict each other fails it, as does a pinned failure
+that stops failing. Qed proves each pinned failure's `\false`, in at most
+0.02 s. `docs/verification.md` says what the check does and does not
+claim ("WP's smoke tests, on each push"). The close's push starts 8 alone
+(`tools/which_workflows.py`).
+
+The record scored 13 of its 14 predictions: run 1 seven of seven, run 2
+six of seven. What it shows:
+
+- **A check is as good as its reading of the tool.** Run 1 read a smoke
+  test's record as a goal's, and the times it was to report were not
+  read; the stand-in it was tested against had been written from the
+  same assumption. WP's documentation of its statistics said how a smoke
+  test counts ("valid xor smoke"); run 2 read that, and printed records
+  whole to check it, which showed what P5 had wrong.
+- **The pinned failures are not near the limit.** Qed proves each,
+  without a prover, and they held at each measure of the same code. A
+  failure that needs a prover will show its time in the notice, of the
+  2 s it has.
+- **By name and count.** A statement number moves with any change to a
+  unit's code; a name, its function and its kind or the function called,
+  does not. A new failure under a pinned name is seen by its count; one
+  that moves within a name is not.
+- **The cost.** All 27 units are about five hours of runners, 27 minutes
+  when they run at once; a push runs the units that include what it
+  changes.

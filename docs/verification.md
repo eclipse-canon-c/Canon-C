@@ -986,6 +986,30 @@ a `checked_mul` that cannot overflow, `option_<T>_expect`'s call of the
 handler its precondition rules out, and others VERIFY-087's run 1 lists.
 There WP proves of nothing, as it should.
 
+### WP's smoke tests, on each push
+
+Since VERIFY-088, `16 · Smoke tests` runs WP's smoke tests on each proof
+unit a push can affect (`tools/smoke/`), with the unit's options as its
+proof job runs it, and fails the push if the smoke tests that fail are
+not the unit's pins, by name without the statement number and by count.
+The pins are 234 failures in 19 units, of the two kinds above: the nine
+functions that call `memcmp`, at the call and in the code after it, in
+every unit that includes them; and branches no execution reaches. A new
+point where WP's hypotheses contradict each other, past a call whose
+precondition WP's model makes false or under a contract that contradicts
+itself, adds a failure and fails the push; so does a pinned failure that
+stops failing, until its pin goes. Qed, WP's simplifier, proves the
+`\false` of each of the 234 in at most 0.02 s (VERIFY-088 run 2): none
+waits on a prover's time limit.
+
+**Not claimed.** A smoke test that passes is a test, not a proof that its
+point is reachable: a contradiction no prover finds in the 2 s a smoke
+test has is not seen. A failure that appears where another of the same
+name disappears, in the same function's code or at a call of the same
+function anywhere in the unit, leaves the count as it was. The check runs
+on the pushes to master that can affect a unit, and on demand; not on
+pull requests.
+
 ### Tools that are themselves verified
 
 A few tools come with a machine-checked proof of their own soundness, or
