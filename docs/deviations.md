@@ -40226,3 +40226,74 @@ nine of nine, run 3 five of six. What it shows:
   images it runs on.
 - **The cost.** A leg takes about a minute; a push that changes
   `platforms.yml` runs 1 to 6 as well, which the list's item 14 is for.
+
+---
+
+## VERIFY-090: Pre-registration — MSVC 19.52's C4789 on `smallvec_test`'s Out-of-Bounds Insert: a False Positive, Silenced in the Test
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-090 |
+| **Date**       | 2026-11-19 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 9943bc1 (VERIFY-089's run 3): `1 · Build & test` #80 red, its job `build (windows-latest, Release, clang)` failed on runner image `windows-2025-vs2026` 20261116.315.1 (MSVC 19.52.37029.0), and the six jobs that need `build` skipped; `2` #113, `3` to `6` #80 and `8` #131 green. |
+| **Scope**      | `test/data/convenience/smallvec_test.c`: an MSVC-only `#pragma warning(disable: 4789)` and its comment. |
+| **Category**   | A runner image's update, found by VERIFY-089's run 3 (its S2). On 2026-11-19 the author chose to silence the warning in the test, over a guard in `smallvec.h` that the invariant makes redundant, and over pinning the image. |
+
+### What is missing
+
+GitHub's image `windows-2025-vs2026` moves from MSVC 19.51 to 19.52, one
+job at a time. MSVC 19.52's optimizer reports, at `/O2`, warning C4789 in
+`smallvec_test.c`'s `test_insert`: "buffer 'v' of size 56 bytes will be
+overrun; 4 bytes will be written starting at offset 436". The project
+compiles with `/WX`, so the test does not build, and with it the job
+fails; each Windows Release job will, once the image has moved.
+
+`smallvec_int` is, on x64, `data`, `len`, `cap` and `arena` (8 bytes
+each), `using_inline` at offset 32 and `inline_buf`, four `int`s, at 36:
+56 bytes. Offset 436 is index 100 of `inline_buf`: the store
+`buf_(v)[i] = value` of `smallvec_int_insert(&v, 100, 0)`, the test's
+out-of-bounds insert, inlined. The insert returns false before that store
+when `i > len`, and while the elements are inline `len <= cap == 4`
+(`smallvec.h`'s invariant): the store is unreachable at index 100. The
+warning is a false positive.
+
+### What is decided
+
+- **The pragma**, `#pragma warning(disable: 4789)` under `_MSC_VER`, for
+  the whole file. C4789 is a code-generation warning (4700 to 4999): its
+  state is the one in force where the compiler reaches the definition of
+  the function it generates, not where the store is written (Microsoft's
+  documentation of `#pragma warning`). Inlining makes that `test_insert`,
+  as the warning says, or `main`, if `test_insert` is inlined into it: a
+  `push` and `pop` around `DEFINE_SMALLVEC`, as the file does for GCC's
+  `-Wmaybe-uninitialized`, would not reach either. The comment says why.
+- **The library is unchanged.** A guard of the index against the inline
+  capacity would let MSVC see the bound, and would be a branch no input
+  reaches (the record's alternative, not chosen).
+
+**Not claimed.** That MSVC 19.52's C4789 is wrong elsewhere: only of this
+store, by `smallvec.h`'s invariant. A program that calls
+`smallvec_<T>_insert` with a constant index past the inline capacity may
+draw the same warning from MSVC 19.52; that is not handled here.
+
+### Measured here
+
+No MSVC runs here. With GCC 13.3.0 and Clang 18.1.3: `smallvec_test`
+builds and passes at Release, the pragma being MSVC's alone. The layout
+above, from `smallvec.h`'s struct and x64's sizes; the warning's numbers
+match it. `tools/which_workflows.py`: 1 to 6 and 8 run.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| T1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| T2 | **1 is green**, its sixteen jobs: each Windows `build` job on either image. | a failure | M–H: Microsoft's rule for code-generation warnings; not compiled with MSVC here. |
+| T3 | **A Windows Release job on MSVC 19.52, if one runs, builds `smallvec_test` without C4789**; if none does, T3 is not scored, and the record waits for one that does. | C4789, or another error | M–H |
+| T4 | **The rest as before**: 1's other jobs with #79's notices, 2 with #113's, 3 to 6 with #80's, 8 green; times aside, 2's slowest header among them. | a failure, or another notice | H: only a test's MSVC branch changes. |
+
+### What follows
+
+T1 to T4 scored, and the record closes once a job has built the test with
+MSVC 19.52. Then the record on `%zu`, VERIFY-091.
