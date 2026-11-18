@@ -12,6 +12,7 @@ on:
       - 'LICENSE*'
       - '.gitignore'
       - '.github/workflows/probes.yml'   # 9 · Probes only: nothing here reads it (VERIFY-080)
+      - '.github/workflows/smoke.yml'    # 16 · Smoke tests only: nothing here reads it (VERIFY-088)
   pull_request:
     branches: [ "master" ]
     paths-ignore:
@@ -20,6 +21,7 @@ on:
       - 'LICENSE*'
       - '.gitignore'
       - '.github/workflows/probes.yml'   # 9 · Probes only: nothing here reads it (VERIFY-080)
+      - '.github/workflows/smoke.yml'    # 16 · Smoke tests only: nothing here reads it (VERIFY-088)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

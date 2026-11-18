@@ -6,7 +6,8 @@ name: "8 · Records"
 # programs checked against the units (VERIFY-066), the misra job's pins
 # checked against their records (VERIFY-068), the size pins checked
 # (VERIFY-070), MetAcsl's units checked against the proof units
-# (VERIFY-086) and the workflow-size guard. Map: .github/workflows/README.md.
+# (VERIFY-086), the smoke tests' pins checked against the units
+# (VERIFY-088) and the workflow-size guard. Map: .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -23,6 +24,7 @@ on:
       - 'tools/size/**'
       - 'tools/metrics/**'
       - 'tools/metacsl/**'
+      - 'tools/smoke/**'
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
@@ -90,6 +92,12 @@ jobs:
         # tools/metrics/pins.txt holds each function's cyclomatic complexity;
         # its rows must be "header function cyclomatic", and its headers exist.
         run: python3 tools/metrics/metrics.py check
+      - name: "The smoke tests' pins are the units' (VERIFY-088)"
+        # Every unit of agreement.py has its pin file in tools/smoke/pins/,
+        # each line a smoke test's name without its statement number and a
+        # count; and every file a unit includes is under 16 · Smoke tests'
+        # push paths, so that the check runs whenever a unit's code changes.
+        run: python3 tools/smoke/smoke.py check
 
   # -------------------------------------------------------------------------
   # Workflow size guard (VERIFY-047). GitHub runs no workflow file of 500 KB

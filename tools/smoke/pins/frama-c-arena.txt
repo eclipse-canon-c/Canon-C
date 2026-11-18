@@ -1,0 +1,15 @@
+# frama-c-arena
+# The smoke tests WP fails in this unit (tools/smoke/smoke.py, VERIFY-088):
+# each line a goal's name as WP gives it, but its statement number, and how
+# many smoke tests of that name fail; a call's smoke test is named after the
+# function called. Written by "smoke.py pin".
+# VERIFY-088 run 1 takes them from VERIFY-087's probe: its run 1
+# (e9f39de).
+typed_cast_bytes_equal_wp_smoke_dead_code 1
+typed_cast_mem_compare_wp_smoke_dead_code 1
+typed_cast_mem_equal_bytes_wp_smoke_dead_code 1
+typed_cast_mem_equal_wp_smoke_dead_code 1
+typed_cast_memcmp_wp_smoke_dead_call 7
+typed_cast_str_ends_with_wp_smoke_dead_code 1
+typed_cast_str_equal_wp_smoke_dead_code 1
+typed_cast_str_starts_with_wp_smoke_dead_code 1

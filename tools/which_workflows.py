@@ -15,8 +15,9 @@ C7). Needs PyYAML.
 After the workflows it lists what reads the changed files inside them
 (VERIFY-080): the units 13 · Prover agreement proves
 (tools/agreement/agreement.py affected), the probes 9 · Probes starts (its
-changes job's filters), and the Eva programs, 14 · Eva's, that include a
-changed file. A program whose unit is preprocessed with -CC reads the
+changes job's filters), the Eva programs, 14 · Eva's, that include a
+changed file, and the units 16 · Smoke tests runs (tools/smoke/smoke.py
+affected, VERIFY-088). A program whose unit is preprocessed with -CC reads the
 annotations inside macro bodies, so an annotation added to a macro of a
 changed header can change its Eva pins too, as VERIFY-079's run 2 found:
 the list marks those programs, and a record pre-registering such a change
@@ -98,7 +99,8 @@ def load(path):
 
 def readers(files):
     """What reads the changed files inside the workflows: 13's units, 9's
-    probes, and 14's programs, those reading macro bodies marked."""
+    probes, 14's programs, those reading macro bodies marked, and 16's
+    units."""
     agreement = load(os.path.join('tools', 'agreement', 'agreement.py'))
     print('13 units: ' + (' '.join(agreement.affected(files)) or 'none'))
     with open(os.path.join('.github', 'workflows', 'probes.yml')) as f:
@@ -120,6 +122,8 @@ def readers(files):
         print('  of them, reading the annotations inside macro bodies (-CC): '
               + ' '.join(macro) + '; an annotation added to a macro of a changed file '
               'can change their Eva pins')
+    smoke = load(os.path.join('tools', 'smoke', 'smoke.py'))
+    print('16 units: ' + (' '.join(smoke.affected(agreement, files)) or 'none'))
 
 
 if __name__ == '__main__':

@@ -1,0 +1,115 @@
+name: "16 · Smoke tests"
+
+# ---------------------------------------------------------------------------
+# WP's smoke tests on each proof unit a push can affect: where WP's
+# hypotheses contradict each other, so that what it proves past them it
+# proves of nothing. Measured by VERIFY-087's probe, made a check by
+# VERIFY-088 (docs/deviations.md). Map: .github/workflows/README.md.
+#
+# With -wp-smoke-tests WP adds goals of \false at each function's entry,
+# under its requires and each behavior's assumes, after each call, at each
+# loop and in code its own analysis does not find reachable; a smoke test
+# whose \false a prover proves has failed. The script runs WP on the unit
+# with its proof job's options, every goal at 1 s and the smoke tests at
+# 2 s, and reads them from WP's JSON report (tools/smoke/smoke.py).
+#
+# WHICH UNITS: as 13 · Prover agreement chooses them: the units that
+# include a changed file, as the compiler lists them. A change to the
+# script, agreement.py, this file or the Frama-C setup, or to a header
+# under the watched folders that no unit includes, runs every unit; a
+# change to a unit's pins runs that unit; a manual run runs every unit.
+# 8 · Records checks that every file a unit includes is under the paths
+# below, and that each unit has its pin file.
+#
+# THE GATE: in each unit, the smoke tests that fail must be those of
+# tools/smoke/pins/UNIT.txt, by name without the statement number, and as
+# many: the branches no execution reaches, and the nine calls of memcmp
+# whose precondition WP compiles as false (docs/verification.md, "Past
+# memcmp's call"). Report-only until VERIFY-088's second run (ENFORCE in
+# the script). One job a unit; WP is stopped after 120 minutes.
+# ---------------------------------------------------------------------------
+
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - 'core/**'
+      - 'semantics/**'
+      - 'data/**'
+      - 'vmacros/vdrivers/**'
+      - 'tools/smoke/**'
+      - 'tools/agreement/agreement.py'
+      - '.github/actions/framac-setup/**'
+      - '.github/workflows/smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    name: "Which units the push can affect"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      units: ${{ steps.affected.outputs.units }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: affected
+        name: "The units that include a changed file"
+        env:
+          BEFORE: ${{ github.event.before }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "push" ] && [ -n "$BEFORE" ] \
+             && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+             && git fetch -q --no-tags --depth=1 origin "$BEFORE"; then
+            mapfile -t files < <(git diff --no-renames --name-only "$BEFORE" "$GITHUB_SHA")
+            printf 'changed: %s\n' "${files[@]}"
+            units=$(python3 tools/smoke/smoke.py affected "${files[@]}")
+          else
+            echo "A manual run, or no base to compare with: every unit."
+            units=$(python3 tools/smoke/smoke.py affected --all)
+          fi
+          echo "units=$units" >> "$GITHUB_OUTPUT"
+          n=$(python3 -c 'import json, sys; print(len(json.loads(sys.argv[1])))' "$units")
+          echo "::notice title=smoke units::$n unit(s): $units"
+
+  smoke:
+    name: "smoke ${{ matrix.unit }}"
+    needs: changes
+    if: ${{ needs.changes.outputs.units != '[]' }}
+    # Pinned, not ubuntu-latest: see the runner note in
+    # ci.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    # WP is stopped after 120 minutes; setup can take 47 minutes when its
+    # cache misses (VERIFY-060 run 1).
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        unit: ${{ fromJSON(needs.changes.outputs.units) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+
+      - name: "WP's smoke tests: ${{ matrix.unit }}"
+        run: |
+          eval $(opam env --switch=frama-c)
+          frama-c -version
+          python3 tools/smoke/smoke.py "${{ matrix.unit }}"
+
+      - name: Upload WP's output, report and summary
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: smoke-${{ matrix.unit }}
+          path: smoke_out
+          if-no-files-found: warn
+          retention-days: 90
+          # A re-run of a job replaces its first attempt's artifact.
+          overwrite: true

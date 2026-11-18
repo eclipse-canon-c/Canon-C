@@ -25,6 +25,7 @@ cite.
 | 13 | `prover-agreement.yml` | 13 · Prover agreement | VERIFY-064's measure, made a check by VERIFY-065: each unit a push can affect, proved once with each prover alone (`tools/agreement/`). The units are those that include a changed file, as the compiler lists them; a change to the script, the workflow, the Frama-C setup, or a header no unit includes runs all 27. Three jobs per unit, at most 30 at once (about an hour and 18 runner-hours for all of them), then one job per unit and a total | yes, since VERIFY-065's third run: the goals no prover proves alone are the job's pinned names, and those one or two prove are the unit's pins, proofs over 30 s left out |
 | 14 | `eva.yml` | 14 · Eva: programs that use Canon-C | VERIFY-066: one small program per verified unit (`tools/eva/programs/`), which includes the unit's file with its own flags and calls its functions as a user would. Each is compiled with GCC and run under ASan and UBSan, and analysed by Eva at the ten machine models of the proofs: whether the analysis reaches the end of `main`, the alarms, and the calls whose preconditions Eva finds invalid or cannot decide. One job per model, then a total, which uploads the properties the pins hold open to code scanning, category `eva`: the alarms from MdR's SARIF, the assertion and the preconditions from Report's table (VERIFY-082, `tools/eva/mdr.py`). The job `e-acsl` instruments each program with E-ACSL, compiles it and runs it, so that it checks its annotations as it runs (VERIFY-083, `tools/eva/eacsl.py`). The job `aorai` checks three of the library's call-order rules, written as automata for Frama-C's Aorai (`tools/aorai/`): Aorai instruments each program that uses them, and each written to keep or break one, and Eva says whether it keeps the rule; and each of those programs is compiled and run, and again with `CANON_LIFETIME_DEBUG` (VERIFY-085, `tools/aorai/aorai.py`). Runs when core/, semantics/, data/, the drivers, `tools/eva/`, `tools/aorai/`, the models, its own file or the Frama-C setup change, and by hand | yes, since VERIFY-066's third run: a program that does not reach its end, or is not as pinned (`tools/eva/pins/`), fails its model's job. Since VERIFY-082's run 3, a program without its SARIF, or an alarm without MdR's open result, fails the total job, and nothing is uploaded. Since VERIFY-083's run 2, a program whose E-ACSL result is not as pinned (`tools/eva/eacsl_pins.txt`) fails the `e-acsl` job. Since VERIFY-085's run 2, a case not as `tools/aorai/aorai.py`'s `CASES` says, or a program not as its `LIFETIME_DEBUG` says, fails the `aorai` job |
 | 15 | `metacsl.yml` | 15 · MetAcsl: the library's rules across its functions | VERIFY-086: two of the library's cross-cutting rules, written as meta-properties for Frama-C's MetAcsl (`tools/metacsl/rules/`): `core/primitives/contract.h`'s handler is written by `contract_set_handler` alone (at each write of every other function; and kept by every other function, at its return), and only documented functions call the heap (at each call: `malloc`, `calloc`, `realloc` and `free` only from `mem_alloc` and `mem_free`; `mem_alloc`, `mem_free` and `mem_alloc_array_checked` only from `mem_alloc_array_checked`, `vec_int_alloc` and `vec_int_free`). MetAcsl writes each as a check at each such point, and WP proves the checks on each of the 27 proof units, at the unit's model, one job for each of core, semantics and data (`tools/metacsl/metacsl.py`). Each job installs MetAcsl 0.7 in the Frama-C setup's switch (`--no-depexts`; failing that, with the system's packages), and removes it at its end. Runs when core/, semantics/, data/, the drivers, `tools/metacsl/`, agreement.py, its own file or the Frama-C setup change, and by hand. The functions whose checks WP does not prove are pinned in `tools/metacsl/pins.txt`: each calls through a pointer its caller passed, but `vec_int_fill` in the vec unit, whose loop loses its annotations there (no `-CC`) | yes, since VERIFY-086's run 2: a function not proved and not pinned, or one pinned and proved, fails its part, as does a run that gives no table or is stopped; report-only in runs 1 to 1c |
+| 16 | `smoke.yml` | 16 · Smoke tests | VERIFY-087's probe, made a check by VERIFY-088: WP's smoke tests on each unit a push can affect (`tools/smoke/`), chosen as 13 chooses its units. WP adds a goal of `\false` at each function's entry, under its requires and each behavior's assumes, after each call, at each loop and in code it does not find reachable, and runs the unit with its proof job's options, every goal at 1 s and the smoke tests at 2 s. A smoke test a prover proves has failed: WP's hypotheses there contradict each other, and what it proves past them it proves of nothing. In each unit the failures must be its pins (`tools/smoke/pins/`), by name without the statement number and as many: the branches no execution reaches, and the nine calls of `memcmp` whose precondition WP compiles as false (`docs/verification.md`, "Past `memcmp`'s call"). One job a unit, the longest about 26 minutes; about 5 runner-hours when every unit runs | not yet: report-only until VERIFY-088's run 2 |
 
 ## Reading results
 
@@ -63,7 +64,10 @@ still there for detail.
   `8 · Records` checks against its job, and its pin file in
   `tools/agreement/pins/` once `13 · Prover agreement` has posted its
   names, and a program in `tools/eva/programs/` with its entry in
-  `tools/eva/eva.py` (`PROGRAMS`), which `8 · Records` also checks.
+  `tools/eva/eva.py` (`PROGRAMS`), which `8 · Records` also checks, and
+  its pin file in `tools/smoke/pins/` (a comment alone until
+  `16 · Smoke tests` has posted the smoke tests that fail), which it
+  checks too.
   Add an MC/DC cover
   file (`vmacros/coverage/`, registered in `CMakeLists.txt` and run by the
   coverage job) when its conditions would otherwise land in a test file; a
@@ -74,12 +78,14 @@ still there for detail.
 - **Something experimental**: a job in `probes.yml`, with its paths added to
   the `changes` job's filter. Workflows 1 to 6 ignore `probes.yml`, which
   none of them reads (VERIFY-080), so editing it starts 8 and 9 alone, and
-  in 9 every probe, since each watches it.
+  in 9 every probe, since each watches it. They ignore `smoke.yml` too
+  (VERIFY-088): editing it starts 8 and 16 alone.
 - **Any change**: `python3 tools/which_workflows.py --files FILE...` lists
-  the workflows the push starts, then 13's units, 9's probes and 14's
-  programs that read the changed files. An annotation added inside a macro
-  reaches the programs it marks as reading macro bodies (`-CC`): their Eva
-  pins can change with it, as VERIFY-079's run 2 found.
+  the workflows the push starts, then 13's units, 9's probes, 14's
+  programs and 16's units that read the changed files. An annotation
+  added inside a macro reaches the programs it marks as reading macro
+  bodies (`-CC`): their Eva pins can change with it, as VERIFY-079's run 2
+  found.
 
 Keep every workflow file under GitHub's **500 KB** limit (512,000 bytes). A
 file over it does not run at all, and GitHub reports only "a workflow file
