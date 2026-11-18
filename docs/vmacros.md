@@ -290,7 +290,7 @@ Shape-B entry in the algo layer.
 | `vec_range_verify.h` | `data/vec/vec_range.h` | B, in-place under `-CC` | ✅ `vmacros/coverage/vec_range_cover.c` (90.5%, 38/42, MCDC-017) |
 | `vec_fmt_verify.h`  | `data/vec/vec_fmt.h` | B, in-place under `-CC` | ✅ `vmacros/coverage/vec_fmt_cover.c` (100%, 26/26, MCDC-018) |
 | `stack_verify.h`    | `data/stack.h`   | B, in-place under `-CC` | ✅ `vmacros/coverage/stack_cover.c` (5/6, MCDC-019; the miss is dead) |
-| `array_verify.h`    | `data/array.h`   | B, in-place under `-CC` | ✅ `vmacros/coverage/array_cover.c` (42/46, MCDC-020; the four misses are dead) |
+| `array_verify.h`    | `data/array.h`   | B, in-place under `-CC` | ✅ `vmacros/coverage/array_cover.c` (43/46, MCDC-020; the three misses are dead; 42/46 until VERIFY-087) |
 | `hashmap_verify.h`  | `data/hashmap/`  | A (confirmed)    | — measured in place via `hashmap_test.c` (`hashmap_impl.h` 65/92); since VERIFY-054 the table also has `hashmap_range.h` and `hashmap_fmt.h`, which no test built before, and which the driver does not include |
 | `range_verify.h`    | `data/range.h`   | **Interposition**, as bitset: it supplies a contracted `option_isize` (VERIFY-028 F3) | — not a cover TU; `range.h` is measured directly (61/62, MCDC-015) |
 

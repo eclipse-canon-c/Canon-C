@@ -12,9 +12,23 @@ Combined verification status across all annotated headers:
 |----------------------|--------------------------------------------------------------------------------|
 | **Headers verified** | 25 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h, stack.h, array.h, hashmap) — lifetime.h is a 25th unit of narrower scope, see VERIFY-021 |
 | **Functions**        | 512 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29 + vec_range.h's 1 + vec_fmt.h's 2 + stack.h's 14 + array.h's 20 + hashmap's 19; lifetime.h's 1 counted separately) |
-| **Total obligations**| 77146 (summed over the 25 verification units and the order of compare.h's comparators; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
-| **Proved automatic** | 76461 (99.11%)                                                                 |
-| **Unproved**         | 685 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+| **Total obligations**| 77134 (summed over the 25 verification units and the order of compare.h's comparators; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
+| **Proved automatic** | 76452 (99.12%)                                                                 |
+| **Unproved**         | 682 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+
+*Recomputed 2026-11-18 (VERIFY-087 run 2, enforced from its run 3).*
+Two units move: array.h from 2863 / 2887 to 2856 / 2878, and diag.h
+from 3073 / 3074 to 3071 / 3071. `array_<T>_<N>_zero`,
+`array_<T>_<N>_from_ptr` and `diag_init` store values of their types
+where they called `memset` on a local object, and `from_ptr` copies
+element by element where it called `memcpy`. The three `memset`
+preconditions were the goals left unproved: false in WP's typed model,
+which counts an object in cells of its type, not in bytes, and taken as
+hypotheses past the calls, they made what WP proved there of nothing
+(VERIFY-087 run 1, WP's smoke tests; "Past `memcmp`'s call", below).
+The change takes away 12 obligations, 9 proved and 3 unproved: the
+copy's loop has fewer goals than the calls it replaces. The card
+previously read 25 / 512 / 77146 / 76461 / 685.
 
 *Corrected 2026-11-16 (VERIFY-084's close).* VERIFY-079's run 2
 (14782ad) moved vec_range.h from 5179 / 5224 to 5183 / 5228, the four
@@ -905,6 +919,70 @@ What it does not claim:
 - **diag's stdio calls.** diag's own writes are checked; not those of its
   calls of `snprintf` and `fprintf`, which VERIFY-017's trusted axioms say
   write the buffer each is given.
+
+### Past `memcmp`'s call
+
+WP proves a call's precondition at the call and takes it as a hypothesis
+after it. Where the precondition is false in WP's model, WP proves every
+goal after the call, and proves it of nothing: hypotheses that contradict
+each other prove anything. VERIFY-087 looked for such points in the 27
+units with WP's smoke tests, which try to prove `\false` at each
+function's entry, after each call, at each loop and in code WP does not
+find reachable; where a prover proves it, WP's hypotheses there
+contradict each other. It found them past a call in twelve functions.
+Three called `memset`, and one `memcpy` too, on a local object whose
+bytes WP's typed model does not count: it counts an object in cells of
+its type (a `Diag` at x86_64: 1288 bytes, 1057 cells). They are
+`array_<T>_<N>_zero`, `array_<T>_<N>_from_ptr` and `diag_init`, and
+store values of their types since VERIFY-087's run 2. Nine call
+`memcmp`, and still do:
+
+| functions | header |
+|-----------|--------|
+| `str_equal`, `bytes_equal`, `str_starts_with`, `str_ends_with` | `core/slice.h` |
+| `mem_compare`, `mem_equal`, `mem_equal_bytes` | `core/memory.h` |
+| `borrowed_bytes_eq` | `semantics/borrow.h` |
+| `array_<T>_<N>_equal` | `data/array.h` |
+
+Frama-C's contract of `memcmp` requires that no byte compared holds a
+dangling address, `non_escaping(s, n)`. WP does not implement
+`\dangling`, and compiles the predicate as `n <= 0` (VERIFY-039 G13).
+Each of the nine calls `memcmp` with a length that is not 0: each returns
+before the call when its length is 0, and an array's is its size. So in
+WP's model the precondition is false at the call: WP leaves it unproved,
+in every unit that includes the function, where it is filed by name
+(VERIFY-008 Category 3, as VERIFY-039 G13 restated it), and after the
+call it contradicts the length. Each of the nine requires the same of
+its caller on the path that compares, in its own `\dangling`
+precondition, and that one contradicts nothing.
+
+What WP proves of these functions, then, it proves on the paths that do
+not reach `memcmp`: a null operand, operands that differ in length or a
+prefix longer than its string, an operand compared with itself, a length
+0. On the path through the call it proves nothing:
+
+- **The result.** Two of the nine contracts state the result of the
+  comparison: `array_<T>_<N>_equal`'s behavior `compare`
+  (`\result == \true <==> memcmp{Pre,Pre}(...) == 0`), and
+  `borrowed_bytes_eq`'s `content_eq_def` (the result is non-zero exactly
+  when the lengths agree and every byte does). On that path WP's proof of
+  each is of nothing. The other seven say nothing of the result there:
+  their postconditions hold of any value or speak of other paths, and
+  the behaviors of `mem_compare`, `mem_equal` and `mem_equal_bytes` for
+  that path have none. That the comparison is right rests on the C
+  library's `memcmp` and on the tests:
+  `test/core/slice_test.c`, `test/core/memory_test.c`,
+  `test/semantics/borrow_test.c`, `test/data/array_test.c`.
+- **The code after the call**, in these nine functions: any run-time
+  check there, and any postcondition a contract adds for that path, would
+  be proved of nothing too.
+
+The nine keep `memcmp` by the author's decision at VERIFY-087, which
+offered a loop over the bytes in its place. The smoke tests fail in
+other places too, branches no execution reaches: an overflow branch after
+a `checked_mul` that cannot overflow, `option_<T>_expect`'s call of the
+handler its precondition rules out, and others VERIFY-087's run 1 lists.
+There WP proves of nothing, as it should.
 
 ### Tools that are themselves verified
 
@@ -4013,7 +4091,11 @@ parameters are consumed by no-op macros).
   `borrowed_bytes_slice` proves a complete two-behavior clamping spec
   (`returns_empty`/`returns_sub`, complete + disjoint), and
   `borrowed_bytes_eq` proves the **full content-equality
-  postcondition** through memcmp's libc contract.
+  postcondition** through memcmp's libc contract. *(2026-11-18,
+  VERIFY-087: on the path through `memcmp` that proof is of nothing.
+  memcmp's precondition on dangling bytes, which WP compiles as
+  `n <= 0`, contradicts the length past the call; see "Past `memcmp`'s
+  call". It holds on the paths before the call.)*
 - **Partial spec by delegation where the callee's is partial**:
   `borrowed_str_eq` carries `str_equal`'s partial ensures trio
   (boolean result, length-mismatch ⇒ false, same-view ⇒ true) with an
@@ -4155,6 +4237,19 @@ unproved goals, the pin since VERIFY-039 G14 and G17 (`2439 / 2458` with
 > and MCDC-009's two open ones. Where this section speaks of the memmove,
 > the `.code`-only shift, eight own residuals and 84/86, it describes the
 > header before VERIFY-073.
+
+> **Note (2026-11-18, VERIFY-087).** Since VERIFY-087's run 3 the job pins
+> 3071 / 3071, every goal proved. diag_init's `memset` of `sizeof(d)`
+> bytes asked WP's typed model, which counts a `Diag` in cells of its
+> members' types, for more cells than a `Diag` has (at x86_64, 1288 bytes,
+> 1057 cells): false there, its precondition was the goal left unproved,
+> and taken as a hypothesis after the call, it made what WP proved past
+> it, `init_empty` among it, of nothing (VERIFY-087 run 1, WP's smoke
+> tests). `diag_init` is now an initializer, `Diag d = {0};`, which WP
+> reads as the members' values; it proves `init_empty` of them. diag.h
+> has no residual: where this section speaks of diag_init's memset goal,
+> of a residual at the memset site or of 3073 / 3074, it describes the
+> header before VERIFY-087.
 
 diag.h is the fifth semantics/ module verified and the third verified
 **in place** (after error.h and borrow.h) — completing the semantics/
@@ -4320,9 +4415,10 @@ frama-c \
   semantics/diag.h
 ```
 
-Expected output: `Proved goals: 3073 / 3074` with the 1 documented
-unproved goal, the pin since VERIFY-073 (`3050 / 3058` with 8 from
-VERIFY-039 G14; `3050 / 3060` with 10 when enforced, VERIFY-017).
+Expected output: `Proved goals: 3071 / 3071`, the pin since VERIFY-087's
+run 3 (`3073 / 3074` with 1 documented unproved goal from VERIFY-073;
+`3050 / 3058` with 8 from VERIFY-039 G14; `3050 / 3060` with 10 when
+enforced, VERIFY-017).
 
 
 ---
@@ -5353,18 +5449,18 @@ failed push or pop leaves the stack unchanged; the tests show it.
 
 | Property               | Value                                          |
 |------------------------|-------------------------------------------------|
-| **Status**             | Verified (8 own residuals, each filed under an existing block) |
-| **Baseline commit**    | 23bad5e (run 1) → 0ae029f (run 2, the same line and names) → enforced from run 3 |
-| **Functions**          | 20 (`array_int_8_*`), contracted in the macro body; loop annotations in `fill` and `fill_all` |
-| **Proof obligations**  | 2863 / 2887 discharged automatically (99.17%) |
-| **Unproved**           | 24: **16 inherited** (cc-slice's 8 memcmp-danglingness names; from cc-vec's, option's 6 and checked.h's 2) and **8 own**, both sets exactly as VERIFY-052 predicted by name, at both runs; 0 Failed, 0 Invalid |
-| **Own residuals**      | 6 byte views of the elements (`as_bytes`, `as_cbytes`, `memset` in `zero` and `from_ptr`, `memcmp`'s `valid_s1`/`valid_s2` in `equal`): WP's Typed+Cast does not carry an `int` range's validity to its bytes, bitset's P4 class; 2 `memcmp` danglingness goals in `equal`, which WP does not implement (VERIFY-008 Category 3, as VERIFY-039 G13 restated it). Filed by name (VERIFY-052, enforcement). |
+| **Status**             | Verified (6 own residuals, each filed under an existing block) |
+| **Baseline commit**    | 23bad5e (run 1) → 0ae029f (run 2, the same line and names) → enforced from run 3; VERIFY-087: 778a730 (its run 2, report-only) → enforced from its run 3 |
+| **Functions**          | 20 (`array_int_8_*`), contracted in the macro body; loop annotations in `fill`, `fill_all` and `from_ptr` |
+| **Proof obligations**  | 2856 / 2878 discharged automatically (99.24%) |
+| **Unproved**           | 22: **16 inherited** (cc-slice's 8 memcmp-danglingness names; from cc-vec's, option's 6 and checked.h's 2) and **6 own**: both sets as VERIFY-052 predicted them by name, at both its runs, less the two `memset` preconditions VERIFY-087 removed with the calls; 0 Failed, 0 Invalid |
+| **Own residuals**      | 4 byte views of the elements (`as_bytes`, `as_cbytes`, `memcmp`'s `valid_s1`/`valid_s2` in `equal`): WP's Typed+Cast does not carry an `int` range's validity to its bytes, bitset's P4 class; 2 `memcmp` danglingness goals in `equal`, which WP does not implement (VERIFY-008 Category 3, as VERIFY-039 G13 restated it). Filed by name (VERIFY-052, enforcement). |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast`, preprocessed with `-CC` |
 | **Driver**             | `vmacros/vdrivers/array_verify.h`: option and `DEFINE_SLICE` at `int`, then `DEFINE_ARRAY(int, 8)` |
-| **CI enforcement**     | Yes, in `.github/workflows/proofs-data.yml` (job `frama-c-array`): pinned `2863 / 2887` + the 24 unproved names (`PIN_NAMES`, set equality) |
-| **MC/DC coverage**     | 42/46, four outcomes dead (`checked_mul`'s failure at `from_ptr`, `size_bytes`, `as_bytes`, `as_cbytes`), measured from `vmacros/coverage/array_cover.c` — see MCDC-020 in VERIFY-052 |
+| **CI enforcement**     | Yes, in `.github/workflows/proofs-data.yml` (job `frama-c-array`): pinned `2856 / 2878` + the 22 unproved names (`PIN_NAMES`, set equality) |
+| **MC/DC coverage**     | 43/46, three outcomes dead (`checked_mul`'s failure at `size_bytes`, `as_bytes`, `as_cbytes`), measured from `vmacros/coverage/array_cover.c` — see MCDC-020 in VERIFY-052; 42/46 until VERIFY-087, `from_ptr`'s `checked_mul` the fourth |
 | **CI artifact**        | `wp-proof-array`                                |
 
 array.h is **module 23**, the fixed-size companion of vec, with code of its own. Its
@@ -5378,9 +5474,19 @@ since ACSL in a macro body cannot name the parameter `N`. `len` and
 - **A2:** the documentation said `CANON_OPTION` and `DEFINE_SLICE` were
   needed only to use some functions; `DEFINE_ARRAY` always needs both.
 
+**Proved of nothing until VERIFY-087:** `zero` and `from_ptr` called
+`memset` on a local array, and `from_ptr` `memcpy`. WP's typed model
+counts the array in `int` cells, not in bytes; the calls' preconditions
+were false there, and past them WP proved the postconditions of nothing
+(VERIFY-087 run 1). `zero` now returns `fill` of a zero of the element
+type, and `from_ptr` starts from the same and copies element by element,
+in a loop with its invariants; their contracts are as before.
+
 **Not claimed:** anything at another element type or size; `equal`'s
 result beyond the byte comparison it states (for element types with
-padding, bytes may differ where values do not).
+padding, bytes may differ where values do not); and that comparison
+itself, which WP proves past `memcmp`'s call, so of nothing ("Past
+`memcmp`'s call", above).
 
 ---
 
@@ -5586,7 +5692,7 @@ VERIFY-050 the pins are in `proofs-core.yml`, `proofs-semantics.yml` and
 | option (driver)  | ✅ Verified  | 222/228 | First driver-verified Shape-B module (VERIFY-014); 6 residuals at CI #1373, the run-time checks that a callback is a valid function, unproved because WP 29 does not implement `\valid_function`; 189/223 with 34 when enforced (2 inherited + 32 own), of which VERIFY-039 G11 and G14 closed 28 that did not hold for every admitted callback or were false as written; default Typed model; MCDC-006; cover TU `option_cover.c` |
 | result (driver)  | ✅ Verified  | 207/213 | Second driver-verified Shape-B module and first union-typed module (VERIFY-015); 6 residuals at CI #1373, the run-time checks that a callback is a valid function; 185/215 with 30 when enforced (2 inherited + 28 own), of which VERIFY-039 G11 and G14 closed 24 that did not hold for every admitted callback or were false as written; union-model standing hypothesis (all union goals proved); default Typed model; MCDC-007 (clean 28/28); cover TU `result_cover.c` |
 | borrow.h         | ✅ Verified  | 2451/2465 | Fourth semantics/ module, second verified in place (VERIFY-016): 24 non-macro functions annotated in place, `DEFINE_BORROWED_SLICE` parked per `docs/vmacros.md` (the slice.h/DEFINE_SLICE structure, first in semantics/); 14 residuals at CI #1373: 10 inherited (slice.h's 8 memcmp-danglingness goals and checked.h's 2) + 4 own (memcmp danglingness at `borrowed_bytes_eq` and at `borrowed_str_eq`'s call to `str_equal`); the 12 danglingness goals true since VERIFY-039 G13's repair and filed under VERIFY-008 Category 3, checked.h's 2 under VERIFY-039's block on fixed-width arithmetic; 19 when enforced (17 inherited + 2 own memcmp-danglingness residuals) — no new residual class; Typed+Cast; verified config `CANON_LIFETIME` off (OWN-001 §7); MCDC-008 (36/38 ceiling post-Commit-9 surface, first named-assert closure) |
-| diag.h           | ✅ Verified  | 3073/3074 | Fifth semantics/ module, third verified in place — layer complete (VERIFY-017): 13 functions annotated in place, the four `DIAG_*` call-site macros parked per `docs/vmacros.md`; 1 own libc byte-view residual since VERIFY-073, which made the overflow shift a loop of frame copies and the earlier frames' postconditions whole (8 at CI #1373, the memmove's 7 among them) and none inherited, the contract.h handler pair, false as written, having closed at VERIFY-039 G14; 10 when enforced (2 inherited, the handler pair — smallest inherited surface of any residual-carrying header — + 8 own) — no new residual class; Typed+Cast originated by diag.h's own casts; two documented trusted stdio axioms (`-variadic-no-translation`); MCDC-009 (84/86 ceiling, second named-assert closure + first libc-environmental permanent outcome) |
+| diag.h           | ✅ Verified  | 3071/3071 | Fifth semantics/ module, third verified in place — layer complete (VERIFY-017): 13 functions annotated in place, the four `DIAG_*` call-site macros parked per `docs/vmacros.md`; no residual since VERIFY-087, which made `diag_init` an initializer where it called `memset`, whose precondition, false in WP's typed model, was the last own residual and made WP's proofs past it of nothing; 1 own libc byte-view residual from VERIFY-073, which made the overflow shift a loop of frame copies and the earlier frames' postconditions whole (8 at CI #1373, the memmove's 7 among them) and none inherited, the contract.h handler pair, false as written, having closed at VERIFY-039 G14; 10 when enforced (2 inherited, the handler pair — smallest inherited surface of any residual-carrying header — + 8 own) — no new residual class; Typed+Cast originated by diag.h's own casts; two documented trusted stdio axioms (`-variadic-no-translation`); MCDC-009 (84/86 ceiling, second named-assert closure + first libc-environmental permanent outcome) |
 
 **The semantics/ layer is complete.** diag.h shipped as the fifth and
 final semantics/ module (see its section above, VERIFY-017): 13
@@ -5638,7 +5744,7 @@ discipline) recorded for deque.
 | vec_range.h  | ✅ Verified | 5183/5228 | VERIFY-079's pin (+4, the assertion `kept`'s four parts, proved); VERIFY-059's (+12, ptr.h's bounds checks' results, proved); VERIFY-058's (+8, proved).  Module 20 (VERIFY-041): in-place contracts under `-CC`, one clause in a driver; 45 unproved, none own. MCDC-017, 38/42. |
 | vec_fmt.h    | ✅ Verified | 5259/5306 | VERIFY-059's pin (+12, ptr.h's bounds checks' results, proved); VERIFY-058's (+8, proved).  Module 21 (VERIFY-042): in-place contracts under `-CC`; 47 unproved, 4 own, filed under VERIFY-042's two blocks. MCDC-018, 26/26. |
 | stack.h      | ✅ Verified | 5742/5811 | VERIFY-062's pin (+8, vec's pointer NULL exactly when its capacity is 0, proved); VERIFY-059's (+12, ptr.h's bounds checks' results, proved); VERIFY-058's (+8, proved).  Module 22 (VERIFY-049): 14 macro-body contracts under `-CC`, enforced from run 3; 69 unproved, all cc-vec's, none own. MCDC-019, 5/6. |
-| array.h      | ✅ Verified | 2863/2887 | Module 23 (VERIFY-052): 20 macro-body contracts under `-CC`, enforced from run 3; 24 unproved, 16 inherited and 8 own, as predicted by name, filed under VERIFY-017's byte-view block and VERIFY-008 Category 3. MCDC-020, 42/46. |
+| array.h      | ✅ Verified | 2856/2878 | Module 23 (VERIFY-052): 20 macro-body contracts under `-CC`, enforced from run 3; 22 unproved, 16 inherited and 6 own, filed under VERIFY-017's byte-view block and VERIFY-008 Category 3: VERIFY-052's 24, as it predicted them by name, less the two `memset` preconditions VERIFY-087 removed, `zero` and `from_ptr` storing values of the element type. MCDC-020, 43/46 (42/46 before VERIFY-087). |
 | queue.h      | Reviewed (light) | — | Wraps deque's verified functions; no WP unit of its own (VERIFY-051). |
 | convenience/dynvec.h | Reviewed (light), not WP-verified | — | Heap vector (VERIFY-053). Not WP-verified by design: heap allocation is where WP's reasoning is weakest (VERIFY-008 Category 1). Fixed: unchecked byte-count products (heap overflow) and `extend` from its own buffer (use after free). Evidence: tests, fuzzing, sanitizers, Valgrind. |
 | convenience/smallvec.h | Reviewed (light), not WP-verified | — | Inline-first vector (VERIFY-053). Fixed: a pointer into `init`'s dead stack frame, which the tests had patched around; the quick start's missing vec requirement; `as_vec`'s empty view. Evidence as dynvec. |

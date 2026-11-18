@@ -933,11 +933,11 @@ jobs:
       - uses: ./.github/actions/framac-setup
       - name: "WP: semantics/diag.h"
         # diag.h — Typed+Cast, 120s / -wp-split, -variadic-no-translation.
-        # Expected: every goal proved, none unproved (VERIFY-087 run 2):
+        # Expected: 3071 / 3071, every goal proved, none unproved
+        # (VERIFY-087, measured by its run 2 and enforced from its run 3):
         # the last own, diag_init's memset, went with the memset; the 2
         # inherited closed at G14 (VERIFY-039), the 7 at the memmove at
-        # VERIFY-073. Report-only at VERIFY-087 run 2, which measures the
-        # count; its run 3 pins it and enforces. Also
+        # VERIFY-073. Also
         # enforces the MCDC-009 closure:
         # dead_by_invariant_clamp must remain in the proved set. Any
         # deviation is a regression and fails the job.
@@ -946,10 +946,10 @@ jobs:
         # to (Timeout|Unknown).
         run: |
           eval $(opam env --switch=frama-c)
-          # ---- ENFORCEMENT VALUES: pinned at 1965b23 (2026-07-08) ----
-          ENFORCE=0   # VERIFY-087 run 2: report-only while diag_init's fix is measured; its run 3 pins the count and enforces
-          EXPECTED_UNPROVED=0   # VERIFY-087 run 2 predicted: 1 -> 0, diag_init's memset gone (VERIFY-073 run 1c measured: 8 -> 1; VERIFY-039 G14: 10 -> 8)
-          EXPECTED_PROVED=""   # VERIFY-087 run 2 measures it (3073 / 3074 before: VERIFY-073 run 1c, the shift a loop, the frames kept whole; 3050 / 3058 before that)
+          # ---- ENFORCEMENT VALUES: pinned at 1965b23 (2026-07-08), re-pinned by VERIFY-039 G14, VERIFY-073 and VERIFY-087 ----
+          ENFORCE=1   # VERIFY-087 run 3; report-only at its run 2, which measured diag_init's fix
+          EXPECTED_UNPROVED=0   # VERIFY-087 run 2 measured: 1 -> 0, diag_init's memset gone (VERIFY-073 run 1c measured: 8 -> 1; VERIFY-039 G14: 10 -> 8)
+          EXPECTED_PROVED="3071 / 3071"   # VERIFY-087 run 2 measured (778a730) (3073 / 3074 before: VERIFY-073 run 1c, the shift a loop, the frames kept whole; 3050 / 3058 before that)
           WP_MODEL="Typed+Cast"         # diag.h's own casts force it
           # ------------------------------------------------------------------
           FAILURES=0
@@ -1071,7 +1071,7 @@ jobs:
               note_fail "FAIL: inherited set differs from the composability record."
             fi
             echo ""
-            echo "  --- Own-residual roll-call: 0 expected (VERIFY-087 run 2) ---"
+            echo "  --- Own-residual roll-call: 0 expected (VERIFY-087) ---"
             # The last own residual, libc byte-view through Typed+Cast (the
             # memset byte spec vs the typed Diag location, VERIFY-007/-008
             # class: typed_cast_diag_init_call_memset_requires_valid_s),

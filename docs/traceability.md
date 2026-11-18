@@ -847,11 +847,14 @@ by methodology):
   `peek_option`'s one; the miss is `peek`'s `!last` true, dead (a
   non-empty stack has a top element). The rest of stack.h is calls to vec.
 
-- **array.h: 91.3% (42/46)**, measured from
-  `vmacros/coverage/array_cover.c` (MCDC-020, VERIFY-052), as measured
-  locally before the TU was pushed. The four misses are `checked_mul`'s
-  failure at `from_ptr`, `size_bytes`, `as_bytes` and `as_cbytes`, dead:
-  the product is the size of an object that exists.
+- **array.h: 93.5% (43/46)** since VERIFY-087 (the coverage job's
+  annotation at 778a730), measured from `vmacros/coverage/array_cover.c`
+  (MCDC-020, VERIFY-052). The three misses are `checked_mul`'s failure at
+  `size_bytes`, `as_bytes` and `as_cbytes`, dead: the product is the size
+  of an object that exists. Until then 91.3% (42/46), as measured locally
+  before the TU was pushed: the fourth miss was `checked_mul`'s failure
+  at `from_ptr`, which now copies element by element, without it; the
+  loop's condition is covered both ways.
 
 - **vec_range.h: 90.5% (38/42)**, measured from
   `vmacros/coverage/vec_range_cover.c` (MCDC-017): `DEFINE_VEC_RANGE` at
@@ -1044,7 +1047,7 @@ and after the paragraphs below say where a reading here no longer holds.
 | option     | 16        |               228 | 222 (97.37%) | 6        | VERIFY-014   |
 | result     | 17        |               213 | 207 (97.18%) | 6        | VERIFY-015   |
 | borrow.h   | 24        |              2465 | 2451 (99.43%) | 14       | VERIFY-016   |
-| diag.h     | 13        |              3074 | 3073 (99.97%) | 1        | VERIFY-017/73 |
+| diag.h     | 13        |              3071 | 3071 (100.00%) | 0        | VERIFY-017/73/87 |
 | vec        | 37        |              5596 | 5503 (98.34%) | 93       | VERIFY-018/23/33/40/58/59/62 |
 | deque      | 24        |              1665 | 1653 (99.28%) | 12       | VERIFY-019/40/62 |
 | bitset     | 32        |              5060 | 4986 (98.54%) | 74       | VERIFY-020/23/40/58/59 |
@@ -1055,9 +1058,20 @@ and after the paragraphs below say where a reading here no longer holds.
 | vec_range.h | 1        |              5228 | 5183 (99.14%) | 45       | VERIFY-041/58/59/62/79 |
 | vec_fmt.h  | 2         |              5306 | 5259 (99.11%) | 47       | VERIFY-042/58/59/62 |
 | stack.h    | 14        |              5811 | 5742 (98.81%) | 69       | VERIFY-049/58/59/62 |
-| array.h    | 20        |              2887 | 2863 (99.17%) | 24       | VERIFY-052   |
+| array.h    | 20        |              2878 | 2856 (99.24%) | 22       | VERIFY-052/87 |
 | hashmap    | 19        |              4784 | 4738 (99.04%) | 46       | VERIFY-054/55/56 |
-| **Total**  | **513**   | **73994**         | **73309 (99.07%)**| **685**  |              |
+| **Total**  | **513**   | **73982**         | **73300 (99.08%)**| **682**  |              |
+
+*Brought to the pins again 2026-11-18 (VERIFY-087, run 3).* Two rows
+move: array.h, 2887 obligations to 2878, 2863 proved to 2856, 24
+unproved to 22; and diag.h, 3074 to 3071, 3073 proved to 3071, 1
+unproved to 0. `array_<T>_<N>_zero`, `array_<T>_<N>_from_ptr` and
+`diag_init` store values of their types where they called `memset` on a
+local object, and `from_ptr` copies element by element where it called
+`memcpy`; the three `memset` preconditions, false in WP's typed model,
+went with the calls, and with them what WP proved past them of nothing
+(VERIFY-087 run 1). The total is 73982 obligations, 73300 proved and 682
+unproved, from 73994, 73309 and 685.
 
 *Brought to the pins again 2026-11-16 (VERIFY-084's close).* One row
 moves: vec_range.h, 5224 obligations to 5228 and 5179 proved to 5183, its

@@ -52,5 +52,7 @@ report, and the log keeps WP's own line.
 
 **Runs.** Run 1: every unit (`steps`: `all`). Run 2: `frama-c-array` and
 `frama-c-diag`, whose `memset`s run 1 found voiding WP's proofs past them,
-with the code that replaces them. The predictions and their scores are
-VERIFY-087's, in `docs/deviations.md`.
+with the code that replaces them: no smoke test fails in it, and the two
+units' other failures are run 1's. Closed at run 3: `steps` names no
+unit. The predictions and their scores are VERIFY-087's, in
+`docs/deviations.md`.

@@ -3022,9 +3022,10 @@ jobs:
   #
   # REPORT-ONLY until VERIFY-052's runs agreed; then the proved line and both
   # sets were pinned, and enforced from its run 3. Report-only again at
-  # VERIFY-087's run 2, which measures the new zero and from_ptr; its run 3
-  # pins the count. A Failed, Invalid or Stepout goal, or a missing summary,
-  # always fails it. The result is also emitted as an annotation.
+  # VERIFY-087's run 2, which measured the new zero and from_ptr, and
+  # enforced from its run 3 on that count. A Failed, Invalid or Stepout
+  # goal, or a missing summary, always fails it. The result is also emitted
+  # as an annotation.
   # -------------------------------------------------------------------------
   frama-c-array:
     runs-on: ubuntu-24.04
@@ -3035,13 +3036,13 @@ jobs:
       - name: "WP under -CC: data/array.h at (int, 8)"
         run: |
           eval $(opam env --switch=frama-c)
-          ENFORCE=0   # VERIFY-087 run 2: report-only while the fix of zero and from_ptr is measured; its run 3 pins the count and enforces (VERIFY-052: enforced from run 3; pins from runs 1 and 2 (23bad5e, 0ae029f), identical)
-          PIN_PROVED="2863 / 2887"   # before VERIFY-087 run 2; its run 3 pins the count run 2 measures
+          ENFORCE=1   # VERIFY-087 run 3; report-only at its run 2, which measured the fix of zero and from_ptr (VERIFY-052: enforced from run 3; pins from runs 1 and 2 (23bad5e, 0ae029f), identical)
+          PIN_PROVED="2856 / 2878"   # VERIFY-087 run 2 measured (778a730): 9 goals fewer, the 2 memset preconditions among them (2863 / 2887 before, VERIFY-052)
           # The 22 unproved names, by set equality: 16 inherited (cc-slice's
           # 8; option's 6 and checked.h's 2, as cc-vec pins them) and 6 own,
           # filed by name in docs/deviations.md (VERIFY-052, enforcement).
-          # VERIFY-087 run 2 predicts them: the two memset preconditions of
-          # zero and from_ptr go with their memsets.
+          # VERIFY-087 run 2 measured them as it predicted: the two memset
+          # preconditions of zero and from_ptr went with their memsets.
           PIN_NAMES=(
             "typed_cast_array_int_8_as_bytes_call_bytes_from_requires_2"
             "typed_cast_array_int_8_as_cbytes_call_cbytes_from_requires_2"
