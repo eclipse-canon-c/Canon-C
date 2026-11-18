@@ -38890,6 +38890,7 @@ two of seven, run 1c six of seven, run 2 six of six. What it shows:
 | **ID**         | VERIFY-087 |
 | **Date**       | 2026-11-17 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-18 — Run 1 scored: K1 to K6, K8 and K9 MATCH; K7 MISS. WP's smoke tests failed 247 times in 20 of the 27 units, never at a requires, an assumes or a loop. In twelve functions the code past a call is unreachable to WP and reachable in C, so that what WP proves there it proves of nothing: K5's three, past a `memset` on a local object, and the nine that call `memcmp`, past its precondition on dangling bytes. The other failures are branches no input reaches either. The smoke-only run misses every function without a requires clause, two of the twelve among them. The Status above is the record as committed. |
 | **Baseline**   | 9742da9 (VERIFY-086's close): `2 · Platforms` #105 (500e16d); `8 · Records` #121 (9742da9); `9 · Probes` #31 (434229c), the last run of every probe, since which nothing the other probes read has changed; the Aorai probe's `steps` names no part since its close. |
 | **Scope**      | Run 1: `tools/probes/verify-087/` (new: `smoke_probe.py`, `steps`, `README.md`); `.github/workflows/probes.yml`, the job `smoke-probe`, its filter, its output, its path and the header; the workflow map's row 9. |
 | **Category**   | The item the author added after item 6 at VERIFY-085's close, on 2026-11-16: a probe of WP's smoke tests over the 27 proof units, report-only, with a short timeout. |
@@ -39036,3 +39037,84 @@ says which proofs past them are of nothing; the author decides whether
 the code changes (a typed store, as `diag_init` writes its depth), and
 whether smoke tests join the proof jobs, in the smoke-only run if it
 finds what the full run finds.
+
+### Run 1 scored (2026-11-18)
+
+The push of 4865af9 and e9f39de started three workflows: `2` #106, `8`
+#122 and `9` #36. Each was green at its first attempt; 9 took 46
+minutes.
+
+| # | scored |
+|---|--------|
+| K1 | **MATCH.** 2, 8 and 9 ran, and no other. |
+| K2 | **MATCH.** 2's sixteen jobs gave #105's notices, times aside, its slowest header among them, and 8's two gave none: 18 jobs, no difference. |
+| K3 | **MATCH.** Of 9's 52 jobs but the smoke probe's, 47 gave #31's notices, times aside. The diag_push probe gave "none 1" and "Proved goals: 3073 / 3074", each prover's proved count #31's, and moved only in what moves between runs (its provers' timeouts, unknowns and failures, its slow goals). The Aorai probe's four parts posted that they did not run, as the order probe's nine did. |
+| K4 | **MATCH.** The smoke probe's 27 jobs are green: every run's WP ended, and every full run gave its summary and its smoke tests, 2 to 1089 a unit, 12,293 in all (WP's JSON reports). The smoke-only runs of `frama-c-error` and `frama-c-lifetime` had no goal. |
+| K5 | **MATCH.** Smoke tests fail in each of the three functions, at the `memset`'s call and past it: in `array_int_8_zero`, the call and the code after it; in `array_int_8_from_ptr`, the call, `checked_mul`'s and `memcpy`'s calls after it, and six points of code; in `diag_init`, the call and the store of the depth (`diag.h:304`, `310`). |
+| K6 | **MATCH.** In no unit does a smoke test fail at a requires or assumes clause, or at a loop: the 247 that fail are 109 calls and 138 points of code. |
+| K7 | **MISS.** Beyond K5's three functions, 104 calls fail: `memcmp`'s, 98, in the nine functions that call it, in every unit that includes them; and six in branches no input reaches, `bytes_empty`'s, `cbytes_empty`'s and `vec_int_empty`'s (below). |
+| K8 | **MATCH.** The smoke-only run gives `array_int_8_from_ptr`'s failures, and none in `array_int_8_zero` or `diag_init`: the smoke tests that fail there in the full run are not among its own, and a smoke test of the same name has the same hypotheses. The log names the smoke tests that fail; the list of every smoke test of a run is in its artifact, not read here. |
+| K9 | **MATCH.** The longest unit, `frama-c-stack`, took 19.1 and 25.7 minutes. |
+
+Eight of nine.
+
+**What run 1 shows.**
+
+- **Twelve functions whose code past a call is unreachable to WP, and
+  reachable in C.** WP proves a call's precondition at the call and
+  takes it as a hypothesis after it (VERIFY-085). Where the precondition
+  is false in WP's model, WP proves every goal past the call: of
+  nothing. Two preconditions do it, both pinned unproved as harmless:
+  - **`memset` and `memcpy` on a local object** (K5): `array_int_8_zero`,
+    `array_int_8_from_ptr`, `diag_init`. Past the calls WP proves
+    `array_int_8_zero`'s postcondition, every element 0;
+    `array_int_8_from_ptr`'s, the elements copied or 0, and its
+    `memcpy`'s precondition; `diag_init`'s `init_empty`. Each holds in
+    C; WP's proof of it is of nothing.
+  - **`memcmp`'s precondition on dangling bytes**: `str_equal`,
+    `bytes_equal`, `str_starts_with`, `str_ends_with` (`core/slice.h`),
+    `mem_compare`, `mem_equal`, `mem_equal_bytes` (`core/memory.h`),
+    `borrowed_bytes_eq` (`semantics/borrow.h`) and `array_int_8_equal`
+    (`data/array.h`). Each returns before the call when the length is 0,
+    so the call compares bytes; libc's `non_escaping(s, n)`, whose
+    `\dangling` WP does not implement, WP compiles as `n <= 0` (VERIFY-039
+    G13), and after the call that contradicts the length. The run does
+    not isolate this cause from the rest of `memcmp`'s contract; its
+    other preconditions WP proves. Past the call the contracts claim
+    little: only `array_int_8_equal`'s behavior `compare` states the
+    result (`\result == \true <==> memcmp{Pre,Pre}(...) == 0`); the
+    others' postconditions hold of any `bool`, or speak of other paths.
+    But a postcondition added there would be proved of nothing too. The
+    functions' own preconditions on dangling bytes, at entry, contradict
+    nothing: no requires or assumes smoke test fails.
+- **The other failures are branches no input reaches.** The overflow
+  branches after a `checked_mul` that cannot overflow
+  (`array_int_8_size_bytes`, `_as_bytes` and `_as_cbytes`, with
+  `bytes_empty`'s and `cbytes_empty`'s calls; `vec_int_alloc` and
+  `vec_int_arena_alloc` past their capacity check, with
+  `vec_int_empty`'s); `option_T_expect`'s call of the handler, which its
+  requires rules out (four instantiations); `stack_int_peek`'s test of
+  the last element's pointer, after its test of the length;
+  `hashmap_load_factor`'s zero capacity, under its invariant; and in
+  `compare-order`'s reflexivity checks, the branches of the float
+  comparisons that need two different values, one NaN and the other not.
+  There WP proves of nothing as it should: no execution reaches them.
+- **The smoke-only run is not the check.** It finds 236 of the 247, and
+  misses every smoke test of a function without a requires clause:
+  `array_int_8_zero` and `diag_init` among them, and the branches of
+  `vec_int_alloc` and `array_int_8_size_bytes`. It saves a quarter of the
+  time: the smoke tests, 2 s a prover each, take most of it.
+- **WP's summary counts a failed smoke test once for each prover that
+  proves it.** The notices' "failed" counts follow it (`frama-c-arena`:
+  40, for 14 smoke tests, 621 in its JSON report against the summary's
+  647); the comparison of the two runs, and this record, count smoke
+  tests.
+- **The cost.** The longest unit took 45 minutes of its job; the 27,
+  about nine hours of runners.
+
+**What follows.** The author decides two things: whether the twelve
+functions change, so that WP's proofs past the calls rest on something
+(K5's three by a typed initializer and a typed copy, the nine by a loop
+over the bytes in place of `memcmp`, or `docs/verification.md` saying
+what WP proves there); and whether smoke tests join the proof jobs, the
+full run's, with the branches no input reaches pinned.
