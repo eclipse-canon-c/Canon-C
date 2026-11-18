@@ -64,7 +64,7 @@ OUT = 'smoke_out'
 WORKFLOW = '.github/workflows/smoke.yml'
 FORCING = ('tools/smoke/smoke.py', 'tools/agreement/agreement.py', WORKFLOW,
            '.github/actions/framac-setup/')
-ENFORCE = False       # VERIFY-088 run 1: report-only
+ENFORCE = True        # VERIFY-088 run 2: a difference fails the job (run 1 report-only)
 GOAL_TIMEOUT = '1'    # seconds a prover, the unit's own goals, whose results are not read
 SMOKE_TIMEOUT = '2'   # seconds a prover, a smoke test: WP's default
 LIMIT = 120 * 60      # seconds, the run
@@ -175,12 +175,18 @@ def function_of(goal):
 
 
 def report(path):
-    """[{goal, status, function, at, seconds, prover}] of the smoke tests in
-    WP's JSON report, status "failed" (a prover proved \\false), "passed",
-    or WP's verdict; seconds and prover the fastest proof of a failed one.
-    None without a report. WP writes a float with no digit after its point,
-    which JSON does not allow: the point gets a 0 first, as agreement.py
-    reads it."""
+    """[{goal, status, function, at, seconds, prover, record}] of the smoke
+    tests in WP's JSON report, status "failed" (a prover proved \\false),
+    "passed", or WP's verdict; seconds and prover the proof of \\false WP
+    reports for a failed one, and its record as read. None without a
+    report. WP writes a float with no digit after its point, which JSON
+    does not allow: the point gets a 0 first, as agreement.py reads it.
+
+    A prover's entry counts its successes as "valid xor smoke" (Frama-C
+    29.0's Wp.Stats): in a smoke test, a proof of \\false is valid, and so
+    not a success. VERIFY-088's run 1 read the entry as a goal's, a proof a
+    success, and found no time for any failure; a proof is an entry whose
+    success is 0. WP keeps each goal's best result."""
     if not os.path.exists(path):
         return None
     try:
@@ -198,7 +204,8 @@ def report(path):
         best = None
         if status == 'failed':
             for p in rec.get('provers') or []:
-                if isinstance(p, dict) and p.get('success') and isinstance(p.get('time'), (int, float)):
+                if (isinstance(p, dict) and not p.get('success')
+                        and isinstance(p.get('time'), (int, float))):
                     if best is None or p['time'] < best[0]:
                         best = (float(p['time']), str(p.get('prover', '?')))
         f = os.path.relpath(str(rec['file']), ROOT) if rec.get('file') else '?'
@@ -206,7 +213,8 @@ def report(path):
                     'function': str(rec.get('function', '?')),
                     'at': f'{f}:{rec.get("line", "?")}',
                     'seconds': best[0] if best else None,
-                    'prover': best[1] if best else None})
+                    'prover': best[1] if best else None,
+                    'record': rec if status == 'failed' else None})
     return out
 
 
@@ -300,10 +308,15 @@ def one(ag, unit):
     line += f'; {minutes:.1f} minutes'
     print(line)
     print(f'--- {unit}: the smoke tests that failed ({len(failed)}): goal, function, place, '
-          f'the fastest proof of \\false ---')
+          f'the proof of \\false WP reports ---')
     shown('\n'.join(f'{r["goal"]}  {r["function"]}  {r["at"]}  '
                     + (f'{r["seconds"]:.2f} s {r["prover"]}' if r['seconds'] is not None else '?')
                     for r in failed) or 'none')
+    if failed:
+        r = max(timed, key=lambda r: r['seconds']) if timed else failed[0]
+        print(f'--- {unit}: the record of ' + ('the slowest failure' if timed else 'the first failure')
+              + f', {r["goal"]}, as read ---')
+        shown(json.dumps(r['record'], indent=1))
     if other:
         print(f'--- {unit}: smoke tests with no result ({len(other)}) ---')
         shown('\n'.join(f'{r["goal"]}: {r["status"]}' for r in other))

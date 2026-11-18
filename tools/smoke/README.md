@@ -34,8 +34,10 @@ that `typed_cast_memcmp_wp_smoke_dead_call 5` is five calls of `memcmp`.
 A count other than the pin's, a name the pins do not hold, or a smoke
 test with no result is a difference; with `ENFORCE` (in the script) a
 difference fails the job. The notice gives the smoke tests, how many
-failed by kind, the differences, and the slowest failure: how long the
-fastest prover took to prove its `\false`, of the 2 s it had.
+failed by kind, the differences, and the slowest failure: the time of the
+proof of its `\false` that WP reports, of the 2 s it had. In a smoke
+test's record, a prover's proof of `\false` has "success" 0: WP counts a
+success as "valid xor smoke".
 
 **Which units.** The workflow's first job chooses them as
 `13 · Prover agreement` does (`smoke.py affected`): the units that include
@@ -54,5 +56,5 @@ writes a unit's pins from its last run, in `smoke_out/UNIT/`. A new proof
 unit needs its pin file; its lines come from the check's first run of it.
 
 **Runs.** VERIFY-088's: run 1 report-only, its pins those VERIFY-087's
-probe measured; the predictions and their scores are in
-`docs/deviations.md`.
+probe measured, which it measured again; run 2 enforced, and read the
+times. The predictions and their scores are in `docs/deviations.md`.

@@ -25,8 +25,9 @@ name: "16 · Smoke tests"
 # tools/smoke/pins/UNIT.txt, by name without the statement number, and as
 # many: the branches no execution reaches, and the nine calls of memcmp
 # whose precondition WP compiles as false (docs/verification.md, "Past
-# memcmp's call"). Report-only until VERIFY-088's second run (ENFORCE in
-# the script). One job a unit; WP is stopped after 120 minutes.
+# memcmp's call"). Enforced since VERIFY-088's second run (ENFORCE in the
+# script); report-only in its first. One job a unit; WP is stopped after
+# 120 minutes.
 # ---------------------------------------------------------------------------
 
 on:
