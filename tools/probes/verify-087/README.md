@@ -44,5 +44,13 @@ files are its artifact, `smoke-probe-UNIT`.
     python3 tools/probes/verify-087/smoke_probe.py named UNIT
     python3 tools/probes/verify-087/smoke_probe.py check
 
-**Run 1.** Every unit (`steps`: `all`). Its predictions and their scores
-are VERIFY-087's, in `docs/deviations.md`.
+**Counts.** WP prints a failed smoke test's line once for each prover
+that proves it, and its summary's "Smoke Tests" counts it as often (run
+1: `frama-c-arena`'s summary said 40 failed, for 14 tests). Since run 2
+the notices count each smoke test once: the tests are those of WP's JSON
+report, and the log keeps WP's own line.
+
+**Runs.** Run 1: every unit (`steps`: `all`). Run 2: `frama-c-array` and
+`frama-c-diag`, whose `memset`s run 1 found voiding WP's proofs past them,
+with the code that replaces them. The predictions and their scores are
+VERIFY-087's, in `docs/deviations.md`.

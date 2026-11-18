@@ -10,6 +10,10 @@
 # data/vec/vec_range.h, which WP proves; as 14 · Eva #12 gave it at the ten models (run 2b).
 # compare_order.c's block is VERIFY-084's run 2 prediction: measured here with Frama-C 25
 # at x86_64, msvc_x86_64 and ppc_32, and the same at the other seven models.
+# diag.c's and array.c's blocks are VERIFY-087's run 2 prediction: diag_init's memset,
+# and array's in zero and from_ptr with from_ptr's memcpy and checked_mul, are gone with
+# their preconditions; measured here with Frama-C 25 at x86_64, msvc_x86_64 and ppc_32,
+# and the same at the other seven models.
 
 checked @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 62/0/0; functions 31/31
 
@@ -77,11 +81,11 @@ result @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 
 
 borrow @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 72/0/0; functions 32/79
 
-diag @ rv64_lp64: end reached, fails {0; 1; 2}; alarms 0; program calls: 0 invalid, 3 unknown; library calls: 0 invalid, 1 unknown; checks not confirmed at lines 42,44; preconditions 74/4/0; functions 16/22
+diag @ rv64_lp64: end reached, fails {0; 1; 2}; alarms 0; program calls: 0 invalid, 3 unknown; library calls: 0 invalid, 1 unknown; checks not confirmed at lines 42,44; preconditions 73/4/0; functions 16/22
   call: Unknown: tools/eva/programs/diag.c:41 main: precondition of diag_render_frame: rf_strings: f ≡ \null ∨ frame_strings_ok(*f)
   call: Unknown: tools/eva/programs/diag.c:43 main: precondition of diag_render: r_strings: d ≡ \null ∨ (∀ ℤ j; 0 ≤ j < d->depth ⇒ frame_strings_ok(d->frames[j]))
   call: Unknown: tools/eva/programs/diag.c:45 main: precondition of diag_print: pr_strings: d ≡ \null ∨ (∀ ℤ j; 0 ≤ j < d->depth ⇒ frame_strings_ok(d->frames[j]))
-  library call: Unknown: semantics/diag.h:1019 diag_render: precondition of snprintf_va_2: \valid(buf + (0 .. size - 1)) ∨ \valid(buf + (0 .. format_length(format) - 1))
+  library call: Unknown: semantics/diag.h:1020 diag_render: precondition of snprintf_va_2: \valid(buf + (0 .. size - 1)) ∨ \valid(buf + (0 .. format_length(format) - 1))
 
 vec @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 121/0/0; functions 55/199
 
@@ -121,7 +125,7 @@ stringbuf @ rv64_lp64: end reached, fails {0; 1; 2; 3; 4; 5}; alarms 0; program 
 
 stack @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; preconditions 60/0/0; functions 37/213
 
-array @ rv64_lp64: end reached, fails {0; 1; 2; 3}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; checks not confirmed at lines 29,31,33; preconditions 88/0/0; functions 42/105
+array @ rv64_lp64: end reached, fails {0; 1; 2; 3}; alarms 0; program calls: 0 invalid, 0 unknown; library calls: 0 invalid, 0 unknown; checks not confirmed at lines 29,31,33; preconditions 82/0/0; functions 42/105
 
 hashmap @ rv64_lp64: end reached, fails {0}; alarms 0; program calls: 0 invalid, 16 unknown; library calls: 0 invalid, 1 unknown; preconditions 55/17/0; functions 38/148
   call: Unknown: tools/eva/programs/hashmap.c:26 main: precondition of hashmap_insert: map ≡ \null ∨ hashmap_inv_(map)

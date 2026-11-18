@@ -255,25 +255,32 @@ def one(ag, unit, mode, opts):
         raise RuntimeError(f'{unit}, {mode}: {why}')
     count = smoke_count(text)
     lines = smoke_results(text)
-    failed = [g for st, _, g in lines if st == 'Failed']
-    noresult = [g for st, _, g in lines if st in ('NoResult', 'Failure')]
+    # WP prints a failed smoke test's line once for each prover that proves
+    # it, and its summary counts it as often (run 1): each test once here.
+    failed = list(dict.fromkeys(g for st, _, g in lines if st == 'Failed'))
+    noresult = list(dict.fromkeys(g for st, _, g in lines
+                                  if st in ('NoResult', 'Failure') and g not in failed))
     places = doomed(text)
     rows = report(rep)
     data = {'unit': unit, 'mode': mode, 'minutes': round(minutes, 1),
             'summary': list(s[:2]) if s else None, 'cats': s[2] if s else None,
             'smoke': list(count) if count else None, 'failed': failed,
-            'noresult': noresult, 'doomed': places}
+            'noresult': noresult, 'doomed': places,
+            'tests': len(rows) if rows is not None else None}
     if s is None:
         line = f'{unit}, {mode}: no goal (WP printed no summary)'
     else:
-        # WP counts a smoke test passed or not; one not passed has failed,
-        # or has no result. Its lines name each.
-        passed, total = count if count else (0, 0)
-        line = f'{unit}, {mode}: smoke tests {total}, passed {passed}, failed {total - passed - len(noresult)}'
+        # The smoke tests, each once: WP's JSON report's, or else its
+        # summary's, less what it counts twice.
+        if rows is not None:
+            total = len(rows)
+        else:
+            passed_, total_ = count if count else (0, 0)
+            total = passed_ + len(failed) + len(noresult)
+        line = (f'{unit}, {mode}: smoke tests {total}, passed {total - len(failed) - len(noresult)}, '
+                f'failed {len(failed)}')
         if failed:
             line += f' ({by_kind(failed)}): {names(sorted(set(function_of(g) for g in failed)))}'
-        if len(failed) != total - passed - len(noresult):
-            line += f' (WP\'s lines name {len(failed)})'
         if noresult:
             line += f'; no result {len(noresult)}'
         if places:
@@ -281,6 +288,8 @@ def one(ag, unit, mode, opts):
         line += f'; WP {s[0]} / {s[1]}'
     line += f'; {minutes:.1f} minutes'
     print(line)
+    if count:
+        print(f'--- {unit}, {mode}: WP\'s summary, "Smoke Tests: {count[0]} / {count[1]}"')
     print(f'--- {unit}, {mode}: smoke tests that failed ({len(failed)}) and gave no result '
           f'({len(noresult)}) ---')
     shown('\n'.join([f'Failed: {g}' for g in failed[:LISTED]]
@@ -312,6 +321,8 @@ def one(ag, unit, mode, opts):
 def compared(unit, a, b):
     """The two runs' smoke tests side by side: a smoke-only, b full."""
     def total(x):
+        if x.get('tests') is not None:
+            return x['tests']
         return x['smoke'][1] if x.get('smoke') else 0
     fa, fb = set(a['failed']), set(b['failed'])
     line = (f'{unit}, the two runs: smoke-only {total(a)} smoke tests, failed {len(fa)}; '

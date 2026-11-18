@@ -1792,10 +1792,12 @@ jobs:
       - name: "Debug: per-line MC/DC detail for array.h (cover TU)"
         # MCDC-020 (VERIFY-052). array.h's conditions are stamped to the cover
         # TU's instantiation line; option is defined under test/support.
-        # Measured locally (GCC 14) 42 / 46: the four misses are checked_mul's
-        # failure at from_ptr, size_bytes, as_bytes and as_cbytes, dead (the
-        # product is the size of an object that exists). Any other miss is a
-        # gap in the cover TU. Report-only. Never fails.
+        # Measured locally (GCC 14) 43 / 46 since VERIFY-087 run 2: the three
+        # misses are checked_mul's failure at size_bytes, as_bytes and
+        # as_cbytes, dead (the product is the size of an object that exists).
+        # The fourth until then (42 / 46), at from_ptr, went with its memcpy:
+        # from_ptr copies element by element. Any other miss is a gap in the
+        # cover TU. Report-only. Never fails.
         run: |
           cd build
           GCDA=$(find . -name "array_cover.c.gcda" | head -1)

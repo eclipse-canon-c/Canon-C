@@ -3014,14 +3014,16 @@ jobs:
   # then DEFINE_ARRAY(int, 8). array.h's contracts are in its macro body, so
   # the unit is preprocessed with -CC, with the flags and model (Typed+Cast)
   # of frama-c-stack. Its unproved goals are split by name:
-  #   - own: names containing _array_int_8_, compared with the eight that
-  #     VERIFY-052 predicts (PRED_OWN);
+  #   - own: names containing _array_int_8_, the eight VERIFY-052 predicted,
+  #     six since VERIFY-087's run 2 (zero's and from_ptr's memsets went);
   #   - inherited: the rest, compared with the closure's existing pins:
   #     cc-slice's 8 (vmacros/vdrivers/cc_pins/slice.txt) and, from cc-vec's
   #     (vec.txt), option's 6 and checked.h's 2.
   #
-  # REPORT-ONLY until VERIFY-052's runs agree; then the proved line and both
-  # sets are pinned. A Failed, Invalid or Stepout goal, or a missing summary,
+  # REPORT-ONLY until VERIFY-052's runs agreed; then the proved line and both
+  # sets were pinned, and enforced from its run 3. Report-only again at
+  # VERIFY-087's run 2, which measures the new zero and from_ptr; its run 3
+  # pins the count. A Failed, Invalid or Stepout goal, or a missing summary,
   # always fails it. The result is also emitted as an annotation.
   # -------------------------------------------------------------------------
   frama-c-array:
@@ -3033,11 +3035,13 @@ jobs:
       - name: "WP under -CC: data/array.h at (int, 8)"
         run: |
           eval $(opam env --switch=frama-c)
-          ENFORCE=1   # VERIFY-052: enforced from run 3; pins from runs 1 and 2 (23bad5e, 0ae029f), identical
-          PIN_PROVED="2863 / 2887"
-          # The 24 unproved names, by set equality: 16 inherited (cc-slice's
-          # 8; option's 6 and checked.h's 2, as cc-vec pins them) and 8 own,
+          ENFORCE=0   # VERIFY-087 run 2: report-only while the fix of zero and from_ptr is measured; its run 3 pins the count and enforces (VERIFY-052: enforced from run 3; pins from runs 1 and 2 (23bad5e, 0ae029f), identical)
+          PIN_PROVED="2863 / 2887"   # before VERIFY-087 run 2; its run 3 pins the count run 2 measures
+          # The 22 unproved names, by set equality: 16 inherited (cc-slice's
+          # 8; option's 6 and checked.h's 2, as cc-vec pins them) and 6 own,
           # filed by name in docs/deviations.md (VERIFY-052, enforcement).
+          # VERIFY-087 run 2 predicts them: the two memset preconditions of
+          # zero and from_ptr go with their memsets.
           PIN_NAMES=(
             "typed_cast_array_int_8_as_bytes_call_bytes_from_requires_2"
             "typed_cast_array_int_8_as_cbytes_call_cbytes_from_requires_2"
@@ -3045,8 +3049,6 @@ jobs:
             "typed_cast_array_int_8_equal_call_memcmp_requires_danglingness_s2"
             "typed_cast_array_int_8_equal_call_memcmp_requires_valid_s1"
             "typed_cast_array_int_8_equal_call_memcmp_requires_valid_s2"
-            "typed_cast_array_int_8_from_ptr_call_memset_requires_valid_s"
-            "typed_cast_array_int_8_zero_call_memset_requires_valid_s"
             "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
             "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
             "typed_cast_checked_add_overflow_ensures"
@@ -3103,7 +3105,7 @@ jobs:
           echo "=== pinned, not unproved ==="; comm -23 pins.txt unproved.txt | sed 's/^/    /'
           FAILS=0
           if cmp -s pins.txt unproved.txt; then
-            echo "NAMES SAME: the 24 pinned names, exactly."
+            echo "NAMES SAME: the 22 pinned names, exactly."
           else
             echo "DIFFERS: the unproved set is not the pinned one (above)."; FAILS=$((FAILS + 1))
           fi

@@ -98,7 +98,7 @@
  * Portability:
  * ----------------------------------------------------------------------------
  * - Requires C99 or later
- * - Uses <string.h> for memset and memcmp
+ * - Uses <string.h> for memcmp
  * - Uses checked_mul() from core/primitives/checked.h for overflow-safe
  *   size calculations
  * - No platform-specific code
@@ -204,7 +204,7 @@
  * Generated functions:
  *
  * Constructors:
- * - array_##type##_##N##_zero()                    -> array (all bytes zeroed)
+ * - array_##type##_##N##_zero()                    -> array (all elements zero)
  * - array_##type##_##N##_fill(val)                 -> array (all elements = val)
  * - array_##type##_##N##_from_ptr(src, count)      -> array (copy from borrowed(const type*))
  *
@@ -256,14 +256,6 @@ typedef struct { \
    ============================================================================ */ \
 \
 /*@ assigns \nothing;                                                                               \
-    ensures \forall integer k; 0 <= k < (sizeof(\result.items) / sizeof(\result.items[0])) ==> \result.items[k] == 0; */\
-static inline array_##type##_##N array_##type##_##N##_zero(void) { \
-    array_##type##_##N a; \
-    memset(a.items, 0, sizeof(a.items)); \
-    return a; \
-} \
-\
-/*@ assigns \nothing;                                                                               \
     ensures \forall integer k; 0 <= k < (sizeof(\result.items) / sizeof(\result.items[0])) ==> \result.items[k] == val; */\
 static inline array_##type##_##N array_##type##_##N##_fill(type val) { \
     array_##type##_##N a; \
@@ -276,6 +268,21 @@ static inline array_##type##_##N array_##type##_##N##_fill(type val) { \
         a.items[_i] = val; \
     } \
     return a; \
+} \
+\
+/** \
+ * @brief Returns an array whose N elements are zero. O(N) \
+ * \
+ * The elements are stored as values of the type (VERIFY-087 run 2): a \
+ * memset of the local's bytes, which this replaces, asks WP's typed model \
+ * for more cells than the local has, and made what WP proved past it of \
+ * nothing. \
+ */ \
+/*@ assigns \nothing;                                                                               \
+    ensures \forall integer k; 0 <= k < (sizeof(\result.items) / sizeof(\result.items[0])) ==> \result.items[k] == 0; */\
+static inline array_##type##_##N array_##type##_##N##_zero(void) { \
+    type zero_val = {0}; \
+    return array_##type##_##N##_fill(zero_val); \
 } \
 \
 /** \
@@ -301,14 +308,20 @@ static inline array_##type##_##N array_##type##_##N##_fill(type val) { \
     disjoint behaviors; */                                                                          \
 static inline array_##type##_##N array_##type##_##N##_from_ptr( \
     borrowed(const type *) src, usize count) { \
-    array_##type##_##N a; \
+    type zero_val = {0}; \
+    array_##type##_##N a = array_##type##_##N##_fill(zero_val); \
     usize copy_n; \
-    usize byte_size; \
-    memset(a.items, 0, sizeof(a.items)); \
+    usize _i; \
     if (!src || count == 0) { return a; } \
     copy_n = (count < (usize)(N)) ? count : (usize)(N); \
-    if (!checked_mul(copy_n, sizeof(type), &byte_size)) { return a; } \
-    memcpy(a.items, src, byte_size); \
+    /*@ loop invariant 0 <= _i <= copy_n;                                                            \
+        loop invariant \forall integer k; 0 <= k < _i ==> a.items[k] == src[k];                     \
+        loop invariant \forall integer k; _i <= k < (sizeof(a.items) / sizeof(a.items[0])) ==> a.items[k] == zero_val; \
+        loop assigns _i, a.items[0 .. (sizeof(a.items) / sizeof(a.items[0])) - 1];                  \
+        loop variant copy_n - _i; */                                                                \
+    for (_i = 0; _i < copy_n; _i++) { \
+        a.items[_i] = src[_i]; \
+    } \
     return a; \
 } \
 \

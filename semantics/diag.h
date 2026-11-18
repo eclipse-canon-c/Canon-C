@@ -249,11 +249,13 @@ typedef struct {
    ════════════════════════════════════════════════════════════════════════════
 
    Verification notes (VERIFY-017):
-   - Own residuals are a single class: libc byte-view through Typed+Cast
-     (the memset byte spec vs. the typed Diag location, VERIFY-007/-008
-     pattern) — 1 goal, in diag_init. diag_push's shift was a memmove,
-     whose byte spec left 7 more until VERIFY-073 made it a loop of frame
-     copies, proved. Round-1's predicted class (b), stdio-intrinsic
+   - Own residuals: none since VERIFY-087 run 2. The last, the libc
+     byte-view class through Typed+Cast (the memset byte spec vs. the typed
+     Diag location, VERIFY-007/-008 pattern), was 1 goal, in diag_init; its
+     memset, false in WP's model, made what WP proved past it of nothing,
+     and is now a zero initialiser. diag_push's shift was a memmove, whose
+     byte spec left 7 more until VERIFY-073 made it a loop of frame copies,
+     proved. Round-1's predicted class (b), stdio-intrinsic
      residuals, did NOT materialize: with sound trusted axioms (see the
      __FRAMAC__ block at the top of this header) the stdio surface
      contributes zero residuals, so diag.h adds no new residual class to
@@ -291,7 +293,7 @@ typedef struct {
  *
  *   Diag d = diag_init();
  *
- * Time:  O(N × M) — memset over sizeof(Diag).
+ * Time:  O(N × M) — zero-initialisation of sizeof(Diag).
  * Space: O(1) — returned by value, no heap.
  */
 /*@
@@ -300,14 +302,13 @@ typedef struct {
 */
 static inline Diag diag_init(void)
 {
-    Diag d;
-    (void)memset(&d, 0, sizeof(d));
-    /* Redundant with the memset, but restates depth == 0 as a typed
-     * store: WP derives the postcondition directly instead of through
-     * byte-level reinterpretation of the memset, which the Typed memory
-     * model cannot do. Same authoring-time pattern as the overflow clamp
-     * in diag_push. The optimizer folds the dead store. */
-    d.depth = 0;
+    /* Every frame and the depth zero, as an initialiser of the type's
+     * members, which WP reads as stores (VERIFY-087 run 2). The memset of
+     * sizeof(d) bytes it replaces asked WP's typed model for more cells
+     * than it counts in a Diag (at x86_64, 1288 of 1057): false there,
+     * and taken as a hypothesis after the call, it made what WP proved
+     * past it, the postcondition among it, of nothing. */
+    Diag d = {0};
     return d;
 }
 

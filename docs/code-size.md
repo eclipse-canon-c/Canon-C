@@ -69,21 +69,26 @@ the measure: two of `core/memory.h`'s figures, whose function the first
 run had counted for no header, and the tokens, which it counted as lines.
 `util/random.h`'s row is VERIFY-072's, whose fixes gave its range
 functions the full `i32` range, spans that overflow, infinite bounds, and a
-draw again where rounding reached `max`. `semantics/diag.h`'s is
+draw again where rounding reached `max`. `semantics/diag.h`'s was
 VERIFY-073's, whose shift of a full chain, a loop of frame copies where it
-was a `memmove`, costs nothing at `-Os` and 2 to 12 bytes at `-O2`.
+was a `memmove`, cost nothing at `-Os` and 2 to 12 bytes at `-O2`. It and
+`data/array.h`'s are VERIFY-087's, whose `diag_init`, and array's `zero`
+and `from_ptr`, store values of the type where they called `memset`, and
+`from_ptr` copies element by element where it called `memcpy`: `diag.h`
+22 to 32 bytes fewer at both levels, `array.h` 22 to 30 fewer at `-Os` and
+10 to 16 more at `-O2`.
 In bytes, at `-Os` as shipped unless the column says otherwise.
 
 **All headers together**, every function kept:
 
 | target | -Os, as shipped | -Os, checks off | -O2, as shipped | -O2, checks off |
 |--------|----------------:|----------------:|----------------:|----------------:|
-| cortex-m0plus | 44,696 | 28,706 | 75,320 | 41,986 |
-| cortex-m4 | 44,588 | 29,080 | 71,208 | 40,556 |
-| rv32imac | 54,684 | 33,126 | 90,034 | 48,076 |
+| cortex-m0plus | 44,642 | 28,652 | 75,298 | 41,964 |
+| cortex-m4 | 44,536 | 29,028 | 71,198 | 40,546 |
+| rv32imac | 54,628 | 33,070 | 90,020 | 48,062 |
 
 The run-time checks are about a third of the code at `-Os`: on Cortex-M4,
-15,508 of 44,588 bytes. `require()` stays on in release builds by design
+15,508 of 44,536 bytes. `require()` stays on in release builds by design
 (`core/primitives/contract.h`); a program whose contracts are proved can
 turn it off with `CANON_NO_REQUIRE`.
 
@@ -115,7 +120,7 @@ turn it off with `CANON_NO_REQUIRE`.
 | `core/region.h` | 12 | 780 | 758 | 1,082 | 162 | 802 | 10,278 |
 | `core/scope.h` | 0 | 0 | 0 | 0 | 0 | 0 | 4 |
 | `core/slice.h` | 22 | 692 | 782 | 704 | 612 | 958 | 1,561 |
-| `data/array.h` | 20 | 684 | 680 | 878 | 342 | 878 | 6,517 |
+| `data/array.h` | 20 | 662 | 650 | 852 | 312 | 890 | 6,499 |
 | `data/bitset.h` | 48 | 2,218 | 2,444 | 2,738 | 1,806 | 3,328 | 12,300 |
 | `data/convenience/dynstring.h` | 23 | 834 | 798 | 1,162 | 800 | 1,902 | 9,117 |
 | `data/convenience/dynvec.h` | 21 | 478 | 442 | 578 | 442 | 528 | 8,929 |
@@ -133,7 +138,7 @@ turn it off with `CANON_NO_REQUIRE`.
 | `data/vec/vec_fmt.h` | 2 | 122 | 108 | 184 | 108 | 136 | 16,898 |
 | `data/vec/vec_range.h` | 1 | 156 | 162 | 166 | 166 | 396 | 15,496 |
 | `semantics/borrow.h` | 24 | 564 | 620 | 672 | 462 | 896 | 5,090 |
-| `semantics/diag.h` | 13 | 790 | 758 | 936 | 708 | 832 | 2,020 |
+| `semantics/diag.h` | 13 | 758 | 736 | 906 | 686 | 810 | 2,002 |
 | `semantics/error.h` | 4 | 286 | 306 | 376 | 306 | 302 | 365 |
 | `semantics/option/option.h` | 16 | 574 | 640 | 638 | 446 | 682 | 1,099 |
 | `semantics/result/result.h` | 17 | 738 | 788 | 608 | 566 | 832 | 1,466 |

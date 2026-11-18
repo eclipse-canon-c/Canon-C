@@ -933,9 +933,11 @@ jobs:
       - uses: ./.github/actions/framac-setup
       - name: "WP: semantics/diag.h"
         # diag.h — Typed+Cast, 120s / -wp-split, -variadic-no-translation.
-        # Expected: 3073 / 3074 proved, exactly 1 unproved (VERIFY-073):
-        # 1 own; the 2 inherited closed at G14 (VERIFY-039), the 7 at the
-        # memmove at VERIFY-073. Also
+        # Expected: every goal proved, none unproved (VERIFY-087 run 2):
+        # the last own, diag_init's memset, went with the memset; the 2
+        # inherited closed at G14 (VERIFY-039), the 7 at the memmove at
+        # VERIFY-073. Report-only at VERIFY-087 run 2, which measures the
+        # count; its run 3 pins it and enforces. Also
         # enforces the MCDC-009 closure:
         # dead_by_invariant_clamp must remain in the proved set. Any
         # deviation is a regression and fails the job.
@@ -945,9 +947,9 @@ jobs:
         run: |
           eval $(opam env --switch=frama-c)
           # ---- ENFORCEMENT VALUES: pinned at 1965b23 (2026-07-08) ----
-          ENFORCE=1
-          EXPECTED_UNPROVED=1   # VERIFY-073 run 1c measured: 8 -> 1 (VERIFY-039 G14: 10 -> 8)
-          EXPECTED_PROVED="3073 / 3074"   # VERIFY-073 run 1c measured: the shift a loop, the frames kept whole (3050 / 3058 before)
+          ENFORCE=0   # VERIFY-087 run 2: report-only while diag_init's fix is measured; its run 3 pins the count and enforces
+          EXPECTED_UNPROVED=0   # VERIFY-087 run 2 predicted: 1 -> 0, diag_init's memset gone (VERIFY-073 run 1c measured: 8 -> 1; VERIFY-039 G14: 10 -> 8)
+          EXPECTED_PROVED=""   # VERIFY-087 run 2 measures it (3073 / 3074 before: VERIFY-073 run 1c, the shift a loop, the frames kept whole; 3050 / 3058 before that)
           WP_MODEL="Typed+Cast"         # diag.h's own casts force it
           # ------------------------------------------------------------------
           FAILURES=0
@@ -1002,7 +1004,7 @@ jobs:
             STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_diag_output.txt || true)
             UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
             echo "  Timeouts: ${TIMEOUT_COUNT}"
-            echo "  Unknown:  ${UNKNOWN_COUNT}   (0-1 — the diag_init memset goal oscillates Timeout/Unknown)"
+            echo "  Unknown:  ${UNKNOWN_COUNT}"
             echo "  Failed:   ${FAILED_COUNT}"
             echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
             if [ "${FAILED_COUNT}" -ne 0 ]; then
@@ -1069,17 +1071,17 @@ jobs:
               note_fail "FAIL: inherited set differs from the composability record."
             fi
             echo ""
-            echo "  --- Own-residual roll-call: 1 expected (VERIFY-017 cat 1) ---"
-            # libc byte-view through Typed+Cast — the memset byte spec vs
-            # the typed Diag location (VERIFY-007/-008 class). Until
-            # VERIFY-073, diag_push's shift was a memmove and left 7 more
-            # (its valid_dest/src, push_shift_semantics parts 05-07, the
-            # assigns' exit part02 and normal part03); the shift is now a
-            # loop of frame copies, and they are gone or proved.
+            echo "  --- Own-residual roll-call: 0 expected (VERIFY-087 run 2) ---"
+            # The last own residual, libc byte-view through Typed+Cast (the
+            # memset byte spec vs the typed Diag location, VERIFY-007/-008
+            # class: typed_cast_diag_init_call_memset_requires_valid_s),
+            # went with diag_init's memset at VERIFY-087 run 2: false in
+            # WP's model, it had made what WP proved past it of nothing.
+            # Until VERIFY-073, diag_push's shift was a memmove and left 7
+            # more (its valid_dest/src, push_shift_semantics parts 05-07,
+            # the assigns' exit part02 and normal part03); the shift is now
+            # a loop of frame copies, and they are gone or proved.
             OWN_CHECKS=(
-              # diag_init — byte view of a local Diag at the memset
-              # (oscillates Timeout/Unknown across runs)
-              "typed_cast_diag_init_call_memset_requires_valid_s"
             )
             OWN_SEEN=0
             for goal in "${OWN_CHECKS[@]}"; do
@@ -1089,7 +1091,7 @@ jobs:
                 note_fail "FAIL: expected unproved goal ${goal} not observed."
               fi
             done
-            echo "  Own residuals observed: ${OWN_SEEN}/1 (expected 1)"
+            echo "  Own residuals observed: ${OWN_SEEN}/0 (expected 0)"
             OTHER_UNPROVED=$((UNPROVED_COUNT - INHERITED_SEEN - OWN_SEEN))
             echo "  Unproved outside the documented set: ${OTHER_UNPROVED} (expected 0)"
             if [ "${OTHER_UNPROVED}" -ne 0 ]; then
@@ -1133,16 +1135,13 @@ jobs:
               echo "  (re)enabling enforcement."
             fi
           elif [ "${FAILURES}" -eq 0 ]; then
-            echo "PASS: diag.h verified — 3073/3074 proved, 1 documented"
-            echo "      residual observed (VERIFY-017, VERIFY-073): 0 inherited"
-            echo "      (the contract.h handler pair until VERIFY-039 G14)"
-            echo "      + 1 own (libc byte-view"
-            echo "      through Typed+Cast at the memset site);"
+            echo "PASS: diag.h verified — ${PROVED_COUNT} proved, no residual"
+            echo "      (VERIFY-017): 0 inherited (the contract.h handler pair"
+            echo "      until VERIFY-039 G14), 0 own (diag_init's memset, the"
+            echo "      last, until VERIFY-087 run 2);"
             echo "      dead_by_invariant_clamp proved (MCDC-009 closure"
             echo "      intact). Zero stdio residuals under the documented"
-            echo "      trusted axioms. Composability confirmation #7 —"
-            echo "      smallest inherited surface of any residual-carrying"
-            echo "      header."
+            echo "      trusted axioms."
           else
             echo "FAIL: ${FAILURES} enforcement check(s) missed — see FAIL lines above."
           fi
