@@ -1,0 +1,32 @@
+# tools/cortexm/pins.txt -- the tests that do not pass on Cortex-M under
+# QEMU (tools/cortexm/cortexm.py, VERIFY-089). Each line: the test, the
+# CPUs (all, m0plus, m4), the C libraries (all, newlib, picolibc), the
+# build types (all, or a list of Debug, Release, RelWithDebInfo and
+# MinSizeRel), and what the test does there: "not-built", or "fails N",
+# N the lines of its output that begin with FAIL. A test no line names
+# must pass. VERIFY-089's run 1 takes them from its measure here.
+#
+# util/time.h needs clock_gettime and CLOCK_MONOTONIC, and the test
+# nanosleep: neither C library has them (the README's Tier 2).
+time_test          all  all       all                        not-built
+# CANON_LIFETIME_DEBUG's counter, which the test turns on, is a 64-bit
+# __atomic_fetch_add: GCC calls __atomic_fetch_add_8 for it, which
+# nothing here provides.
+lifetime_test      all  all       all                        not-built
+# File I/O (Tier 2) through semihosting: picolibc's has no rename; with
+# newlib, rename through QEMU's semihosting fails (ENOSYS), and with it
+# file_write_all_atomic, and impl_defined_test's five checks of rename.
+file_test          all  picolibc  all                        not-built
+impl_defined_test  all  picolibc  all                        not-built
+file_test          all  newlib    all                        fails 1
+impl_defined_test  all  newlib    all                        fails 5
+# This newlib has no C99 printf formats (_WANT_IO_C99_FORMATS is not in
+# its newlib.h): %zu prints "zu" and takes no argument, so that the
+# arguments after it are read as the wrong types. diag.h's rendering and
+# hashmap_fmt.h's header use %zu; picolibc's printf has it.
+diag_test          all  newlib    all                        fails 19
+hashmap_test       all  newlib    all                        fails 1
+# GCC 13.2 folds option_Point_combine_with(some({3,4}), some({3,4}),
+# point_add) to Some({3,4}) at -O2 and -Os, where it is Some({6,8}):
+# wrong code, gone with -fno-ipa-sra, -fno-ipa-cp or -fno-tree-sra.
+option_test        all  all       RelWithDebInfo,MinSizeRel  fails 1

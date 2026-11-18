@@ -1,7 +1,8 @@
 name: "2 · Platforms"
 # Portability beyond the build matrix: musl, Linux AArch64, C11 to C23,
-# big-endian s390x under qemu, and the embedded compile checks (Cortex-M,
-# RISC-V, AVR). Map: .github/workflows/README.md.
+# big-endian s390x under qemu, the embedded compile checks (Cortex-M,
+# RISC-V, AVR), and the tests on Cortex-M0+ and Cortex-M4 under QEMU.
+# Map: .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -256,4 +257,49 @@ jobs:
         with:
           name: metrics
           path: metrics_out/
+          retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # 1i. Cortex-M under QEMU — the tests run (VERIFY-089)
+  #
+  #    The embedded job compiles the tests for Cortex-M; this one runs them
+  #    there. arm-none-eabi-gcc with newlib or picolibc; each test is run
+  #    under qemu-system-arm through semihosting, which carries its output
+  #    and exit status to the host: Cortex-M0+ code (Armv6-M, soft float,
+  #    which faults on an unaligned access) on QEMU's micro:bit, whose
+  #    Cortex-M0 runs it, and Cortex-M4 with hard float on mps2-an386. Each
+  #    at Debug, Release, RelWithDebInfo and MinSizeRel. The tests that do
+  #    not pass there are pinned, each with its reason
+  #    (tools/cortexm/pins.txt); report-only in VERIFY-089's run 1
+  #    (ENFORCE in the script).
+  # -------------------------------------------------------------------------
+  cortex-m:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        cpu: [m0plus, m4]
+        libc: [newlib, picolibc]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install the Arm toolchain, newlib, picolibc and QEMU
+        # Without the packages apt recommends, as the embedded job installs
+        # them; the limit fails a stalled mirror in 30 minutes.
+        timeout-minutes: 30
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-arm-none-eabi libnewlib-arm-none-eabi \
+            picolibc-arm-none-eabi qemu-system-arm
+      - name: "The tests on Cortex-M under QEMU: ${{ matrix.cpu }}, ${{ matrix.libc }}"
+        run: python3 tools/cortexm/cortexm.py run ${{ matrix.cpu }} ${{ matrix.libc }}
+      - name: Upload the builds' logs and summaries
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cortex-m-${{ matrix.cpu }}-${{ matrix.libc }}
+          path: |
+            cortexm_out/*.json
+            cortexm_out/*.build.log
+          if-no-files-found: warn
           retention-days: 90

@@ -10,7 +10,7 @@ cite.
 | # | file | sidebar name | holds | fails the push? |
 |---|------|--------------|-------|-----------------|
 | 1 | `ci.yml` | 1 · Build & test | Build and test matrix (Linux, Windows MSVC and MinGW, macOS; Release, and Debug with sanitizers), i386, Valgrind, libFuzzer, the lifetime token under concurrency, lifetime-debug | yes |
-| 2 | `platforms.yml` | 2 · Platforms | musl, Linux AArch64, C11 to C23, big-endian s390x (qemu), embedded compile checks (Cortex-M, RISC-V, AVR tiers), code size and build cost by header (VERIFY-070), each function's complexity by Frama-C's Metrics, by header (VERIFY-081) | yes; since VERIFY-070's third run, a header's size or tokens not as pinned (`tools/size/pins.txt`) fails the embedded job. Metrics: yes, since VERIFY-081's run 2: a function whose cyclomatic complexity is not as pinned (`tools/metrics/pins.txt`), or that is measured and not pinned, or pinned and not measured, fails the metrics job |
+| 2 | `platforms.yml` | 2 · Platforms | musl, Linux AArch64, C11 to C23, big-endian s390x (qemu), embedded compile checks (Cortex-M, RISC-V, AVR tiers), code size and build cost by header (VERIFY-070), each function's complexity by Frama-C's Metrics, by header (VERIFY-081), the tests on Cortex-M0+ and Cortex-M4 under QEMU, with newlib and picolibc (VERIFY-089, `tools/cortexm/`) | yes; since VERIFY-070's third run, a header's size or tokens not as pinned (`tools/size/pins.txt`) fails the embedded job. Metrics: yes, since VERIFY-081's run 2: a function whose cyclomatic complexity is not as pinned (`tools/metrics/pins.txt`), or that is measured and not pinned, or pinned and not measured, fails the metrics job. Cortex-M: not yet, report-only until VERIFY-089's run 2 |
 | 3 | `analysis.yml` | 3 · Static analysis & coverage | clang-tidy and Cppcheck, clang-tidy's CERT C checks on the library's code (VERIFY-077), MISRA C:2012, MC/DC and branch coverage, CompCert | static-analysis and coverage's threshold: yes; a CERT C finding in the library's code fails static-analysis (`tools/cert/cert_check.py`). MISRA: yes, since VERIFY-068's third run: a real finding not as pinned by file and rule (`tools/misra/pins.txt`, each line naming its record) fails the job, as does a canary not seen. CompCert: informational |
 | 4 | `proofs-core.yml` | 4 · Proofs: core/ | Frama-C WP, one job per unit of core/ and core/primitives/, plus arena at 32-bit and memory/bits at LLP64, and `frama-c-compare-order`: compare.h's 24 comparators as total orders, through the driver `vmacros/vdrivers/compare_order_verify.h`, the comparators' calls inlined (VERIFY-084) | yes, each job on its pins |
 | 5 | `proofs-semantics.yml` | 5 · Proofs: semantics/ | WP for error, option, result, borrow, diag | yes |
@@ -46,8 +46,10 @@ still there for detail.
   For a test that needs a second translation unit, list both files under
   `SRC`, and name the second `X_defs.c` beside `X_test.c` so that CompCert
   links it too. Every build job then runs it, and the embedded check
-  compiles it, with no workflow edit. A test that includes from
-  directories outside the library's, as
+  compiles it, with no workflow edit; the `cortex-m` job runs it on
+  Cortex-M under QEMU, and a test that cannot pass there needs its line
+  in `tools/cortexm/pins.txt`, with the reason (VERIFY-089). A test that
+  includes from directories outside the library's, as
   `test/integrations/autosar/autosar_test.c` does (VERIFY-075), needs them
   on three more include paths: the embedded check's
   (`tools/embedded_compile_check.sh`), CompCert's and the static-analysis
