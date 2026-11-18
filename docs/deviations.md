@@ -39816,7 +39816,7 @@ six of seven. What it shows:
 | **ID**         | VERIFY-089 |
 | **Date**       | 2026-11-18 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-18 — Run 1 scored: Q1 to Q7 MATCH. On the runner every leg gave the outcomes measured here. The author decided the three measures of the library and its toolchains: a leg with the Arm GNU Toolchain first, on GCC 13.2's wrong code; `%zu` out of the library, in a record of its own; and `CANON_LIFETIME_NO_ATOMICS` documented and defined in the job. Run 2, pre-registered below, enforces Ubuntu's legs and measures the Arm GNU Toolchain 15.3.Rel2's, report-only. Run 2 scored: R1 to R9 MATCH. GCC 15.3 compiles `option_test` right where GCC 13.2 does not; Arm's newlib has C99's formats, where Ubuntu's has not. Run 3, pre-registered below, pins and enforces the Arm legs, and the README and `docs/architectures.md` say what the job shows. |
+| **Status update** | 2026-11-18 — Run 1 scored: Q1 to Q7 MATCH. On the runner every leg gave the outcomes measured here. The author decided the three measures of the library and its toolchains: a leg with the Arm GNU Toolchain first, on GCC 13.2's wrong code; `%zu` out of the library, in a record of its own; and `CANON_LIFETIME_NO_ATOMICS` documented and defined in the job. Run 2, pre-registered below, enforces Ubuntu's legs and measures the Arm GNU Toolchain 15.3.Rel2's, report-only. Run 2 scored: R1 to R9 MATCH. GCC 15.3 compiles `option_test` right where GCC 13.2 does not; Arm's newlib has C99's formats, where Ubuntu's has not. Run 3, pre-registered below, pins and enforces the Arm legs, and the README and `docs/architectures.md` say what the job shows. Run 3 scored (2026-11-19): S1 and S3 to S6 MATCH; S2 MISS: `1 · Build & test` red, one Windows job on a new runner image whose MSVC 19.52 reports C4789 in `smallvec_test.c`, which VERIFY-090 takes up. CLOSED: the job runs the tests on Cortex-M0+ and Cortex-M4 under QEMU with both toolchains, enforced; 21 of 22 predictions ("Run 3 scored", below). The Status above is the record as committed. |
 | **Baseline**   | a0ce2f2 (VERIFY-088's close): `1`, `3` to `6` #77 (ff4850b); `2 · Platforms` #110 (3055981); `8 · Records` #128 (a0ce2f2). |
 | **Scope**      | Run 1: `tools/cortexm/` (new: `cortexm.py`, `toolchain.cmake`, `startup.c`, `cortexm.ld`, `pins.txt`, `README.md`); `platforms.yml`, the job `cortex-m` and the header; `records.yml`, a step, its paths and the header; the workflow map, row 2 and the note on a new test. Run 2: `cortexm.py` (`ENFORCE`, the toolchain, report-only legs, the C library's line, `CANON_LIFETIME_NO_ATOMICS`), `pins.txt` and the tool's README; `platforms.yml`'s job, the Arm GNU Toolchain's legs; the README's bare-metal section; the workflow map's row 2. Run 3: `pins.txt`; `platforms.yml`, the Arm legs enforced; the README's bare-metal section, `docs/architectures.md`, the tool's README and the workflow map's row 2. |
 | **Category**   | The author's list, item 7's first part (2026-11-12): the tests run on Cortex-M under QEMU, the M4 on mps2-an386 and the M0+ if it can be done, with newlib and picolibc through semihosting: soft float, short enums, strict alignment. A record of its own, report-only and then enforced; `docs/architectures.md`'s "Tested on" rows at its close. |
@@ -40173,3 +40173,56 @@ to 16 do not (`platforms.yml` changes).
 **What follows.** S1 to S6 scored, and the record closes. The record on
 `%zu` follows: the library's four format strings, and the pins of
 `diag_test` and `hashmap_test` with Ubuntu's newlib.
+
+### Run 3 scored (2026-11-19)
+
+The push of f9a9fc3 and 9943bc1 started seven workflows: `1`, `3` to `6`
+#80, `2` #113 and `8` #131. All but 1 were green at their first attempt;
+1 was red: its job `build (windows-latest, Release, clang)` failed, and
+the six jobs that need `build` were skipped.
+
+| # | scored |
+|---|--------|
+| S1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| S2 | **MISS.** 1 is red. The failed job ran on a new version of the runner image `windows-2025-vs2026` (20261116.315.1), whose compiler is MSVC 19.52.37029.0; the three other Windows jobs ran on 20261103.298.1, MSVC 19.51.36260.0, as at #79. MSVC 19.52's optimizer reports warning C4789 in `test/data/convenience/smallvec_test.c`, "in function 'test_insert' buffer 'v' of size 56 bytes will be overrun; 4 bytes will be written starting at offset 436", an error under `/WX` (its line 95, `DEFINE_SMALLVEC(int, 4)`): the build stops there, no other test failing to build. The other nine `build` jobs, 3 to 6's jobs, and 2's sixteen jobs before `cortex-m` gave #79's and #112's notices. Nothing this run changed reaches it: the image changed under it. VERIFY-090 takes it up. |
+| S3 | **MATCH.** Ubuntu's four legs as at run 2: sixteen notices, each "as pinned". |
+| S4 | **MATCH.** The Arm legs are green, enforced: eight notices "61 tests, 58 passed, 2 failed (impl_defined_test 5, file_test 1), 1 not built (time_test); as pinned"; "Cache restored from key: arm-gnu-toolchain-463df966…", and the checksum OK. |
+| S5 | **MATCH.** 8 is green: "cortexm check: 8 pins, 61 tests in CMakeLists.txt; 0 problem(s)". |
+| S6 | **MATCH.** The six legs took 0.8 to 1.5 minutes. |
+
+Five of six.
+
+**Closed.** `2 · Platforms`' job `cortex-m` builds the 61 tests for
+Cortex-M0+ (on QEMU's micro:bit) and Cortex-M4 (on mps2-an386) at CMake's
+four build types, with Ubuntu's GCC 13.2 and newlib or picolibc, and with
+the Arm GNU Toolchain 15.3.Rel2's GCC 15.3 and newlib, fetched with its
+checksum pinned; it runs each through semihosting and fails a leg whose
+outcomes are not its pins (`tools/cortexm/pins.txt`, each with the
+reason). The README's bare-metal section and `docs/architectures.md` say
+what it shows. Three of its measures are the library's or its
+toolchains', and the author decided each: GCC 13.2's wrong code at `-O2`
+and `-Os`, documented now that GCC 15.3 is measured right; `%zu`, which
+the library will stop using, in a record of its own; and
+`CANON_LIFETIME_NO_ATOMICS`, documented and defined in the job. The close
+changes nothing but this record.
+
+The record scored 21 of its 22 predictions: run 1 seven of seven, run 2
+nine of nine, run 3 five of six. What it shows:
+
+- **Running finds what compiling cannot.** The `embedded` job had
+  compiled these tests for these CPUs since VERIFY-046; running them
+  showed a compiler that folds a call to the wrong value, a printf that
+  takes no argument for `%zu`, and an atomic that does not link. None
+  stops a build.
+- **Measure before deciding.** The leg with a newer toolchain turned "the
+  library or the compiler?" into a measure: GCC 15.3 compiles the check
+  right, and Arm's newlib has the formats Ubuntu's has not.
+- **A pin with its reason** keeps a failure in view: the environment's
+  limits (no clock, no `rename` through semihosting) are named beside the
+  defects.
+- **A moving image is an input.** S2 missed on a runner image that changed
+  between two runs, not on this run's change; one of four Windows jobs
+  drew it. A prediction that a workflow stays green holds only for the
+  images it runs on.
+- **The cost.** A leg takes about a minute; a push that changes
+  `platforms.yml` runs 1 to 6 as well, which the list's item 14 is for.
