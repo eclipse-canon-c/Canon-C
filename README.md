@@ -917,8 +917,23 @@ For what Canon-C intentionally omits, established C libraries exist:
 > with `arm-none-eabi-gcc` and both newlib and picolibc, and for RISC-V
 > RV32 and RV64 with picolibc, under the project's warning flags (job
 > `embedded`). The hashmap headers, which need a key type defined,
-> are compiled through the tests that define one. That shows they
-> compile there; they are not linked or run on the target.
+> are compiled through the tests that define one. On Cortex-M0+ and
+> Cortex-M4 the tests are also linked and run, under QEMU, with both
+> C libraries and at CMake's four build types (job `cortex-m`,
+> VERIFY-089); `tools/cortexm/pins.txt` names those that do not pass
+> there, and why. On RISC-V they are compiled, not run.
+>
+> **`CANON_LIFETIME_DEBUG` without 64-bit atomics**
+> The debug mode's token counter is a 64-bit atomic (`lifetime.h`'s
+> ladder). Where the target has no lock-free one (a Cortex-M has
+> none), GCC compiles it to a call of `__atomic_fetch_add_8`, which
+> neither libgcc nor newlib or picolibc provides there, and the link
+> fails. Define
+> `CANON_LIFETIME_NO_ATOMICS` for a single thread of execution: the
+> counter is then a plain increment, not race-free
+> (`CANON_LIFETIME_ATOMIC_IDS` is 0). Or provide
+> `__atomic_fetch_add_8` yourself, with interrupts masked around it.
+> The `cortex-m` job defines `CANON_LIFETIME_NO_ATOMICS`.
 >
 > **stdio**
 > stdio enters Canon-C in exactly two ways. The default contract panic

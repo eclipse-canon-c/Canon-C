@@ -6,7 +6,10 @@ cortexm.py -- the test suite on Cortex-M0+ and Cortex-M4 under QEMU
 `2 · Platforms`' job `embedded` compiles the tests for Cortex-M; this runs
 them there. Each test of CMakeLists.txt is built with arm-none-eabi-gcc,
 with newlib or picolibc, and run under qemu-system-arm through
-semihosting, which carries its output and its exit status to the host:
+semihosting, which carries its output and its exit status to the host.
+The toolchain is Ubuntu 24.04's packages ("ubuntu", GCC 13.2, newlib and
+picolibc), or the Arm GNU Toolchain on the PATH ("arm-15.3.rel2", its own
+GCC and newlib), named with --toolchain:
 
     m0plus   -mcpu=cortex-m0plus, soft float, on QEMU's micro:bit, whose
              Cortex-M0 runs the same Armv6-M code; its nRF51's SRAM and
@@ -17,23 +20,28 @@ semihosting, which carries its output and its exit status to the host:
 
 On both, enums are short and int32_t is long. Each is built at the four
 build types of CMake: Debug (-O0), Release (-O3), RelWithDebInfo (-O2) and
-MinSizeRel (-Os). A test passes when it exits with status 0.
+MinSizeRel (-Os), with CANON_LIFETIME_NO_ATOMICS defined: a Cortex-M has
+no lock-free 64-bit atomic, which CANON_LIFETIME_DEBUG's counter needs
+otherwise (the README's bare-metal section). A test passes when it exits
+with status 0.
 
 The tests that do not pass are pinned, with the reason, in pins.txt: each
-line a test, the CPUs, the C libraries and the build types it holds for,
-and what it does there, "not-built" or "fails N" (N the lines its output
-begins with FAIL). A test the pins do not name must pass. An outcome other
-than its pin's is a difference; with ENFORCE, a difference fails the run.
-A run that cannot configure, finds no test, or builds a binary that is not
-the CPU's (its ELF attributes) always fails.
+line a test, the toolchains, CPUs, C libraries and build types it holds
+for, and what it does there, "not-built" or "fails N" (N the lines its
+output begins with FAIL). A test the pins do not name must pass. An
+outcome other than its pin's is a difference; with ENFORCE, a difference
+fails the run, unless the run is --report-only. A run that cannot
+configure, finds no test, or builds a binary that is not the CPU's (its
+ELF attributes) always fails.
 
-    python3 tools/cortexm/cortexm.py run CPU LIBC [BUILD...]
+    python3 tools/cortexm/cortexm.py run CPU LIBC [BUILD...] [--toolchain T] [--report-only]
     python3 tools/cortexm/cortexm.py check
 
 "run" writes its builds and its summaries to cortexm_out/, run from the
-repository's root. "check" is 8 · Records': each pin well formed, naming
-a test of CMakeLists.txt, no two pins for the same test and leg, and the
-support files there.
+repository's root. Its log names the compiler, QEMU and the C library,
+with whether its printf has C99's formats. "check" is 8 · Records': each
+pin well formed, naming a test of CMakeLists.txt, no two pins for the same
+test and leg, and the support files there.
 """
 import json
 import os
@@ -49,7 +57,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 PINS = os.path.join(HERE, 'pins.txt')
 OUT = 'cortexm_out'
-ENFORCE = False       # VERIFY-089 run 1: report-only
+ENFORCE = True        # VERIFY-089 run 2: a difference fails the run (run 1 report-only)
 TIMEOUT = 60          # seconds a test, under QEMU
 SHOWN = 6             # differences named in a notice
 
@@ -75,10 +83,18 @@ CPUS = {
     },
 }
 LIBCS = ('newlib', 'picolibc')
+# The toolchains, and the C libraries each has.
+TOOLCHAINS = {
+    'ubuntu': ('newlib', 'picolibc'),
+    'arm-15.3.rel2': ('newlib',),
+}
+# Defined for every test: lifetime.h's debug counter without atomics.
+DEFINES = '-DCANON_LIFETIME_NO_ATOMICS'
+
 BUILDS = ('Debug', 'Release', 'RelWithDebInfo', 'MinSizeRel')
 SUPPORT = ('toolchain.cmake', 'startup.c', 'cortexm.ld', 'pins.txt')
 FAIL_LINE = re.compile(r'^FAIL\b')
-PIN = re.compile(r'^(\w+)\s+(all|m0plus|m4)\s+(all|newlib|picolibc)\s+(\S+)\s+'
+PIN = re.compile(r'^(\w+)\s+(\S+)\s+(all|m0plus|m4)\s+(all|newlib|picolibc)\s+(\S+)\s+'
                  r'(not-built|fails)(?:\s+(\d+))?$')
 
 
@@ -96,7 +112,7 @@ def shown(text):
 
 
 def read_pins():
-    """[{line, test, cpu, libc, builds, outcome, fails}], and the file's problems."""
+    """[{line, test, toolchain, cpu, libc, builds, outcome, fails}], and the problems."""
     pins, problems = [], []
     with open(PINS, encoding='utf-8') as f:
         for n, line in enumerate(f, 1):
@@ -105,9 +121,13 @@ def read_pins():
                 continue
             m = PIN.match(text)
             if not m:
-                problems.append(f'pins.txt:{n}: not "TEST CPU LIBC BUILDS OUTCOME [FAILS]"')
+                problems.append(f'pins.txt:{n}: not "TEST TOOLCHAIN CPU LIBC BUILDS OUTCOME '
+                                f'[FAILS]"')
                 continue
-            test, cpu, libc, builds, outcome, fails = m.groups()
+            test, toolchain, cpu, libc, builds, outcome, fails = m.groups()
+            if toolchain != 'all' and toolchain not in TOOLCHAINS:
+                problems.append(f'pins.txt:{n}: toolchain "all" or of {", ".join(TOOLCHAINS)}')
+                continue
             builds = BUILDS if builds == 'all' else tuple(builds.split(','))
             if any(b not in BUILDS for b in builds):
                 problems.append(f'pins.txt:{n}: build types "all" or of {", ".join(BUILDS)}')
@@ -116,19 +136,21 @@ def read_pins():
                 problems.append(f'pins.txt:{n}: "fails" takes a count of FAIL lines, '
                                 f'"not-built" none')
                 continue
-            pins.append({'line': n, 'test': test, 'cpu': cpu, 'libc': libc,
+            pins.append({'line': n, 'test': test, 'toolchain': toolchain, 'cpu': cpu,
+                         'libc': libc,
                          'builds': builds, 'outcome': outcome,
                          'fails': int(fails) if fails is not None else None})
     return pins, problems
 
 
-def matching(pins, test, cpu, libc, build):
-    return [p for p in pins if p['test'] == test and p['cpu'] in ('all', cpu)
-            and p['libc'] in ('all', libc) and build in p['builds']]
+def matching(pins, test, toolchain, cpu, libc, build):
+    return [p for p in pins if p['test'] == test and p['toolchain'] in ('all', toolchain)
+            and p['cpu'] in ('all', cpu) and p['libc'] in ('all', libc)
+            and build in p['builds']]
 
 
-def expected(pins, test, cpu, libc, build):
-    m = matching(pins, test, cpu, libc, build)
+def expected(pins, test, toolchain, cpu, libc, build):
+    m = matching(pins, test, toolchain, cpu, libc, build)
     return (m[0]['outcome'], m[0]['fails']) if m else ('passes', None)
 
 
@@ -148,16 +170,33 @@ def cmake_tests():
     return names
 
 
-def versions():
+def versions(toolchain):
     out = []
     for cmd in (['arm-none-eabi-gcc', '--version'], ['qemu-system-arm', '--version']):
         r = sh(cmd)
-        out.append(r.stdout.splitlines()[0] if r.returncode == 0 and r.stdout else f'{cmd[0]}: not found')
-    if shutil.which('dpkg-query'):
+        out.append(r.stdout.splitlines()[0] if r.returncode == 0 and r.stdout
+                   else f'{cmd[0]}: not found')
+    r = sh(['sh', '-c', 'command -v arm-none-eabi-gcc'])
+    out.append('arm-none-eabi-gcc: ' + (r.stdout.strip() or 'not on the PATH'))
+    if toolchain == 'ubuntu' and shutil.which('dpkg-query'):
         for pkg in ('libnewlib-arm-none-eabi', 'picolibc-arm-none-eabi'):
             r = sh(['dpkg-query', '-W', '-f=${Package} ${Version}', pkg])
             out.append(r.stdout if r.returncode == 0 else f'{pkg}: not installed')
     return out
+
+
+def libc_facts(cpu, libc):
+    """The C library's version, and whether its printf has C99's formats (%zu)."""
+    specs = ['--specs=picolibc.specs'] if libc == 'picolibc' else []
+    r = sh(['arm-none-eabi-gcc', *CPUS[cpu]['flags'].split(), *specs, '-E', '-dM', '-x', 'c',
+            '-'], input='#include <stdio.h>\n')
+    macros = dict(re.findall(r'^#define (\w+)(?: (.*))?$', r.stdout, re.M))
+    if libc == 'picolibc':
+        version = macros.get('__PICOLIBC_VERSION__', '?').strip('"')
+    else:
+        version = macros.get('_NEWLIB_VERSION', '?').strip('"')
+    c99 = 'yes' if '_WANT_IO_C99_FORMATS' in macros else 'no'
+    return f'{libc} {version}; C99 printf formats (_WANT_IO_C99_FORMATS): {c99}'
 
 
 def support(cpu, libc, out):
@@ -177,22 +216,22 @@ def support(cpu, libc, out):
 
 def environment(cpu, libc, sup):
     env = dict(os.environ)
-    env['CANON_CM_FLAGS'] = CPUS[cpu]['flags']
+    env['CANON_CM_FLAGS'] = CPUS[cpu]['flags'] + ' ' + DEFINES
     env['CANON_CM_LIBC'] = libc
     env['CANON_CM_SUPPORT'] = sup
     env['CANON_CM_QEMU'] = ';'.join(CPUS[cpu]['qemu'] + SEMIHOSTING)
     return env
 
 
-def configure_and_build(cpu, libc, build, out, env):
-    b = os.path.abspath(os.path.join(out, f'{cpu}-{libc}-{build}'))
+def configure_and_build(toolchain, cpu, libc, build, out, env):
+    b = os.path.abspath(os.path.join(out, f'{toolchain}-{cpu}-{libc}-{build}'))
     shutil.rmtree(b, ignore_errors=True)
     r = sh(['cmake', '-S', ROOT, '-B', b, '-G', 'Unix Makefiles',
             '-DCMAKE_TOOLCHAIN_FILE=' + os.path.join(HERE, 'toolchain.cmake'),
             '-DCMAKE_BUILD_TYPE=' + build], env=env)
     if r.returncode != 0:
         shown('\n'.join((r.stdout + r.stderr).splitlines()[-30:]))
-        raise RuntimeError(f'{cpu} {libc} {build}: CMake does not configure')
+        raise RuntimeError(f'{label(toolchain, cpu, libc, build)}: CMake does not configure')
     # -k: the tests that build are built, whatever does not.
     r = sh(['cmake', '--build', b, '--parallel', str(os.cpu_count() or 2), '--', '-k'], env=env)
     with open(b + '.build.log', 'w') as f:
@@ -256,13 +295,19 @@ def attributes(binary, cpu):
     return ', '.join(f'{k} {got[k]}' for k in shown_tags if k in got), problems
 
 
-def leg(cpu, libc, build, out, env, pins):
+def label(toolchain, cpu, libc, build=None):
+    """A leg's name: the toolchain named only when it is not Ubuntu's."""
+    words = ([] if toolchain == 'ubuntu' else [toolchain]) + [cpu, libc] + ([build] if build else [])
+    return ' '.join(words)
+
+
+def leg(toolchain, cpu, libc, build, out, env, pins):
     """One build type: (notice line, differences, data), or raises."""
     t0 = time.time()
-    b = configure_and_build(cpu, libc, build, out, env)
+    b = configure_and_build(toolchain, cpu, libc, build, out, env)
     tests = listed(b)
     if not tests:
-        raise RuntimeError(f'{cpu} {libc} {build}: CTest lists no test')
+        raise RuntimeError(f'{label(toolchain, cpu, libc, build)}: CTest lists no test')
     rows = []
     for t in tests:
         if os.path.exists(t['command'][-1]):
@@ -270,14 +315,14 @@ def leg(cpu, libc, build, out, env, pins):
         else:
             got = {'outcome': 'not-built', 'rc': None, 'fails': None, 'fail_lines': [],
                    'why': why_not_built(b, t['name'], env)}
-        want = expected(pins, t['name'], cpu, libc, build)
+        want = expected(pins, t['name'], toolchain, cpu, libc, build)
         rows.append({'name': t['name'], 'got': got, 'want': want})
     built = [t['command'][-1] for t in tests if os.path.exists(t['command'][-1])]
     if not built:
-        raise RuntimeError(f'{cpu} {libc} {build}: no test built')
+        raise RuntimeError(f'{label(toolchain, cpu, libc, build)}: no test built')
     attrs, attr_problems = attributes(built[0], cpu)
     if attr_problems:
-        raise RuntimeError(f'{cpu} {libc} {build}: {os.path.basename(built[0])} is not the '
+        raise RuntimeError(f'{label(toolchain, cpu, libc, build)}: {os.path.basename(built[0])} is not the '
                            f'CPU\'s: ' + '; '.join(attr_problems))
     names = {t['name'] for t in tests}
     diffs = []
@@ -292,8 +337,8 @@ def leg(cpu, libc, build, out, env, pins):
     failed = [r for r in rows if r['got']['outcome'] in ('fails', 'timeout')]
     unbuilt = [r for r in rows if r['got']['outcome'] == 'not-built']
     minutes = (time.time() - t0) / 60
-    line = (f'cortex-m {cpu} {libc} {build}: {len(rows)} tests, {len(passed)} passed, '
-            f'{len(failed)} failed')
+    line = (f'cortex-m {label(toolchain, cpu, libc, build)}: {len(rows)} tests, '
+            f'{len(passed)} passed, {len(failed)} failed')
     if failed:
         line += ' (' + ', '.join(f'{r["name"]} {described(r["got"]["outcome"], r["got"]["fails"])}'
                                  .replace(' fails ', ' ') for r in failed) + ')'
@@ -305,7 +350,7 @@ def leg(cpu, libc, build, out, env, pins):
         + (f', and {len(diffs) - SHOWN} more' if len(diffs) > SHOWN else ''))
     line += f'; {minutes:.1f} minutes'
     print(line)
-    print(f'--- {cpu} {libc} {build}: the binaries\' ELF attributes: {attrs}')
+    print(f'--- {label(toolchain, cpu, libc, build)}: the binaries\' ELF attributes: {attrs}')
     for r in failed:
         g = r['got']
         print(f'--- {r["name"]}: {g["outcome"]}, exit {g["rc"]}, '
@@ -316,9 +361,10 @@ def leg(cpu, libc, build, out, env, pins):
         print(f'--- {r["name"]}: not built ---')
         shown('\n'.join(r['got']['why']))
     if diffs:
-        print(f'--- {cpu} {libc} {build}: differences from the pins ({len(diffs)}) ---')
+        print(f'--- {label(toolchain, cpu, libc, build)}: differences from the pins ({len(diffs)}) ---')
         shown('\n'.join(diffs))
-    data = {'cpu': cpu, 'libc': libc, 'build': build, 'minutes': round(minutes, 1),
+    data = {'toolchain': toolchain, 'cpu': cpu, 'libc': libc, 'build': build,
+            'minutes': round(minutes, 1),
             'tests': len(rows), 'passed': [r['name'] for r in passed],
             'failed': {r['name']: r['got']['fails'] for r in failed},
             'not_built': [r['name'] for r in unbuilt], 'differences': diffs,
@@ -334,14 +380,15 @@ def check():
     for p in pins:
         if p['test'] not in tests:
             problems.append(f'pins.txt:{p["line"]}: {p["test"]} is not a test of CMakeLists.txt')
-    for cpu in CPUS:
-        for libc in LIBCS:
-            for build in BUILDS:
-                for t in sorted({p['test'] for p in pins}):
-                    m = matching(pins, t, cpu, libc, build)
-                    if len(m) > 1:
-                        problems.append(f'pins.txt:{m[0]["line"]},{m[1]["line"]}: {t} pinned '
-                                        f'twice for {cpu} {libc} {build}')
+    for toolchain, libcs in TOOLCHAINS.items():
+        for cpu in CPUS:
+            for libc in libcs:
+                for build in BUILDS:
+                    for t in sorted({p['test'] for p in pins}):
+                        m = matching(pins, t, toolchain, cpu, libc, build)
+                        if len(m) > 1:
+                            problems.append(f'pins.txt:{m[0]["line"]},{m[1]["line"]}: {t} pinned '
+                                            f'twice for {label(toolchain, cpu, libc, build)}')
     for f in SUPPORT:
         if not os.path.exists(os.path.join(HERE, f)):
             problems.append(f'tools/cortexm/{f}: no such file')
@@ -355,14 +402,27 @@ def check():
 def main(argv):
     if argv[:1] == ['check'] and len(argv) == 1:
         return check()
-    if len(argv) < 3 or argv[0] != 'run' or argv[1] not in CPUS or argv[2] not in LIBCS \
-            or any(b not in BUILDS for b in argv[3:]):
+    args, toolchain, report_only = [], 'ubuntu', False
+    rest = list(argv)
+    while rest:
+        a = rest.pop(0)
+        if a == '--toolchain' and rest:
+            toolchain = rest.pop(0)
+        elif a == '--report-only':
+            report_only = True
+        else:
+            args.append(a)
+    if len(args) < 3 or args[0] != 'run' or args[1] not in CPUS \
+            or toolchain not in TOOLCHAINS or args[2] not in TOOLCHAINS[toolchain] \
+            or any(b not in BUILDS for b in args[3:]):
         print(__doc__)
         return 2
-    cpu, libc, builds = argv[1], argv[2], argv[3:] or list(BUILDS)
-    for v in versions():
+    cpu, libc, builds = args[1], args[2], args[3:] or list(BUILDS)
+    for v in versions(toolchain):
         print(v)
-    print(f'QEMU board: {CPUS[cpu]["board"]}; flags: {CPUS[cpu]["flags"]}')
+    print(f'C library: {libc_facts(cpu, libc)}')
+    print(f'QEMU board: {CPUS[cpu]["board"]}; flags: {CPUS[cpu]["flags"]} {DEFINES}')
+    name = label(toolchain, cpu, libc)
     pins, problems = read_pins()
     os.makedirs(OUT, exist_ok=True)
     all_diffs = list(problems)
@@ -370,19 +430,19 @@ def main(argv):
         sup = support(cpu, libc, OUT)
         env = environment(cpu, libc, sup)
         for build in builds:
-            line, diffs, _ = leg(cpu, libc, build, OUT, env, pins)
-            print(f'::notice title=cortex-m {cpu} {libc} {build}::{line}')
+            line, diffs, _ = leg(toolchain, cpu, libc, build, OUT, env, pins)
+            print(f'::notice title=cortex-m {label(toolchain, cpu, libc, build)}::{line}')
             all_diffs += diffs
     except RuntimeError as e:
-        print(f'::error title=cortex-m {cpu} {libc}::{e}')
+        print(f'::error title=cortex-m {name}::{e}')
         return 1
-    if all_diffs and ENFORCE:
-        print(f'::error title=cortex-m {cpu} {libc}::{len(all_diffs)} difference(s) from '
+    if all_diffs and ENFORCE and not report_only:
+        print(f'::error title=cortex-m {name}::{len(all_diffs)} difference(s) from '
               f'tools/cortexm/pins.txt')
         return 1
     if all_diffs:
         print(f'REPORT-ONLY: {len(all_diffs)} difference(s) from the pins, not failing '
-              f'(ENFORCE is off)')
+              f'({"--report-only" if report_only else "ENFORCE is off"})')
     return 0
 
 

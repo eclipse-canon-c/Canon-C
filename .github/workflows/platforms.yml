@@ -268,36 +268,81 @@ jobs:
   #    and exit status to the host: Cortex-M0+ code (Armv6-M, soft float,
   #    which faults on an unaligned access) on QEMU's micro:bit, whose
   #    Cortex-M0 runs it, and Cortex-M4 with hard float on mps2-an386. Each
-  #    at Debug, Release, RelWithDebInfo and MinSizeRel. The tests that do
-  #    not pass there are pinned, each with its reason
-  #    (tools/cortexm/pins.txt); report-only in VERIFY-089's run 1
-  #    (ENFORCE in the script).
+  #    at Debug, Release, RelWithDebInfo and MinSizeRel, with
+  #    CANON_LIFETIME_NO_ATOMICS defined. The tests that do not pass there
+  #    are pinned, each with its reason (tools/cortexm/pins.txt).
+  #
+  #    Two toolchains: Ubuntu 24.04's packages (GCC 13.2, newlib and
+  #    picolibc), enforced since VERIFY-089's run 2; and the Arm GNU
+  #    Toolchain 15.3.Rel2, with its own newlib, fetched from Arm with its
+  #    checksum pinned, report-only in run 2, its first measure: whether a
+  #    newer GCC compiles option_test right at -O2 and -Os, where GCC 13.2
+  #    does not.
   # -------------------------------------------------------------------------
   cortex-m:
+    name: ${{ matrix.toolchain == 'ubuntu' && format('cortex-m ({0}, {1})', matrix.cpu, matrix.libc) || format('cortex-m ({0}, {1}, {2})', matrix.cpu, matrix.libc, matrix.toolchain) }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
+        toolchain: [ubuntu]
         cpu: [m0plus, m4]
         libc: [newlib, picolibc]
+        include:
+          - { toolchain: arm-15.3.rel2, cpu: m0plus, libc: newlib }
+          - { toolchain: arm-15.3.rel2, cpu: m4, libc: newlib }
+    env:
+      TOOLCHAIN: ${{ matrix.toolchain }}
+      # The Arm GNU Toolchain 15.3.Rel2's x86_64 package for arm-none-eabi,
+      # where Arm publishes it, and its SHA-256 as Arm's meta-arm layer
+      # (gcc-arm-none-eabi_15.3.rel2.bb) and arm-none-eabi-gcc-action pin it.
+      ARM_URL: https://gitlab.arm.com/api/v4/projects/tooling%2Fgnu-toolchains-for-arm/packages/generic/gnu-toolchain/15.3.rel2/arm-gnu-toolchain-15.3.rel2-x86_64-arm-none-eabi.tar.xz
+      ARM_SHA256: 463df9665c246fa13bab2102115bbf83440661b6eb70b44f3dfd4712ca30037a
     steps:
       - uses: actions/checkout@v6
-      - name: Install the Arm toolchain, newlib, picolibc and QEMU
+      - name: Install QEMU, and Ubuntu's Arm toolchain, newlib and picolibc
         # Without the packages apt recommends, as the embedded job installs
         # them; the limit fails a stalled mirror in 30 minutes.
         timeout-minutes: 30
         run: |
+          pkgs="qemu-system-arm"
+          if [ "$TOOLCHAIN" = "ubuntu" ]; then
+            pkgs="$pkgs gcc-arm-none-eabi libnewlib-arm-none-eabi picolibc-arm-none-eabi"
+          fi
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            gcc-arm-none-eabi libnewlib-arm-none-eabi \
-            picolibc-arm-none-eabi qemu-system-arm
-      - name: "The tests on Cortex-M under QEMU: ${{ matrix.cpu }}, ${{ matrix.libc }}"
-        run: python3 tools/cortexm/cortexm.py run ${{ matrix.cpu }} ${{ matrix.libc }}
+          # shellcheck disable=SC2086
+          sudo apt-get install -y --no-install-recommends $pkgs
+      - name: Cache the Arm GNU Toolchain's package
+        if: matrix.toolchain != 'ubuntu'
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/arm-gnu-toolchain.tar.xz
+          key: arm-gnu-toolchain-${{ env.ARM_SHA256 }}
+      - name: Fetch the Arm GNU Toolchain, its checksum checked
+        if: matrix.toolchain != 'ubuntu'
+        timeout-minutes: 15
+        run: |
+          pkg="$RUNNER_TEMP/arm-gnu-toolchain.tar.xz"
+          [ -f "$pkg" ] || curl -fsSL --retry 3 -o "$pkg" "$ARM_URL"
+          echo "$ARM_SHA256  $pkg" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/arm-gnu-toolchain"
+          tar -xJf "$pkg" -C "$RUNNER_TEMP/arm-gnu-toolchain" --strip-components=1
+          echo "$RUNNER_TEMP/arm-gnu-toolchain/bin" >> "$GITHUB_PATH"
+      - name: "The tests on Cortex-M under QEMU: ${{ matrix.cpu }}, ${{ matrix.libc }}, ${{ matrix.toolchain }}"
+        env:
+          CPU: ${{ matrix.cpu }}
+          LIBC: ${{ matrix.libc }}
+          # The Arm toolchain's legs are report-only in VERIFY-089's run 2,
+          # their first measure.
+          REPORT_ONLY: ${{ matrix.toolchain != 'ubuntu' && '--report-only' || '' }}
+        run: |
+          # shellcheck disable=SC2086
+          python3 tools/cortexm/cortexm.py run "$CPU" "$LIBC" --toolchain "$TOOLCHAIN" $REPORT_ONLY
       - name: Upload the builds' logs and summaries
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: cortex-m-${{ matrix.cpu }}-${{ matrix.libc }}
+          name: cortex-m-${{ matrix.toolchain }}-${{ matrix.cpu }}-${{ matrix.libc }}
           path: |
             cortexm_out/*.json
             cortexm_out/*.build.log
