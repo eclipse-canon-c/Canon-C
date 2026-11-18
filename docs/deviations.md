@@ -3686,13 +3686,24 @@ error.h only — error.h is VERIFY-013 clean and contributes nothing —
 exactly as the round-1 prediction anticipated. Seventh composability
 data point.
 
-### diag-own residuals (1)
+### diag-own residuals (65 — filed by name here from other units; diag.h's own, none since VERIFY-087)
 
-**Category 1 — libc byte-view through Typed+Cast (1)**
+**Category 1 — libc byte-view through Typed+Cast (0 of diag.h's own)**
 
-| # | Goal | Units | Reading |
-|---|---|---|---|
-| 1 | `typed_cast_diag_init_call_memset_requires_valid_s` | `frama-c-diag` | the bytes of the local `d`, a complete `Diag`, are valid |
+**Restated (2026-11-18, VERIFY-087).** The table listed one goal,
+`typed_cast_diag_init_call_memset_requires_valid_s`, the validity of the
+local `d`'s bytes at `diag_init`'s `memset`, until VERIFY-087's run 2
+(778a730) made `diag_init` an initializer, `Diag d = {0};`. The goal went
+with the call. It was false in WP's typed model, which counts a `Diag` in
+1057 cells, not 1288 bytes, and WP, taking it as a hypothesis past the
+call, had proved `init_empty` of nothing (VERIFY-087 run 1, WP's smoke
+tests). `frama-c-diag` proves 3071 / 3071 (`5 · Proofs: semantics/` #75),
+pinned and enforced from VERIFY-087's run 3. diag.h has no residual of
+its own: the block stands for the goals filed by name under it from other
+units, 65, whose class it argues (the heading counted diag's own until
+then, 1 after VERIFY-073 and 8 before). The argument below is of those;
+where it speaks of `diag_init` or of diag's own goals, it describes the
+header before VERIFY-087.
 
 **Restated (2026-11-13, VERIFY-073).** The table listed eight goals, and
 the heading and category counted 8, until VERIFY-073 (d1d4d2e) made
@@ -27683,10 +27694,20 @@ and 19 in force.
 |---|---|---|---|
 | 1 | `typed_cast_array_int_8_as_bytes_call_bytes_from_requires_2` | `frama-c-array` | validity of the elements' bytes for `bytes_from`: `(u8 *)a->items + (0 .. sizeof(a->items) - 1)`, the footprint of `a->items`, valid by `\valid(a)` |
 | 2 | `typed_cast_array_int_8_as_cbytes_call_cbytes_from_requires_2` | `frama-c-array` | readability of the same bytes for `cbytes_from`, by `\valid_read(a)` |
-| 3 | `typed_cast_array_int_8_zero_call_memset_requires_valid_s` | `frama-c-array` | validity of the local array's bytes for `memset`: `a.items`, a local object of `sizeof(a.items)` bytes |
-| 4 | `typed_cast_array_int_8_from_ptr_call_memset_requires_valid_s` | `frama-c-array` | the same, at `from_ptr`'s local array |
-| 5 | `typed_cast_array_int_8_equal_call_memcmp_requires_valid_s1` | `frama-c-array` | readability of `a`'s elements' bytes for `memcmp`, `sizeof(a->items)` of them: on the path that compares `a` is not null, and `\valid_read(a)` holds |
-| 6 | `typed_cast_array_int_8_equal_call_memcmp_requires_valid_s2` | `frama-c-array` | the same, of `b`'s, by `\valid_read(b)`; `b->items` has `a->items`'s size, the type being one |
+| 3 | `typed_cast_array_int_8_equal_call_memcmp_requires_valid_s1` | `frama-c-array` | readability of `a`'s elements' bytes for `memcmp`, `sizeof(a->items)` of them: on the path that compares `a` is not null, and `\valid_read(a)` holds |
+| 4 | `typed_cast_array_int_8_equal_call_memcmp_requires_valid_s2` | `frama-c-array` | the same, of `b`'s, by `\valid_read(b)`; `b->items` has `a->items`'s size, the type being one |
+
+**Restated (2026-11-18, VERIFY-087).** The table filed six goals until
+VERIFY-087's run 2 (778a730). Its rows 3 and 4 were `memset`'s
+preconditions in `zero` and `from_ptr`, `typed_cast_array_int_8_zero_call_memset_requires_valid_s`
+and `typed_cast_array_int_8_from_ptr_call_memset_requires_valid_s`: the
+validity of a local array's bytes, false in WP's typed model, which
+counts the array in `int` cells, so that past the calls WP proved the
+postconditions of nothing (VERIFY-087 run 1). `zero` now returns `fill`
+of a zero of the element type, and `from_ptr` copies element by element
+from the same; the goals went with the calls. `frama-c-array` proves
+2856 / 2878 with 22 unproved, 6 own (`6 · Proofs: data/` #75), pinned and
+enforced from VERIFY-087's run 3.
 
 These are the block's class at array.h: the bytes of a valid typed range
 are valid and lie in its footprint. WP's Typed+Cast model does not carry an
@@ -38890,9 +38911,9 @@ two of seven, run 1c six of seven, run 2 six of six. What it shows:
 | **ID**         | VERIFY-087 |
 | **Date**       | 2026-11-17 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-18 — Run 1 scored: K1 to K6, K8 and K9 MATCH; K7 MISS. WP's smoke tests failed 247 times in 20 of the 27 units, never at a requires, an assumes or a loop. In twelve functions the code past a call is unreachable to WP and reachable in C, so that what WP proves there it proves of nothing: K5's three, past a `memset` on a local object, and the nine that call `memcmp`, past its precondition on dangling bytes. The other failures are branches no input reaches either. The smoke-only run misses every function without a requires clause, two of the twelve among them. The author decided on 2026-11-18: K5's three functions change; the nine stay as they are, and `docs/verification.md` says what WP proves past `memcmp`'s call; and smoke tests join the proof jobs once the three are fixed, a record of their own (VERIFY-088). Run 2, pre-registered below, makes the change: `array_int_8_zero`, `array_int_8_from_ptr` and `diag_init` store values of their types where they called `memset`, and `from_ptr` copies element by element where it called `memcpy`; the two units' proof jobs are report-only while WP's counts are measured. The Status above is the record as committed. |
+| **Status update** | 2026-11-18 — Run 1 scored: K1 to K6, K8 and K9 MATCH; K7 MISS. WP's smoke tests failed 247 times in 20 of the 27 units, never at a requires, an assumes or a loop. In twelve functions the code past a call is unreachable to WP and reachable in C, so that what WP proves there it proves of nothing: K5's three, past a `memset` on a local object, and the nine that call `memcmp`, past its precondition on dangling bytes. The other failures are branches no input reaches either. The smoke-only run misses every function without a requires clause, two of the twelve among them. The author decided on 2026-11-18: K5's three functions change; the nine stay as they are, and `docs/verification.md` says what WP proves past `memcmp`'s call; and smoke tests join the proof jobs once the three are fixed, a record of their own (VERIFY-088). Run 2, pre-registered below, makes the change: `array_int_8_zero`, `array_int_8_from_ptr` and `diag_init` store values of their types where they called `memset`, and `from_ptr` copies element by element where it called `memcpy`; the two units' proof jobs are report-only while WP's counts are measured. Run 2 scored: L1 to L8, L10, L11 and L13 to L18 MATCH; L9 and L12 MISS, two counts of goals estimated from the new code alone, where the calls it replaced had more. No smoke test fails in the three functions; `frama-c-diag` proves every goal, 3071, and `frama-c-array`'s unproved goals are its 22 pinned names. Run 3, pre-registered below, pins the two units' counts and enforces their jobs, restates VERIFY-017's block and VERIFY-052's filing, documents the nine in `docs/verification.md`, and closes the probe. The Status above is the record as committed. |
 | **Baseline**   | 9742da9 (VERIFY-086's close): `2 · Platforms` #105 (500e16d); `8 · Records` #121 (9742da9); `9 · Probes` #31 (434229c), the last run of every probe, since which nothing the other probes read has changed; the Aorai probe's `steps` names no part since its close. |
-| **Scope**      | Run 1: `tools/probes/verify-087/` (new: `smoke_probe.py`, `steps`, `README.md`); `.github/workflows/probes.yml`, the job `smoke-probe`, its filter, its output, its path and the header; the workflow map's row 9. Run 2: `data/array.h`'s `zero` and `from_ptr` and `semantics/diag.h`'s `diag_init`, with their notes; `proofs-data.yml`'s `frama-c-array` and `proofs-semantics.yml`'s `frama-c-diag`, report-only, their pinned names and comments; the pins that read the two headers, `tools/size/pins.txt` with `docs/code-size.md`, and Eva's ten pin files; the comment of `analysis.yml`'s `array.h` coverage step; the probe's counts, its `steps` and its README. |
+| **Scope**      | Run 1: `tools/probes/verify-087/` (new: `smoke_probe.py`, `steps`, `README.md`); `.github/workflows/probes.yml`, the job `smoke-probe`, its filter, its output, its path and the header; the workflow map's row 9. Run 2: `data/array.h`'s `zero` and `from_ptr` and `semantics/diag.h`'s `diag_init`, with their notes; `proofs-data.yml`'s `frama-c-array` and `proofs-semantics.yml`'s `frama-c-diag`, report-only, their pinned names and comments; the pins that read the two headers, `tools/size/pins.txt` with `docs/code-size.md`, and Eva's ten pin files; the comment of `analysis.yml`'s `array.h` coverage step; the probe's counts, its `steps` and its README. Run 3: the two jobs, enforced on run 2's counts; VERIFY-017's block and VERIFY-052's filing, restated; `docs/verification.md` (the card, a section on `memcmp`'s call, diag.h's and array.h's sections, their rows), `docs/traceability.md` (MCDC-020, the proof table) and `docs/vmacros.md`'s row; the probe's `steps` and README, and the workflow map's row 9. |
 | **Category**   | The item the author added after item 6 at VERIFY-085's close, on 2026-11-16: a probe of WP's smoke tests over the 27 proof units, report-only, with a short timeout. |
 
 ### What is missing
@@ -39084,6 +39105,8 @@ Eight of nine.
     little: only `array_int_8_equal`'s behavior `compare` states the
     result (`\result == \true <==> memcmp{Pre,Pre}(...) == 0`); the
     others' postconditions hold of any `bool`, or speak of other paths.
+    (Run 3 corrects this: `borrowed_bytes_eq`'s `content_eq_def` states
+    the result too.)
     But a postcondition added there would be proved of nothing too. The
     functions' own preconditions on dangling bytes, at entry, contradict
     nothing: no requires or assumes smoke test fails.
@@ -39262,3 +39285,136 @@ the two units' counts from this run and enforces both jobs, restates what
 names no part, and VERIFY-087 closes. A goal unproved, or a smoke test
 failing in the new code, is read before anything is pinned. Then
 VERIFY-088: WP's smoke tests in the proof jobs.
+
+### Run 2 scored (2026-11-18)
+
+The push of 00b830e, 7fe25b8 and 778a730 started twelve workflows: `1`
+to `6` #75 (2 #107), `7` #34, `8` #123, `9` #37, `13` #16, `14` #26 and
+`15` #5. Each was green at its first attempt; 6 took 88 minutes.
+
+| # | scored |
+|---|--------|
+| L1 | **MATCH.** 1 to 9, 13, 14 and 15 ran, and no other: 13 its 2 units, 6 jobs; 9 the pointer, Aorai and smoke probes, the other probes' twelve jobs skipped. |
+| L2 | **MATCH.** 1's 27 jobs gave #74's notices: GitHub's own on four macOS jobs, and no other. |
+| L3 | **MATCH.** 2's sixteen jobs are green, fourteen with #106's notices. The embedded job's read as measured here, figure for figure: rv32imac 54628, 33070, 90020 and 48062, cortex-m4 44536, 29028, 71198 and 40546, cortex-m0plus 44642, 28652, 75298 and 41964; "418534 tokens", the most 25271 (`data/hashmap/hashmap_range.h`); "as pinned: 57 rows, 798 figures". The metrics job's: "as pinned, 858 functions", its ten most complex #106's, "statements 9037 in all". |
+| L4 | **MATCH.** "MC/DC 2066 / 2232", each cover row #74's but `array_cover.c` 43/46. |
+| L5 | **MATCH.** The misra job gave #74's notice. |
+| L6 | **MATCH.** static-analysis on the three systems and compcert gave #74's notices: "0 finding(s) in the library's code", "61 / 61 compiled, 61 ran". |
+| L7 | **MATCH.** 4's fourteen jobs, 5's four others and 6's ten others gave #74's notices; every job green. |
+| L8 | **MATCH.** "wp_diag_output.txt: proved 3071 / 3071; unproved 0; failed/invalid/stepout 0": N is 3071, run 1's 3074 less three. Its log: "Own residuals observed: 0/0 (expected 0)", "REPORT-ONLY: all pinned checks match", and `dead_by_invariant_clamp` proved. |
+| L9 | **MISS.** The unproved goals are the 22 names ("NAMES SAME: the 22 pinned names, exactly."), and the notice reads "proved 2856 / 2878 (pin 2863 / 2887); unproved 22: inherited 16, own 6; 1 difference(s)", the difference the proved line: every new goal is proved. But T is 2878, outside 2880 to 2900: 9 goals fewer, not more. |
+| L10 | **MATCH.** 7's seven jobs are green, without notices. |
+| L11 | **MATCH.** 8 is green; record-coverage took the three names as pending from e9f39de ("3 no longer pinned") and found no problem. |
+| L12 | **MISS.** The pointer probe's 25 other parts gave #36's notices, `frama-c-diag`'s "158 / 158" among them; the Aorai probe's four parts and 25 of the smoke probe's posted that they did not run, and no other probe started. But `frama-c-array`'s gives "pointer_value proved 27 / 27": two fewer, not one more. |
+| L13 | **MATCH.** The two parts are green. `frama-c-diag`: no smoke test failed in either run; 91 smoke tests smoke-only, 119 full (run 1's calls 8 and points of code 86, now 7 and 85). `frama-c-array`: full, "smoke tests 447, passed 429, failed 18 (call 7, dead code 11)", the eighteen as predicted by function and kind: `as_bytes` and `as_cbytes` two points each and the calls of `bytes_empty` and `cbytes_empty`, `size_bytes` one point, `equal`, `bytes_equal`, `str_equal`, `str_starts_with` and `str_ends_with` `memcmp`'s call and one point each, `option_int_expect` one point. Smoke-only, "smoke tests 434, passed 417, failed 17 (call 7, dead code 10)", all but `size_bytes`'s. In each run WP warns at run 1's six places. No smoke test fails in `zero`, `from_ptr` or `diag_init`. Of the full run's 43 calls (run 1's 45, less `memset`'s two, `checked_mul`'s and `memcpy`'s, and with `_fill`'s two) all pass but the seven named above, and its 4 loops pass, `from_ptr`'s copy among them. |
+| L14 | **MATCH.** 13 is green: "2 unit(s): ["frama-c-array", "frama-c-diag"]"; `frama-c-array` "Unproved: the 22 names its job pins. Against its pins: 0 difference(s)", `frama-c-diag` "Unproved: the 0 names its job pins. … Against its pins: 0 difference(s)". No new goal is proved by one or two provers alone. |
+| L15 | **MATCH.** At each of the ten models `array.c` reads "preconditions 82/0/0" and `diag.c` "preconditions 73/4/0", as pinned, the rest #25's; `eva total`'s model lines, the native job and Aorai give #25's. |
+| L16 | **MATCH.** "mdr pins", "mdr upload" and "mdr others" give #25's; "mdr", 270 of 270 runs, open 30, level error 6880, and 303140 results where 303160, passes 303110 and level none 296260: two a model fewer. |
+| L17 | **MATCH.** "e-acsl pins: as pinned, 27 programs: runs 11, stops: mkBinOp 6, stops: does not finish 10"; "11 of 27 programs as E-ACSL runs them: instrumented 11, compiled 11, run to their end 11; annotations failed 0, verdicts unsound 0, CHECKs failed 0"; the stopped list #25's. 1936 checks inserted where 1937, and 2094 annotations not translated where 2102. |
+| L18 | **MATCH.** 15 is green, each part "differences from the pins 0". core and semantics gave #4's notices, times aside, `diag`'s `handler_written` 11/11 and `handler_kept` 18/18 among them. In data `handler_written` has 710 checks where 713, `array`'s 38/38 where 41/41, all proved; `handler_kept` 1699, proved 1609, `array` 97/103 as #4's, 48 under hypotheses where 47. |
+
+Sixteen of eighteen.
+
+**What run 2 shows.**
+
+- **What WP proves of the three functions rests on something now.** No
+  smoke test fails in `array_int_8_zero`, `array_int_8_from_ptr` or
+  `diag_init`, nor past their calls of `_fill`. `frama-c-diag` proves
+  every goal, 3071, and `frama-c-array`'s unproved goals are the 22 it
+  pins, the two `memset` preconditions gone; the elements zero, the
+  elements copied and `init_empty`, WP proves of the stores. The code is
+  smaller at `-Os` (`diag.h` 22 to 32 bytes, `array.h` 22 to 30) and
+  `array.h` larger at `-O2` (10 to 16), and `array_cover.c` covers one
+  outcome more, `from_ptr`'s dead `checked_mul` failure gone. L9's miss is
+  its count alone: its names and every new goal proved held.
+- **A call is more goals than it looks.** Both misses counted the goals
+  the new code brings and not all those the calls took with them.
+  `frama-c-array` has 9 goals fewer: in WP's report 2743 became 2734, the
+  9 among those WP proves itself (Qed 2453, now 2444), while the provers
+  prove 2 more and none 2 fewer. The pointer probe's `array` has 2
+  fewer: each call took the array as a pointer, and RTE checks that
+  pointer (`\object_pointer((int *)a.items)`, at `memset`'s two calls and
+  `memcpy`'s), where the copy computes one, `src + _i`. Frama-C 25's RTE,
+  run here on the unit at e9f39de and at 778a730, prints the same three
+  and the same one. `diag`'s 3074 became 3071, within L8's range: WP's
+  report 3046 goals where 3051, its summary's Terminating and Unreachable
+  11 and 14 where 10 and 13.
+- **The rest moved as predicted, or a little where not predicted.** MdR
+  has 2 results a model fewer; E-ACSL inserts one check fewer and leaves
+  8 annotations fewer untranslated, by kinds not read further here;
+  MetAcsl checks 3 writes fewer in `array`, all proved, and `diag`'s 11
+  as before.
+
+**What follows.** Run 3, below: it pins run 2's counts, the names being
+those L9 predicted.
+
+### Run 3: pre-registration (2026-11-18)
+
+**What changes.**
+
+- **The two jobs, enforced on run 2's counts.** `frama-c-array`
+  (`proofs-data.yml`): `ENFORCE=1`, `PIN_PROVED="2856 / 2878"`, its 22
+  names run 2's. `frama-c-diag` (`proofs-semantics.yml`): `ENFORCE=1`,
+  `EXPECTED_PROVED="3071 / 3071"`, `EXPECTED_UNPROVED=0`. Their comments.
+- **The records the three names left, restated**, as `8 · Records` asks
+  once the names are no longer pending: VERIFY-017's block "diag-own
+  residuals" lists no goal of diag.h's own, and its heading counts the 65
+  goals other units file by name under it, with a note on why; VERIFY-052's
+  filing under that block files four of array.h's goals, not six, with a
+  note.
+- **The documents.** `docs/verification.md`: the card, recomputed (77134
+  obligations, 76452 proved, 682 unproved); a section, "Past `memcmp`'s
+  call", in "The proved configuration": the nine functions, what WP
+  proves of them and what it does not, and that they keep `memcmp` by
+  the author's decision; diag.h's section, a note and the expected
+  output; array.h's, its summary, a paragraph and what it does not claim;
+  borrow.h's, a note on `borrowed_bytes_eq`'s proof of content equality;
+  diag.h's and array.h's rows in the roadmap. `docs/traceability.md`:
+  MCDC-020's array.h, 43/46; the proof table's two rows and its total
+  (73982, 73300, 682), with a note. `docs/vmacros.md`: array's row,
+  43/46.
+- **The probe closes.** `steps` names no unit; its README; the workflow
+  map's row 9.
+
+No code changes.
+
+**A correction to run 1.** Its "What run 1 shows" says that past
+`memcmp`'s call only `array_int_8_equal`'s contract states the result.
+`borrowed_bytes_eq`'s does too: its `content_eq_def` says the result is
+non-zero exactly when the lengths agree and every byte does, and
+`docs/verification.md` said WP proves it through `memcmp`'s contract. On
+that path the proof is of nothing; the new section says so, and a note
+in borrow.h's section. Found reading the nine contracts for the section.
+
+**Measured here.**
+
+- **`record_coverage.py --strict --complete`**, with no name pending and
+  with `--pending-from` 778a730: no problem, and "0 names whose pins
+  changed". VERIFY-017's block: "listed 0 … filed by name elsewhere 65:
+  live 65, stale 0".
+- **The proof table** in `docs/traceability.md`: its rows sum to its total.
+- **The probe**: `check`, "27 units, the matrix 27; 0 problem(s)";
+  `named`, false for every unit.
+- `8 · Records`' other checks; actionlint on the two workflows.
+
+Not run here: WP.
+
+**The workflows.** `tools/which_workflows.py`: 1 to 6, 8 and 9 run; 7
+and 10 to 15 do not. 1 to 6 because the proof workflows change; 9 starts
+the smoke probe alone; 13 takes no unit, the pinned names being run 2's.
+
+**Baselines.** Run 2's: 1 to 6 #75 (2 #107), 8 #123, 9 #37.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| M1 | **1 to 6, 8 and 9 run**, and no other; 9 starts the smoke probe alone. | another set | H |
+| M2 | **1 to 4 are green**, each job with run 2's notices (2's #107), times aside, 2's slowest header among them. | a failure, or another notice | H: nothing they read changes but the two proof workflows. |
+| M3 | **`frama-c-array` is green, enforced**: "proved 2856 / 2878 (pin 2856 / 2878); unproved 22: inherited 16, own 6; 0 difference(s)". | a difference, or a failure | H: run 2's line and names; the same unit gave one line and one set of names at each of VERIFY-052's runs. |
+| M4 | **`frama-c-diag` is green, enforced**: "wp_diag_output.txt: proved 3071 / 3071; unproved 0; failed/invalid/stepout 0", and its log's PASS line. | a goal unproved, or a failure | H: run 2 proved every goal, the slowest in 44.7 s of its 120. |
+| M5 | **5's and 6's other jobs give run 2's notices**, times aside. | a failure, or another notice | H |
+| M6 | **8 is green**: record-coverage with no name pending from the push's base. | a failure | H (run here) |
+| M7 | **The smoke probe's 27 parts are green**, each posting that it did not run: "UNIT: not run; tools/probes/verify-087/steps names no unit". No other probe starts. | a failure, or a part that runs | H |
+
+**What follows.** M1 to M7 scored. If M3 and M4 hold, VERIFY-087 closes
+with the score: its push changes this record alone. Then VERIFY-088: WP's
+smoke tests in the proof jobs, the branches no input reaches pinned.
