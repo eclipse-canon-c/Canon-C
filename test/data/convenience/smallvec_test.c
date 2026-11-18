@@ -85,6 +85,20 @@ typedef struct { int*   data; usize len; usize cap; } vec_int;
 static inline vec_int vec_int_init(int* d, usize n)
     { vec_int v; v.data = d; v.len = 0; v.cap = n; return v; }
 
+/* MSVC 19.52's optimizer reports warning C4789, an error under /WX, in
+ * test_insert: that smallvec_int_insert(&v, 100, 0), inlined, writes four
+ * bytes at index 100 of the 4-element inline_buf (offset 436 of the
+ * 56-byte smallvec_int). The insert returns false before that store,
+ * since 100 > len, and while the elements are inline len <= cap == 4: the
+ * store is unreachable, and the warning a false positive (VERIFY-090;
+ * MSVC 19.51 reports nothing). A code-generation warning (4700-4999)
+ * takes the state in force where the compiler reaches the definition of
+ * the function it is generating, which inlining can make test_insert or
+ * main; so it is off for this file, and for MSVC alone. */
+#ifdef _MSC_VER
+#pragma warning(disable: 4789)
+#endif
+
 #ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wuninitialized"
