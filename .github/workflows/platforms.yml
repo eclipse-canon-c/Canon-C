@@ -274,10 +274,9 @@ jobs:
   #
   #    Two toolchains: Ubuntu 24.04's packages (GCC 13.2, newlib and
   #    picolibc), enforced since VERIFY-089's run 2; and the Arm GNU
-  #    Toolchain 15.3.Rel2, with its own newlib, fetched from Arm with its
-  #    checksum pinned, report-only in run 2, its first measure: whether a
-  #    newer GCC compiles option_test right at -O2 and -Os, where GCC 13.2
-  #    does not.
+  #    Toolchain 15.3.Rel2 (GCC 15.3, its own newlib), fetched from Arm
+  #    with its checksum pinned, enforced since run 3. GCC 15.3 compiles
+  #    option_test right at -O2 and -Os, where GCC 13.2 does not.
   # -------------------------------------------------------------------------
   cortex-m:
     name: ${{ matrix.toolchain == 'ubuntu' && format('cortex-m ({0}, {1})', matrix.cpu, matrix.libc) || format('cortex-m ({0}, {1}, {2})', matrix.cpu, matrix.libc, matrix.toolchain) }}
@@ -332,12 +331,7 @@ jobs:
         env:
           CPU: ${{ matrix.cpu }}
           LIBC: ${{ matrix.libc }}
-          # The Arm toolchain's legs are report-only in VERIFY-089's run 2,
-          # their first measure.
-          REPORT_ONLY: ${{ matrix.toolchain != 'ubuntu' && '--report-only' || '' }}
-        run: |
-          # shellcheck disable=SC2086
-          python3 tools/cortexm/cortexm.py run "$CPU" "$LIBC" --toolchain "$TOOLCHAIN" $REPORT_ONLY
+        run: python3 tools/cortexm/cortexm.py run "$CPU" "$LIBC" --toolchain "$TOOLCHAIN"
       - name: Upload the builds' logs and summaries
         if: always()
         uses: actions/upload-artifact@v6

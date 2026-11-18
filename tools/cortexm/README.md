@@ -51,5 +51,6 @@ on Ubuntu 24.04: `gcc-arm-none-eabi`, `libnewlib-arm-none-eabi`,
 **Runs.** VERIFY-089's: run 1 report-only, its pins those it measured
 before it ran; run 2 enforced for Ubuntu's toolchain, with
 `CANON_LIFETIME_NO_ATOMICS`, and the Arm GNU Toolchain's first measure,
-report-only. The predictions and their scores are in
+report-only; run 3 the Arm GNU Toolchain's legs enforced, pinned as run 2
+measured them. The predictions and their scores are in
 `docs/deviations.md`.

@@ -918,10 +918,23 @@ For what Canon-C intentionally omits, established C libraries exist:
 > RV32 and RV64 with picolibc, under the project's warning flags (job
 > `embedded`). The hashmap headers, which need a key type defined,
 > are compiled through the tests that define one. On Cortex-M0+ and
-> Cortex-M4 the tests are also linked and run, under QEMU, with both
-> C libraries and at CMake's four build types (job `cortex-m`,
+> Cortex-M4 the tests are also linked and run, under QEMU, at CMake's
+> four build types: with Ubuntu's GCC 13.2 and both C libraries, and
+> with the Arm GNU Toolchain's GCC 15.3 and newlib (job `cortex-m`,
 > VERIFY-089); `tools/cortexm/pins.txt` names those that do not pass
 > there, and why. On RISC-V they are compiled, not run.
+>
+> **GCC 13.2 at `-O2` and `-Os`**
+> On Cortex-M, GCC 13.2 (Ubuntu 24.04's `arm-none-eabi-gcc`,
+> 13.2.rel1) compiles one check of `option_test` wrong at `-O2` and
+> `-Os`: `option_Point_combine_with` of `Some({3,4})` and `Some({3,4})`,
+> with a function that adds two points, gives `Some({3,4})` where it is
+> `Some({6,8})`. In a short program of that call GCC folds it to the
+> wrong constant. With `-fno-ipa-sra` the test passes, and GCC 15.3
+> (the Arm GNU Toolchain 15.3.Rel2) compiles it right; the versions
+> between are not measured. Ubuntu's `riscv64-unknown-elf-gcc` 13.2
+> folds the same short program wrong. With GCC 13.2 for these targets,
+> build with `-fno-ipa-sra`, or use a newer GCC.
 >
 > **`CANON_LIFETIME_DEBUG` without 64-bit atomics**
 > The debug mode's token counter is a 64-bit atomic (`lifetime.h`'s
