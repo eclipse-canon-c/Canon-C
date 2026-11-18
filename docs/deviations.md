@@ -39806,3 +39806,189 @@ six of seven. What it shows:
 - **The cost.** All 27 units are about five hours of runners, 27 minutes
   when they run at once; a push runs the units that include what it
   changes.
+
+---
+
+## VERIFY-089: Pre-registration — The Tests Run on Cortex-M0+ and Cortex-M4 under QEMU, with newlib and picolibc, at CMake's Four Build Types; Run 1, Report-Only
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-089 |
+| **Date**       | 2026-11-18 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | a0ce2f2 (VERIFY-088's close): `1`, `3` to `6` #77 (ff4850b); `2 · Platforms` #110 (3055981); `8 · Records` #128 (a0ce2f2). |
+| **Scope**      | Run 1: `tools/cortexm/` (new: `cortexm.py`, `toolchain.cmake`, `startup.c`, `cortexm.ld`, `pins.txt`, `README.md`); `platforms.yml`, the job `cortex-m` and the header; `records.yml`, a step, its paths and the header; the workflow map, row 2 and the note on a new test. |
+| **Category**   | The author's list, item 7's first part (2026-11-12): the tests run on Cortex-M under QEMU, the M4 on mps2-an386 and the M0+ if it can be done, with newlib and picolibc through semihosting: soft float, short enums, strict alignment. A record of its own, report-only and then enforced; `docs/architectures.md`'s "Tested on" rows at its close. |
+
+### What is missing
+
+The tests run on x86-64, 32-bit x86, AArch64 and s390x, each under a
+hosted C library (`docs/architectures.md`, "Tested on"). For Cortex-M0+
+and Cortex-M4, `2 · Platforms`' job `embedded` compiles every test with
+newlib and picolibc (VERIFY-046, VERIFY-048), and nothing is linked or run
+there, as the README's bare-metal section says. What a Cortex-M differs
+in, no test has run on: enums that are short, an `int32_t` that is
+`long`, no FPU or a single-precision one, Armv6-M's fault on an unaligned
+access, and C libraries whose printf and file I/O are not glibc's.
+
+### What is decided
+
+- **The job**, `cortex-m` in `2 · Platforms`: a leg for each CPU and C
+  library, four, each building and running the suite at CMake's four
+  build types, Debug (`-O0`), Release (`-O3`), RelWithDebInfo (`-O2`) and
+  MinSizeRel (`-Os`): the `embedded` job compiles at `-O0`, `-Os` and
+  `-O2`. `tools/cortexm/cortexm.py` configures CMake with a toolchain file
+  of its own (`toolchain.cmake`), builds what builds, and runs each test
+  CTest lists under `qemu-system-arm` through semihosting, which carries
+  its output and exit status to the host; a test passes when it exits
+  with status 0. Ubuntu 24.04's packages, as the `embedded` job installs
+  them: `gcc-arm-none-eabi`, `libnewlib-arm-none-eabi`,
+  `picolibc-arm-none-eabi`, and `qemu-system-arm`.
+- **The CPUs.** The Cortex-M4 with hard float (`-mfloat-abi=hard
+  -mfpu=fpv4-sp-d16`) on mps2-an386, as the author's list says. The
+  Cortex-M0+ with soft float on QEMU's micro:bit: QEMU 8.2's only Armv6-M
+  board, whose Cortex-M0 runs the same Armv6-M code (its mps2 boards take
+  their own CPU alone: "This board can only be used with CPU
+  cortex-m3-arm-cpu"). The micro:bit's nRF51 is given 4 MB of SRAM and of
+  flash through its SoC's properties, for 16 KB and 256 KB, as mps2-an386
+  has, so that one memory map serves both. The script checks that each
+  build's binaries are the CPU's, from their ELF attributes: the
+  architecture, the FPU and its argument registers, short enums.
+- **The C libraries.** picolibc with its semihosting start file and
+  linker script as they are. newlib with rdimon, its semihosting library,
+  and `startup.c` and `cortexm.ld` in place of its start file: newlib's
+  own takes the stack from semihosting's SYS_HEAPINFO, which QEMU answered
+  on mps2-an386 with 0x22000000, apart from the 4 MB at 0x20000000 the
+  program is linked in; `startup.c` takes it from the vector table, as a
+  Cortex-M does at reset.
+- **The pins**, `tools/cortexm/pins.txt`: the tests that do not pass, each
+  for the CPUs, C libraries and build types it holds for, with what the
+  test does there, `not-built` or `fails N` (N the lines of its output
+  beginning with `FAIL`), and why. A test the pins do not name must pass;
+  an outcome other than its pin's is a difference. Run 1's pins are the
+  measure here (below): nine lines.
+- **Report-only for run 1** (`ENFORCE = False`). A leg fails only if CMake
+  does not configure, CTest lists no test, nothing builds, or the binaries
+  are not the CPU's. Run 2 enforces.
+- **Around it.** `8 · Records` runs `cortexm.py check`: each pin well
+  formed and naming a test of `CMakeLists.txt`, no two for the same test
+  and leg, the support files there. The workflow map's row 2 and its note
+  on a new test, which a test that cannot pass on Cortex-M needs a pin
+  for.
+
+**Not claimed.** QEMU is not the silicon: the micro:bit's CPU is a
+Cortex-M0, not an M0+, and neither board models timing, caches or the
+memory system; semihosting stands in for a UART and a file system. A test
+that passes shows its checks hold of the code this compiler and C library
+make, at these build types; a pinned test shows nothing of what it tests.
+The library's code is not changed by this run.
+
+### Measured here
+
+With Ubuntu 24.04's `arm-none-eabi-gcc` 13.2.1 (`15:13.2.rel1-2`), newlib
+4.4.0.20231231, picolibc 1.8.6 and `qemu-system-arm` 8.2.2
+(`1:8.2.2+ds-0ubuntu1.18`), installed from Ubuntu's archive as the runner
+installs them; CMake 3.28.3 and Python 3.13:
+
+- **The sixteen builds**, as pinned: the 61 tests of `CMakeLists.txt` in
+  each, the same on both CPUs.
+
+  | C library | Debug, Release | RelWithDebInfo, MinSizeRel |
+  |-----------|----------------|----------------------------|
+  | newlib | 55 pass; `diag_test`, `hashmap_test`, `impl_defined_test` and `file_test` fail (19, 1, 5 and 1 FAIL lines); `lifetime_test` and `time_test` do not build | 54 pass: `option_test` fails too (1) |
+  | picolibc | 57 pass; `lifetime_test`, `impl_defined_test`, `file_test` and `time_test` do not build | 56 pass: `option_test` fails (1) |
+
+- **GCC 13.2's wrong code: `option_test` at `-O2` and `-Os`.** Its check
+  of `option_Point_combine_with(o, option_Point_some(p), point_add)` with
+  `o` and `p` Some({3,4}) and {3,4} gets Some({3,4}) where it is Some({6,8}),
+  on both CPUs and both C libraries; at `-O0`, `-O1` and `-O3` it passes.
+  A short program that makes the call once and prints the result fails
+  alike: GCC compiles its `main` to a `printf` of 1, 3 and 4 and a return
+  of 1. With `-fno-ipa-sra`, `-fno-ipa-cp` or `-fno-tree-sra` it gets 6
+  and 8, as Clang 18.1.3 does for the same target, and as GCC 13.3.0 does
+  on x86-64 and x86; on x86-64, UBSan and ASan report nothing.
+  `riscv64-unknown-elf-gcc` 13.2.0 at `rv32imac` folds it to 3 and 4 too.
+  With the inputs read at run time, or the results passed to a function,
+  the calls give the right sums: not every call is miscompiled. Not
+  matched to a GCC report here.
+- **newlib's printf has no C99 formats.** `_WANT_IO_C99_FORMATS` is not
+  defined in its `newlib.h`. `snprintf` of "zu=%zu hhu=%hhu lld=%lld
+  jd=%jd td=%td", with 5, 7, -9, 3 and -2, gives "zu=zu hhu=5 lld=7 jd=jd
+  td=td" with newlib and "zu=5 hhu=7 lld=-9 jd=3 td=-2" with picolibc:
+  newlib prints `%zu`, `%jd` and `%td` as written and takes no argument
+  for them, so that the arguments after one are read as other types. The
+  library's format strings with `%zu`, comments aside: three in
+  `semantics/diag.h`, `diag_print`'s, `diag_render_frame`'s and
+  `diag_render`'s (its lines 785, 874 and 1021), and the header line of
+  `data/hashmap/hashmap_fmt.h` (its line 143). `diag_test`'s 19
+  failures are of the rendering, and `hashmap_test`'s one of "len=5";
+  both tests pass with picolibc. The README's bare-metal section names
+  `diag_render()` as the way to render without a `FILE*`.
+- **`CANON_LIFETIME_DEBUG`'s counter does not link.** `lifetime_test`
+  turns the debug mode on; its token counter is then a 64-bit
+  `__atomic_fetch_add` (`lifetime.h`'s level 2), which GCC compiles on
+  both CPUs as a call to `__atomic_fetch_add_8`, and neither libgcc nor
+  the C libraries provide one: "undefined reference to
+  `__atomic_fetch_add_8'".
+- **File I/O through semihosting**, the README's Tier 2. picolibc's
+  semihosting layer has no `rename`, so that `file_test` and
+  `impl_defined_test` do not link. With newlib, `rename` returns -1 with
+  errno 88, ENOSYS, through QEMU's semihosting (a program of its own):
+  `file_write_all_atomic` fails, `file_test` stops at its first check of
+  it, and `impl_defined_test` fails its five checks of `rename`, the 189
+  others passing.
+- **`util/time.h`**: `clock_gettime` and `CLOCK_MONOTONIC`, and the test's
+  `nanosleep`, are not declared by either C library, as the README says
+  of newlib.
+- **The boards.** An unaligned word load (through a pointer the compiler
+  cannot see is unaligned) faults on the micro:bit's Cortex-M0; on
+  mps2-an386's Cortex-M4 it faults only with `CCR.UNALIGN_TRP` set, which
+  the job leaves clear: the Cortex-M4 builds may access unaligned data,
+  as their attribute `Tag_CPU_unaligned_access: v6` says, and the core
+  allows it. A test's exit status reaches QEMU's with both C libraries
+  (3 from a program's `return 3`); picolibc's default start file does not
+  end QEMU, its semihosting one does. A fault ends the run: picolibc's
+  start file prints "ARM fault: hardfault" and exits 1, `startup.c`
+  prints "FAULT: …" and exits 70.
+- **`cortexm.py`**: the sixteen builds as pinned; the attributes
+  "Tag_CPU_arch v6S-M, Tag_ABI_enum_size small" for the Cortex-M0+ and
+  "Tag_CPU_arch v7E-M, Tag_FP_arch VFPv4-D16, Tag_ABI_VFP_args VFP registers,
+  Tag_ABI_enum_size small, Tag_CPU_unaligned_access v6" for the
+  Cortex-M4; a pin changed to `fails 2`, with `ENFORCE`: "1 difference(s):
+  hashmap_test (pinned fails 2, fails 1)", exit 1 and an error. `check`:
+  "cortexm check: 9 pins, 61 tests in CMakeLists.txt; 0 problem(s)".
+  pyflakes; actionlint on the two workflows; `record_coverage.py --strict
+  --complete`.
+
+### The workflows
+
+`tools/which_workflows.py`: 1 to 6 and 8 run; 7 and 9 to 16 do not. 1 and
+3 to 6 because two workflow files they do not ignore change
+(`platforms.yml`, `records.yml`); 2 for the same and for `tools/`.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Q1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| Q2 | **1 and 3 to 6 are green**, each job with #77's notices, and 2's sixteen jobs before this one with #110's, times aside, its slowest header among them. | a failure, or another notice | H: nothing they read changes. |
+| Q3 | **2's four `cortex-m` jobs are green**, each with four notices, one a build type, as measured here: newlib's Debug and Release "61 tests, 55 passed, 4 failed (diag_test 19, hashmap_test 1, impl_defined_test 5, file_test 1), 2 not built (lifetime_test, time_test); as pinned", RelWithDebInfo and MinSizeRel "54 passed, 5 failed (option_test 1, …)"; picolibc's Debug and Release "57 passed, 0 failed, 4 not built (lifetime_test, impl_defined_test, file_test, time_test); as pinned", RelWithDebInfo and MinSizeRel "56 passed, 1 failed (option_test 1)"; times aside. | another count or name, a difference, or a failure | M–H: the same packages from the same archive; QEMU's may have moved with Ubuntu's updates. |
+| Q4 | **The binaries are the CPU's**: each log's attribute lines as measured here. | other attributes, or a leg stopped by them | H |
+| Q5 | **The versions**: GCC 13.2.1 20231009, newlib 4.4.0.20231231-2, picolibc 1.8.6-2, QEMU 8.2.2. | another | M–H |
+| Q6 | **8 is green**, its new step "cortexm check: 9 pins, 61 tests in CMakeLists.txt; 0 problem(s)". | a failure | H (run here) |
+| Q7 | **Each `cortex-m` job under 15 minutes**, the packages' install among them. | over | M: a mirror's speed. |
+
+### What follows
+
+Q1 to Q7 scored. Three of the measures are of the library and its
+toolchains, not of the test bench, and the author decides each before
+run 2: GCC 13.2's wrong code past `option_<T>_combine_with` at `-O2` and
+`-Os` (report it to GCC, say so in the README's bare-metal section and
+`docs/architectures.md`, and whether the library or its documentation
+works around it); `%zu` with a C library without C99 formats (the
+library's four format strings, or the documentation of what printf it
+needs); and `CANON_LIFETIME_DEBUG`'s 64-bit atomic on targets without one
+(a fallback, or the documentation of `CANON_LIFETIME_NO_ATOMICS`). Run 2
+enforces the pins as they then are. The close adds the Cortex-M rows to
+`docs/architectures.md`'s "Tested on", and the README's bare-metal
+section says the tests run there.
