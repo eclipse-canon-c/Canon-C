@@ -41104,3 +41104,115 @@ What it shows:
   the messages, whole; the titles were cut by a comma the command reads as
   its own. A check of the step's output, here, would not have shown it:
   only the annotations do.
+
+---
+
+## VERIFY-096: Pre-registration — The Tests on MSP430X under the GDB Simulator, at a 16-Bit `int`: TI's GCC, the Small and Large Memory Models, Run 1 Report-Only
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-096 |
+| **Date**       | 2026-11-20 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | ef9b2cf (VERIFY-095's change; its close, a record, is pushed with this): `1` and `3` to `6` #85, `2` #118, `8` #137. |
+| **Scope**      | `tools/msp430/` (new: `msp430.py`, `toolchain.cmake`, `pins.txt`, `README.md`); `.github/workflows/platforms.yml`: a job, `msp430`, and `big-endian-32`'s notice without a title; `.github/workflows/records.yml`: a step, `msp430.py check`; the README's platform tiers; `docs/architectures.md`, `docs/verification.md`, `docs/implementation-defined.md` and the workflow map, on the new job, and the map's row for 8, which named neither MetAcsl's, the smoke tests' nor the Cortex-M check. No library or test file. |
+| **Category**   | The list's item 7a-2, which the author chose on 2026-11-19 to take after 7a-3: a target whose `int` has 16 bits, MSP430X, its tests run. |
+
+### What is missing
+
+Every target that runs the tests has a 32-bit `int`. The README's platform
+tiers say Tier 0 works on 16-bit-`size_t` MCUs, and that "MSP430 is not
+checked"; AVR's check (`embedded`, VERIFY-048) compiles headers and runs
+nothing. No test has run where `int` has 16 bits, where integer promotion
+turns a `u16` into an `unsigned int` and an `int` cannot count to 100000.
+
+### What changes
+
+- **`tools/msp430/msp430.py`**, modeled on `tools/cortexm/cortexm.py`,
+  whose steps it shares (CTest's list, a test's run, its `FAIL` lines):
+  each test of `CMakeLists.txt` built with TI's `msp430-elf-gcc` for the
+  MSP430X CPU, at the small memory model (`-msmall`: 16-bit `size_t` and
+  pointers) and the large (`-mlarge -mcode-region=either
+  -mdata-region=either`: 20-bit, `__int20` in 4 bytes), each at CMake's
+  four build types, with `CANON_LIFETIME_NO_ATOMICS`; linked with
+  newlib's simulator runtime (`-msim`) and run under `msp430-elf-run`, the
+  GDB simulator the toolchain ships, whose system calls carry the output
+  and the exit status. Before the tests, a probe: a program that prints the
+  model's sizes as the target has them and exits with 3, which must come
+  back, or the run fails. The run names the toolchain, newlib's version and
+  printf formats, the memory regions of the model's linker script, and
+  checks the binaries' MSPABI attributes. `ENFORCE` is off: run 1 is
+  report-only, its pins (`pins.txt`, empty) to come from its measure.
+- **`msp430`**, in `platforms.yml`, one job per model: TI's
+  MSP430-GCC-OPENSOURCE 9.3.1.2 for x86-64 Linux
+  (`msp430-gcc-9.3.1.11_linux64.tar.bz2`: GCC 9.3.1.11, binutils 2.34,
+  newlib 2.4.0, GDB 9.1), fetched from TI into the Actions cache, its
+  SHA-256 pinned as three recipes that fetch the same file pin it (two Nix
+  derivations, and lwext4's CI image, whose CI runs `msp430-elf-run` with
+  it); the logs and summaries uploaded.
+- **`big-endian-32`**'s notice has no title, the leg in its message:
+  VERIFY-095's finding.
+- **`records.yml`**: `msp430.py check`, as `cortexm.py check`.
+- **The documents** say what the job checks, not yet what it finds.
+
+### Measured here
+
+TI's toolchain is a binary download, which the author's rule keeps from
+running here; the simulator, GCC 9's warnings and the large model are
+measured by run 1 alone.
+
+- **What compiles at a 16-bit `int`**: clang 18.1.3's MSP430 target, at
+  its one model (the small: `int`, `size_t` and pointers 16 bits, `double`
+  64), with newlib 4.4.0's headers (Ubuntu's `libnewlib-dev`) and the
+  project's flags. 17 tests compile: `autosar_bool_test`, `autosar_test`,
+  `bits_test`, `compare_test`, `contract_test`, `diag_test`,
+  `error_test`, `fold_test`, `log_test`, `option_test`,
+  `ownership_test`, `parse_test`, `random_test`, `result_test`,
+  `scope_test`, `slice_test` and `types_test`. Of the other 44, 42 stop
+  first at Tier 1's `#error` (`limits.h`), `time_test` at `util/time.h`'s
+  `clock_gettime`, which newlib declares not under `-std=c99` (as with
+  Cortex-M's newlib), and `lifetime_test` at its own line 134, `for (i =
+  0; i < 100000u; i++)` with an `unsigned int i`: at a 16-bit `int` the
+  condition is always true, the loop endless (`-Wtautological-constant-
+  out-of-range-compare`, an error under `-Werror`; GCC's `-Wtype-limits`,
+  in `-Wextra`, says the same). That is a defect of the test at a 16-bit
+  `int`, below Tier 1; it is not fixed here.
+- **GCC's MSP430 port**, from GCC 10's sources, the nearest published to
+  TI's 9.3.1.11: `int` 16 bits, `long` 32; `size_t` `unsigned int`, or
+  `__int20 unsigned` with `-mlarge`, pointers 16 or 20 bits; `double` and
+  `long double` 64; plain `char` unsigned; `-msim` links libsim and the
+  linker script `msp430-sim.ld`, or `msp430xl-sim.ld` with `-mlarge`. In
+  newlib's libgloss, a system call is a call to address 0x180 plus its
+  number, which the simulator catches; `exit` is one.
+- **The script**, with a stand-in toolchain (the host's GCC under the
+  MSP430 names, a simulator that runs the host binary): the probe, the
+  configure, build and run of a leg, a test made to fail to compile, named
+  not built with its error, and report-only; its refusals each made to
+  fire: binaries of the other model, a simulator that returns 0 to the
+  probe, a model it does not know. `msp430.py check`: 0 pins, 61 tests,
+  no problem.
+- `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Z1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| Z2 | **The toolchain**: in each `msp430` job the package comes from TI, or from the cache the other job saved, with the pinned SHA-256; `msp430-elf-gcc` reports 9.3.1, and `msp430-elf-run` is on the PATH. | a failed fetch, another checksum, a tool missing | M–H: TI's server, from GitHub's runners, not tried here; lwext4's CI fetches the same file |
+| Z3 | **The probe** exits with 3 and prints, at the small model, "int 2 bytes (INT_MAX 32767), long 4, size_t 2 (SIZE_MAX 65535), pointer 2, double 8, char unsigned", and at the large, "int 2 bytes (INT_MAX 32767), long 4, size_t 4 (SIZE_MAX 1048575), pointer 4, double 8, char unsigned". | another status, or another value | M: the sizes from GCC's port; the exit status through libsim not run here |
+| Z4 | **Both `msp430` jobs are green**, report-only: each of the eight legs configures, builds a test, and its binaries are MSP430X at the model (`Tag_ISA` MSP430X; `Tag_Code_Model` and `Tag_Data_Model` Small, or Large). | a failed job | M: the toolchain and the simulator not run here |
+| Z5 | **What builds**: at both models, none of the 44 above; `lifetime_test` refused by its loop's bound and `time_test` by `clock_gettime`, the 42 others by Tier 1's `#error`. The 17 build at the large model, and at the small all but those its 64 KB cannot hold, each named with the region the linker reports. | another set, or another reason | M: GCC 9's warnings are not clang 18's, and no test was linked here |
+| Z6 | **Three pass**: `types_test`, `compare_test` and `scope_test` at each leg that builds them. | a failure or a time-out | M: no 16-bit-`int` assumption read in them |
+| Z7 | **`big-endian-32`'s notices** have no title, and say "big-endian-32 Release off: 1 of 61 test binaries linked with libatomic", the same at Debug, and "24 of 61" with `debug`. | a title, or another count | H |
+| Z8 | **Nothing else changes**: 1 and 3 to 6 give #85's notices, 2's other jobs #118's (times, and `embedded`'s slowest header's name, aside), and 8 is green, its new step among its checks. | another notice, or a failure | H |
+| Z9 | **VERIFY-090's T3 where it failed** (VERIFY-095's Y7, carried): a Windows `build` Release job on MSVC 19.52, if one runs, builds `smallvec_test.c` without C4789 and the test passes. If none runs, Z9 is not scored and is carried to the next push that runs 1. | C4789, or another error | M–H |
+
+**Not predicted**: which of the tests built pass, but Z6's three. Run 1
+measures them, report-only.
+
+### What follows
+
+Z1 to Z9 scored, Z9 scored or carried, and the record closes. Then
+VERIFY-097: run 1's measure pinned and enforced, each line with its
+reason, and what it finds put to the author, `lifetime_test`'s loop among
+it.
