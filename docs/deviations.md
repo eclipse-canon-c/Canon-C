@@ -40559,6 +40559,7 @@ What it shows:
 | **ID**         | VERIFY-092 |
 | **Date**       | 2026-11-19 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-19 — Scored: V1, V2 and V5 MATCH; V4 MISS, `embedded` stopped twice at its install's 30-minute limit by Azure's Ubuntu mirror, before it compiled anything; V3 not scored. CLOSED: three of four scored ("Scored", below); VERIFY-093 makes the install robust and carries V4's compile checks (its W3) and V3 (its W6). The Status above is the record as committed. |
 | **Baseline**   | a7b4d87 (VERIFY-091's change; its close, a record, is pushed with this): `1` and `3` to `6` #82, `2` #115, `8` #133. |
 | **Scope**      | `test/semantics/diag_test.c`: `test_render_index_and_line_at_full_width`, compiled at every width of `size_t`, the texts it expects written out by division; and a check that `diag_usize_fmt_` is as wide as `usize`. `test/data/hashmap_test.c`: the header line checked through its `cap`, and the same check of `hashmap_usize_fmt_`. No library file. |
 | **Category**   | VERIFY-091's U2: its run shows `diag_test` passing with MSVC, not that the test was compiled there. |
@@ -40639,3 +40640,36 @@ compile, the 16-bit targets of the list) is not checked by them; there
 V1 to V5 scored, and the record closes, with V3 scored or carried. Then
 the list: Analog Devices' SHARC in `docs/architectures.md`, and item 7's
 next part, a target whose `int` has 16 bits.
+
+### Scored (2026-11-19)
+
+The push of 33b4230, d43d354 and 4eb3ca0 started seven workflows: `1` and
+`3` to `6` #83, `2` #116 and `8` #134. Each but 2 was green at its first
+attempt; 2 was red at its first attempt and at the second, the author's
+re-run of its failed job.
+
+| # | scored |
+|---|--------|
+| V1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| V2 | **MATCH.** 1 is green, its 27 jobs, their notices #82's, 27 of 27. `diag_test` and `hashmap_test` passed in each job that runs the suite, the test at `usize`'s maximum and the two checks of width compiled in every one. The eight MSVC jobs, Windows `build` and `lifetime-debug`, all on image 20261103.298.1 with MSVC 19.51.36260.0, passed them: with MSVC, `diag.h`'s and `hashmap_fmt.h`'s conversions hold a `usize`, which VERIFY-091's run could not show. |
+| V3 | **Not scored.** The four Windows `build` jobs ran on 20261103.298.1, MSVC 19.51; the one Windows job on 20261116.315.1 was `mingw (Debug)`, GCC 16.2.0. Carried to VERIFY-093 (W6). |
+| V4 | **MISS.** 2 is red. Its `embedded` job stopped at its install step's 30-minute limit before it compiled anything, at the first attempt (07:55 to 08:25 UTC) and at the second (10:53 to 11:23): Azure's mirror of the Ubuntu archive sent the 380 MB of packages at about 0.1 MB/s, `gcc-riscv64-unknown-elf`'s 48.4 MB in twelve minutes, where in 2's five runs before the step took 20 to 40 seconds. The `cortex-m (m4, newlib)` job's install took 17 minutes in the same run. The cause is not the change; a failure is what V4 named as its falsifier. 2's 21 other jobs gave #115's notices, the six `cortex-m` jobs among them, which ran the two tests on Cortex-M with both toolchains. The embedded job's compile of them (227 of 227 at each of the 18 configurations, here) is VERIFY-093's W3. |
+| V5 | **MATCH.** 3 to 6's 36 jobs gave #82's notices; 8 is green. |
+
+Three of four scored; V3 not scored, and carried.
+
+**Closed.** The test at `usize`'s maximum is compiled at every width, and
+`diag_test` and `hashmap_test` check that their header's conversion holds
+a `usize`; with MSVC, where VERIFY-091 could not show it, they passed. V4's
+miss is the mirror's, and the embedded job is VERIFY-093's to run again:
+the author decided on 2026-11-19 that its install, and `cortex-m`'s, be
+made robust, which that record does. The close changes nothing but this
+record.
+
+What it shows:
+
+- **A test that cannot be left out shows what one that could not.** The
+  pass on MSVC is evidence now, where VERIFY-091's was an inference.
+- **A runner's mirror can stop a job whatever the change.** The 30-minute
+  limit made the stall a failure in half an hour, not in 2 h 48 min as at
+  VERIFY-061; a re-run three hours later met the same mirror.
