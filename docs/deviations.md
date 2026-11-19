@@ -40935,6 +40935,7 @@ What it shows:
 | **ID**         | VERIFY-095 |
 | **Date**       | 2026-11-19 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-20 — Scored: Y1 to Y6 MATCH, Y5 by its falsifier, its wording wrong for the six `cortex-m` jobs, whose logs do not show CMake's output; Y7 not scored, no Windows `build` Release job having drawn MSVC 19.52. CLOSED: six of six scored ("Scored", below); Y7 waits for the next push that runs 1. Found at scoring: the notice's title stops at its comma. The Status above is the record as committed. |
 | **Baseline**   | 7c5c93a (VERIFY-094's change; its close, a record, is pushed with this): `8` #136; `1` and `3` to `6` #84 and `2` #117, at f4f3098, the last push that ran them. |
 | **Scope**      | `CMakeLists.txt`: a check for the 64-bit atomic, and the test binaries linked with libatomic where it finds that needed. `.github/workflows/platforms.yml`: a job, `big-endian-32`. `README.md`: the note on `CANON_LIFETIME_DEBUG` without 64-bit atomics. `docs/architectures.md`: a row in "Tested on". The lists of where the tests run, in `docs/implementation-defined.md`, `docs/verification.md`, `docs/autosar-classic.md` and the workflow map: 32-bit PowerPC, and Cortex-M where VERIFY-089 left it out. No library or test file. |
 | **Category**   | The list's item 7a-3, which the author chose on 2026-11-19 to take before MSP430: the tests on a 32-bit big-endian target, with Ubuntu's packages, as the s390x job runs them. |
@@ -41056,3 +41057,50 @@ check, and the runner's install of the three packages.
 
 Y1 to Y7 scored, Y7 scored or carried, and the record closes. Then item
 7a-2: MSP430X, a target whose `int` has 16 bits.
+
+### Scored (2026-11-20)
+
+The push of 7af0382, 13d9635 and ef9b2cf started seven workflows: `1` and
+`3` to `6` #85, `2` #118 and `8` #137, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| Y1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| Y2 | **MATCH.** The four `big-endian-32` jobs passed at their first attempt, each with 61 of 61 tests passed, the tests in 1.6 to 2.0 s under qemu-ppc 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.18), built by GCC 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04.1), as here. |
+| Y3 | **MATCH.** In each: "CANON_C_ATOMIC64_LINKS - Failed", "CANON_C_ATOMIC64_LINKS_LIBATOMIC - Success", "Canon-C: the tests are linked with libatomic"; the binaries "ELF 32-bit MSB executable, PowerPC"; the notice "1 of 61 test binaries linked with libatomic" in the two `off` jobs, `lifetime_test` alone, and "24 of 61" in the two `debug` jobs. The notices' titles read `big-endian-32 (Release` and `big-endian-32 (Debug` (below). |
+| Y4 | **MATCH.** Each job listed 19 package files, 50 MB, found no cache entry, fetched the 19 and left none to apt, its install step taking 24 to 25 s. `big-endian-32 (Debug, debug)` saved the entry; the three others were told "Unable to reserve cache with key ..., another job may be creating this cache", as at VERIFY-093. |
+| Y5 | **MATCH, by its falsifier; its wording wrong for six jobs.** The 34 jobs of 1, 2 and 3 that configure CMake with GCC or Clang and log CMake's output (GCC 13.2.1, 13.3.0, 14.2.0 and MinGW-w64's 16.2.0; Clang 18.1.3; Apple Clang 21.0.0) each logged "CANON_C_ATOMIC64_LINKS - Success", and none "linked with libatomic"; the eight MSVC jobs, the four `build` and the four `lifetime-debug` on Windows, ran no check. The six `cortex-m` jobs configure CMake with `arm-none-eabi-gcc` too, but `tools/cortexm/cortexm.py` keeps CMake's output and shows it only when configuring fails: their logs cannot show the line, and the prediction counted them among the jobs that log it. Their tests passed as pinned; the Cortex-M4 toolchain's check passed here (Measured here). |
+| Y6 | **MATCH.** The 87 jobs of 1 to 6 and 8 that ran at the baseline gave its conclusions and notices (#84, #117, and `8` #135), times aside; 8 is green. |
+| Y7 | **Not scored.** The two Windows `build` Release jobs ran on image 20261103.298.1, MSVC 19.51.36260.0, for the fifth push in a row. The six other MSVC jobs drew 20261116.315.1, MSVC 19.52.37029.0: the two `build` Debug jobs and the four `lifetime-debug` jobs, two of those at Release, which built `smallvec_test.c` without C4789 and passed it, T3's weaker case (VERIFY-090). Carried to the next push that runs 1. |
+
+Six of six scored; Y7 not scored, and carried.
+
+**Found at scoring.** The notice's title is cut at its comma: GitHub's
+workflow commands separate a command's properties with commas, so
+`title=big-endian-32 (Release, off)` gives the title
+`big-endian-32 (Release`, and two jobs' notices share each title. The
+messages are whole, and the job names each notice's leg; the next change to
+`platforms.yml` puts the leg in the message and gives no title.
+
+**Closed.** The tests run on big-endian 32-bit PowerPC, at Release and
+Debug, with `CANON_LIFETIME` off and debug, and pass; a 32-bit `size_t` has
+met big-endian byte order in a run. The test build links libatomic where
+the 64-bit atomic needs it, and nowhere else in CI. VERIFY-090's T3, Y7
+here, waits for the next push that runs 1. The close changes nothing but
+this record.
+
+What it shows:
+
+- **A target proved at was not a target tested.** 32-bit PowerPC Linux had
+  the core/ proofs and Eva's programs; the first build of the suite there
+  did not link. The proofs take the counter's increment as atomic; that the
+  platform makes it atomic in a library, by a mutex, is a fact of the link,
+  which only a build for the target meets.
+- **A prediction about a log must know which logs show what.** The check ran
+  in 44 jobs and showed its line in 38: `cortexm.py` keeps CMake's output.
+  Y5's falsifier held; its count was written without reading how the
+  Cortex-M job runs CMake.
+- **A message's text is not its syntax.** The counts Y3 predicted were in
+  the messages, whole; the titles were cut by a comma the command reads as
+  its own. A check of the step's output, here, would not have shown it:
+  only the annotations do.
