@@ -106,6 +106,18 @@
     #error "hashmap_fmt.h: define HASHMAP_FMT_VAL_FN (bool fn(StringBuf*, const V*)) before including"
 #endif
 
+/* The header line's len and cap are usize, printed without C99's %zu
+ * (VERIFY-091), as semantics/diag.h prints a frame's index and line: %lu
+ * with a cast to unsigned long where size_t has 32 bits or fewer, %llu
+ * with a cast to unsigned long long where it is wider. */
+#if defined(SIZE_MAX) && (SIZE_MAX > 0xFFFFFFFF)
+typedef unsigned long long hashmap_usize_fmt_;
+#define HASHMAP_USIZE_FMT_ "llu"
+#else
+typedef unsigned long hashmap_usize_fmt_;
+#define HASHMAP_USIZE_FMT_ "lu"
+#endif
+
 /* ============================================================================
  * HASHMAP_FN(to_stringbuf) — serialize hashmap to StringBuf
  * ========================================================================= */
@@ -140,8 +152,11 @@ static inline bool HASHMAP_FN(to_stringbuf)(
         ? (f64)map->len / (f64)map->capacity
         : 0.0;
 
-    if (!stringbuf_append_fmt(sb, "hashmap { len=%zu, cap=%zu, load=%.3f } {\n",
-            (size_t)map->len, (size_t)map->capacity, load))
+    if (!stringbuf_append_fmt(sb,
+            "hashmap { len=%" HASHMAP_USIZE_FMT_ ", cap=%" HASHMAP_USIZE_FMT_
+            ", load=%.3f } {\n",
+            (hashmap_usize_fmt_)map->len, (hashmap_usize_fmt_)map->capacity,
+            load))
         return false;
 
     /* Entries */

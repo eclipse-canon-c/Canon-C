@@ -76,7 +76,9 @@ was a `memmove`, cost nothing at `-Os` and 2 to 12 bytes at `-O2`. It and
 and `from_ptr`, store values of the type where they called `memset`, and
 `from_ptr` copies element by element where it called `memcpy`: `diag.h`
 22 to 32 bytes fewer at both levels, `array.h` 22 to 30 fewer at `-Os` and
-10 to 16 more at `-O2`.
+10 to 16 more at `-O2`. VERIFY-091, which prints a size without `%zu`,
+moved only tokens: `diag.h`'s 38 more, `data/hashmap/hashmap_fmt.h`'s 10;
+at the twelve settings their bytes are the same.
 In bytes, at `-Os` as shipped unless the column says otherwise.
 
 **All headers together**, every function kept:
@@ -127,7 +129,7 @@ turn it off with `CANON_NO_REQUIRE`.
 | `data/convenience/smallvec.h` | 24 | 918 | 856 | 1,094 | 756 | 1,254 | 14,987 |
 | `data/deque/deque.h` | 24 | 1,202 | 1,182 | 1,380 | 828 | 1,506 | 4,145 |
 | `data/hashmap/hashmap.h` | 52 | 3,296 | 3,418 | 3,640 | 2,232 | 3,792 | 9,701 |
-| `data/hashmap/hashmap_fmt.h` | 1 | 264 | 256 | 362 | 188 | 488 | 18,437 |
+| `data/hashmap/hashmap_fmt.h` | 1 | 264 | 256 | 362 | 188 | 488 | 18,447 |
 | `data/hashmap/hashmap_range.h` | 2 | 288 | 288 | 298 | 198 | 476 | 25,271 |
 | `data/priority_queue.h` | 26 | 1,454 | 1,422 | 1,878 | 842 | 5,274 | 11,642 |
 | `data/queue.h` | 14 | 176 | 144 | 210 | 94 | 822 | 4,469 |
@@ -138,7 +140,7 @@ turn it off with `CANON_NO_REQUIRE`.
 | `data/vec/vec_fmt.h` | 2 | 122 | 108 | 184 | 108 | 136 | 16,898 |
 | `data/vec/vec_range.h` | 1 | 156 | 162 | 166 | 166 | 396 | 15,496 |
 | `semantics/borrow.h` | 24 | 564 | 620 | 672 | 462 | 896 | 5,090 |
-| `semantics/diag.h` | 13 | 758 | 736 | 906 | 686 | 810 | 2,002 |
+| `semantics/diag.h` | 13 | 758 | 736 | 906 | 686 | 810 | 2,040 |
 | `semantics/error.h` | 4 | 286 | 306 | 376 | 306 | 302 | 365 |
 | `semantics/option/option.h` | 16 | 574 | 640 | 638 | 446 | 682 | 1,099 |
 | `semantics/result/result.h` | 17 | 738 | 788 | 608 | 566 | 832 | 1,466 |

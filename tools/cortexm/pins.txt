@@ -6,7 +6,9 @@
 # there: "not-built", or "fails N", N the lines of its output that begin
 # with FAIL. A test no line names must pass. The lines are measures:
 # VERIFY-089's runs 1 and 2 for Ubuntu's toolchain, run 2 for the Arm GNU
-# Toolchain's.
+# Toolchain's. VERIFY-091 took out diag_test's and hashmap_test's with
+# Ubuntu's newlib, whose printf has no C99 formats: the library no longer
+# prints a size with %zu.
 #
 # util/time.h needs clock_gettime and CLOCK_MONOTONIC, and the test
 # nanosleep: no C library here has them (the README's Tier 2).
@@ -18,13 +20,6 @@ file_test          ubuntu  all  picolibc  all                        not-built
 impl_defined_test  ubuntu  all  picolibc  all                        not-built
 file_test          all     all  newlib    all                        fails 1
 impl_defined_test  all     all  newlib    all                        fails 5
-# Ubuntu's newlib (4.4.0) has no C99 printf formats (_WANT_IO_C99_FORMATS
-# is not in its newlib.h): %zu prints "zu" and takes no argument, so that
-# the arguments after it are read as the wrong types. diag.h's rendering
-# and hashmap_fmt.h's header use %zu. picolibc's printf has it, and so
-# has the Arm GNU Toolchain's newlib (4.6.0).
-diag_test          ubuntu  all  newlib    all                        fails 19
-hashmap_test       ubuntu  all  newlib    all                        fails 1
 # GCC 13.2 folds option_Point_combine_with(some({3,4}), some({3,4}),
 # point_add) to Some({3,4}) at -O2 and -Os, where it is Some({6,8}):
 # wrong code, gone with -fno-ipa-sra, -fno-ipa-cp or -fno-tree-sra.

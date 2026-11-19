@@ -34,7 +34,8 @@ architecture badges follow it.
 On Cortex-M, GCC 13.2 compiles one check of `option_test` wrong at `-O2`
 and `-Os`, and GCC 15.3 compiles it right (the README's bare-metal
 section); Ubuntu's newlib has no C99 printf formats, which the Arm GNU
-Toolchain's has (`tools/cortexm/pins.txt`).
+Toolchain's has, and which the library's own format strings do not use
+since VERIFY-091.
 
 *Planned:*
 

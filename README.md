@@ -962,6 +962,12 @@ For what Canon-C intentionally omits, established C libraries exist:
 > `<stdio.h>` does so only for `snprintf` in optional formatting
 > functions — skip those call sites and the dependency is inert on
 > toolchains with stub stdio support (newlib, picolibc).
+> The library's own format strings print a `usize` with `%lu` where
+> `size_t` has 32 bits or fewer and with `%llu` where it is wider, not
+> with C99's `%zu`, which a printf built without C99's formats (Ubuntu's
+> newlib, newlib-nano) prints as written (VERIFY-091). newlib-nano's
+> printf has no `%llu` either: on a 64-bit target, link a printf that
+> has it.
 >
 > **malloc / free**
 > `core/memory.h` includes `<stdlib.h>` and provides `mem_alloc()` /

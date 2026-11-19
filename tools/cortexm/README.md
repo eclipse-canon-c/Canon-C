@@ -52,5 +52,6 @@ on Ubuntu 24.04: `gcc-arm-none-eabi`, `libnewlib-arm-none-eabi`,
 before it ran; run 2 enforced for Ubuntu's toolchain, with
 `CANON_LIFETIME_NO_ATOMICS`, and the Arm GNU Toolchain's first measure,
 report-only; run 3 the Arm GNU Toolchain's legs enforced, pinned as run 2
-measured them. The predictions and their scores are in
-`docs/deviations.md`.
+measured them. VERIFY-091 took the library's `%zu` out, and with it the
+pins of `diag_test` and `hashmap_test` with Ubuntu's newlib. The
+predictions and their scores are in `docs/deviations.md`.

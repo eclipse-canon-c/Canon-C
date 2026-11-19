@@ -727,6 +727,27 @@ static inline Error diag_latest_code(const Diag *d)
    Output
    ════════════════════════════════════════════════════════════════════════════ */
 
+/* A frame's index and line are usize, printed without C99's %zu
+ * (VERIFY-091): a printf built without C99's formats, as Ubuntu's newlib
+ * 4.4.0's and newlib-nano's, prints "%zu" as written and leaves its
+ * argument to the next conversion. Where size_t has 32 bits or fewer the
+ * conversion is %lu, with a cast to unsigned long: C89's, which every
+ * printf has. Where size_t is wider it is %llu, with a cast to unsigned
+ * long long: C99's long long, which newlib-nano's printf has not. Either
+ * cast keeps the value. SIZE_MAX is read under defined(), as
+ * core/primitives/limits.h reads it, for the static analyzers that do
+ * not read system headers. DIAG_FRAME_FMT_ is a frame's line, which
+ * diag_print, diag_render_frame and diag_render share. */
+#if defined(SIZE_MAX) && (SIZE_MAX > 0xFFFFFFFF)
+typedef unsigned long long diag_usize_fmt_;
+#define DIAG_USIZE_FMT_ "llu"
+#else
+typedef unsigned long diag_usize_fmt_;
+#define DIAG_USIZE_FMT_ "lu"
+#endif
+#define DIAG_FRAME_FMT_ \
+    "[%" DIAG_USIZE_FMT_ "] %s:%" DIAG_USIZE_FMT_ " in %s() -- error %d: \"%s\""
+
 /**
  * @brief Prints the full chain to `stream`, from root cause to latest frame.
  *
@@ -782,10 +803,10 @@ static inline void diag_print(const Diag *d, FILE *stream)
     for (i = 0u; i < d->depth; i++) {
         const DiagFrame *f = &d->frames[i];
         (void)fprintf(stream,
-                "[%zu] %s:%zu in %s() -- error %d: \"%s\"\n",
-                i,
+                DIAG_FRAME_FMT_ "\n",
+                (diag_usize_fmt_)i,
                 (f->file != NULL) ? f->file : "?",
-                f->line,
+                (diag_usize_fmt_)f->line,
                 (f->func != NULL) ? f->func : "?",
                 (int)f->code,
                 (f->message[0] != '\0') ? f->message : "(no message)");
@@ -871,10 +892,10 @@ static inline usize diag_render_frame(const DiagFrame *f,
 #  pragma GCC diagnostic ignored "-Wformat-truncation"
 #endif
     n = snprintf(buf, buf_size,
-                 "[%zu] %s:%zu in %s() -- error %d: \"%s\"",
-                 index,
+                 DIAG_FRAME_FMT_,
+                 (diag_usize_fmt_)index,
                  (f->file != NULL) ? f->file : "?",
-                 f->line,
+                 (diag_usize_fmt_)f->line,
                  (f->func != NULL) ? f->func : "?",
                  (int)f->code,
                  (f->message[0] != '\0') ? f->message : "(no message)");
@@ -1018,10 +1039,10 @@ static inline usize diag_render(const Diag *d,
 #  pragma GCC diagnostic ignored "-Wformat-truncation"
 #endif
         n = snprintf(dst, rem,
-                     "[%zu] %s:%zu in %s() -- error %d: \"%s\"\n",
-                     i,
+                     DIAG_FRAME_FMT_ "\n",
+                     (diag_usize_fmt_)i,
                      (f->file != NULL) ? f->file : "?",
-                     f->line,
+                     (diag_usize_fmt_)f->line,
                      (f->func != NULL) ? f->func : "?",
                      (int)f->code,
                      (f->message[0] != '\0') ? f->message : "(no message)");

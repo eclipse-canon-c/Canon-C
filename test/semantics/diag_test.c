@@ -40,6 +40,8 @@
  *   - diag_render: full-chain content and ordering, would-be total under
  *                  truncation, placeholders, NULL/0 guards, empty chain,
  *                  cross-check against per-frame renders
+ *   - diag_render_frame and diag_render at usize's maximum: the index and
+ *     the line rendered whole, without C99's %zu (VERIFY-091)
  *   - DIAG_RETURN_IF: pushes and returns on true condition, skips on false
  *   - DIAG_PROPAGATE: pushes and returns when call returns false, skips on true
  *   - Reuse after diag_clear: new pushes land at index 0
@@ -1046,6 +1048,40 @@ static void test_render_zero_size_returns_zero_buf_untouched(void)
     EXPECT(buf[0] == 'X');                     /* size 0: nothing written */
 }
 
+/* VERIFY-091: the index and the line are usize, rendered without C99's %zu
+ * (semantics/diag.h, DIAG_USIZE_FMT_). At usize's maximum they render
+ * whole; a conversion narrower than size_t, as %lu where long is narrower
+ * (64-bit Windows), would cut them here. The texts are per width of
+ * size_t; at another width the test is not compiled. */
+#if defined(SIZE_MAX) && (SIZE_MAX == 0xFFFFFFFFFFFFFFFF)
+#  define FULL_WIDTH_FRAME \
+    "[18446744073709551614] w.c:18446744073709551615 in fn() -- error "
+#  define FULL_WIDTH_CHAIN "[0] w.c:18446744073709551615 in fn() -- error "
+#elif defined(SIZE_MAX) && (SIZE_MAX == 0xFFFFFFFF)
+#  define FULL_WIDTH_FRAME "[4294967294] w.c:4294967295 in fn() -- error "
+#  define FULL_WIDTH_CHAIN "[0] w.c:4294967295 in fn() -- error "
+#endif
+
+#ifdef FULL_WIDTH_FRAME
+static void test_render_index_and_line_at_full_width(void)
+{
+    Diag             d = diag_init();
+    char             buf[256];
+    const DiagFrame *f;
+
+    diag_push(&d, "w.c", SIZE_MAX, "fn", ERR_UNKNOWN, "m");
+    f = diag_root(&d);
+    EXPECT_NOT_NULL(f);
+    EXPECT(f->line == SIZE_MAX);
+
+    (void)diag_render_frame(f, SIZE_MAX - 1u, buf, sizeof(buf));
+    EXPECT(strncmp(buf, FULL_WIDTH_FRAME, strlen(FULL_WIDTH_FRAME)) == 0);
+
+    (void)diag_render(&d, buf, sizeof(buf));
+    EXPECT(strncmp(buf, FULL_WIDTH_CHAIN, strlen(FULL_WIDTH_CHAIN)) == 0);
+}
+#endif
+
 /* ============================================================================
    Frame ordering — root = first pushed, latest = last pushed
    ============================================================================ */
@@ -1291,6 +1327,9 @@ int main(void)
     test_render_empty_chain_returns_zero_empty_buf();
     test_render_null_buf_returns_zero();
     test_render_zero_size_returns_zero_buf_untouched();
+#ifdef FULL_WIDTH_FRAME
+    test_render_index_and_line_at_full_width();
+#endif
 
     /* Frame ordering */
     test_frame_ordering_three_pushes();
