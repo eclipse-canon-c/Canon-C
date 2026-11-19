@@ -40834,3 +40834,63 @@ What it shows:
 - **A carried prediction waits on what it cannot hurry.** VERIFY-090's
   T3 has waited four pushes for GitHub's rollout to reach a Windows
   `build` Release job; carrying it costs a line a record.
+
+---
+
+## VERIFY-094: Pre-registration — Analog Devices' SHARC in "Not Supported": a 32-Bit `char` before SHARC+, and on SHARC+ Built for Words
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-094 |
+| **Date**       | 2026-11-19 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | f4f3098 (VERIFY-093's change; its close, a record, is pushed with this): `8` #135. |
+| **Scope**      | `docs/architectures.md`: a row in "Not supported", and its sources. No code and no workflow. |
+| **Category**   | The list's item since 2026-11-18, when the author added Analog Devices' SHARC to it, for the "Not supported" section as the C28x is, for its 32-bit `char`. The record checks that claim against Analog Devices' compiler manuals before the row says it. |
+
+### What is decided
+
+- **Before SHARC+, the claim holds.** The SHARC compiler's manual (Rev
+  1.5, "Data Type and Data Type Sizes", Table 1-13) gives `char` 32 bits
+  and a `sizeof` of 1, and `short`, `int` and `long` the same; "Although
+  32-bit chars are unusual, they do conform to the standard." So
+  `uint8_t` cannot exist, as on the C28x, whose row says what Canon-C
+  assumes of a byte: not supported.
+- **SHARC+ splits it.** CrossCore Embedded Studio 2.9.0's manual, "Using
+  Byte-Addressing": "Byte-addressing is enabled by the command line switch
+  -char-size-8, which is the default setting", and "word-addressing is
+  enabled by the command line switch -char-size-32", on the processors
+  that can "access individual 8-bit bytes in memory"; Analog Devices' FAQ
+  names ADSP-SC58x and ADSP-2158x among them. Built with `-char-size-32`,
+  SHARC+ is the older SHARC: not supported. Built as it is by default, its
+  `char` has 8 bits, and the row does not exclude it.
+- **Not tried, and not listed as supported.** Its compiler is CrossCore
+  Embedded Studio's, which this project does not use; whether Canon-C
+  builds with it (Rev 1.5's `-c99` is "a freestanding implementation" of
+  C99) is not known.
+
+**Not claimed.** The table of processors that address bytes is not in the
+excerpts read; the row names the two families Analog Devices' FAQ names.
+Analog Devices' later manuals may change the default; the row cites
+2.9.0's.
+
+### Measured here
+
+- **Read**: the three documents the row cites, and Analog Devices' FAQ on
+  `sizeof` for Blackfin and SHARC, which says the classic SHARC counts its
+  `sizeof` in 32-bit words.
+- `tools/which_workflows.py`: 8 alone.
+- `tools/record_coverage.py --strict --complete`: no problem.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| X1 | **8 alone runs.** | another set | H |
+| X2 | **8 is green**, its record checks passing with this record and the row. | a failure | H |
+
+### What follows
+
+X1 and X2 scored, and the record closes. VERIFY-093's W6 waits for the
+next push that runs 1. Then item 7's next part: a target whose `int` has
+16 bits.
