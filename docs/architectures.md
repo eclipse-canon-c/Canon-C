@@ -109,8 +109,15 @@ and PowerPC e200, generated from their compilers as the seven are.
 |--------------|-----|
 | TI C28x (C2000's classic core) and other processors with 16-bit bytes | the smallest addressable unit is 16 bits, so `uint8_t` cannot exist, and the C standard does not allow it to; Canon-C's `u8`, its byte views and its byte counts assume 8-bit bytes. Supporting them would mean redesigning the library's foundations. |
 | 8051 and STM8, for now | SDCC, their free compiler, has no 64-bit `double`; planned above, Tier 0 once `f64` is optional |
+| Analog Devices SHARC before SHARC+ (ADSP-2106x to ADSP-2148x), and SHARC+ built with `-char-size-32` | word-addressed: `char` has 32 bits, as `short`, `int` and `long` do, each of `sizeof` 1, so `uint8_t` cannot exist, as on the C28x. SHARC+ processors that address bytes (ADSP-SC58x and ADSP-2158x among them) do so by default, with `-char-size-8`, their `char` 8 bits: this row does not exclude them, and they are not tried: their compiler is Analog Devices' CrossCore Embedded Studio, which this project does not use. |
 
 Sources for the compilers named here: [SDCC's
 `double`](https://sourceforge.net/p/sdcc/feature-requests/351), [byte
-accesses on the C28x](https://software-dl.ti.com/ccs/esd/documents/c2000_byte-accesses-with-the-c28x-cpu.html)
-and [TI's c29clang manual](https://software-dl.ti.com/codegen/docs/c29clang/compiler_tools_user_guide/compiler_manual/indexC29.html).
+accesses on the C28x](https://software-dl.ti.com/ccs/esd/documents/c2000_byte-accesses-with-the-c28x-cpu.html),
+[TI's c29clang manual](https://software-dl.ti.com/codegen/docs/c29clang/compiler_tools_user_guide/compiler_manual/indexC29.html),
+the SHARC compiler's sizes of types before SHARC+ ([its manual, Rev
+1.5](https://www-cce.cldnet.analog.com/media/en/dsp-documentation/software-manuals/50_21k_cc_mn_rev_1.5.pdf),
+"Data Type and Data Type Sizes") and its byte-addressing on SHARC+
+([CrossCore Embedded Studio 2.9.0's
+manual](https://www.analog.com/media/en/dsp-documentation/software-manuals/cces-sharccompiler-manual.pdf),
+"Using Byte-Addressing").
