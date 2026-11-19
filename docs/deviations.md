@@ -40673,3 +40673,123 @@ What it shows:
 - **A runner's mirror can stop a job whatever the change.** The 30-minute
   limit made the stall a failure in half an hour, not in 2 h 48 min as at
   VERIFY-061; a re-run three hours later met the same mirror.
+
+---
+
+## VERIFY-093: Pre-registration — The Embedded and Cortex-M Jobs Install Their Packages from the Actions Cache, or from Canonical's Archive before Azure's Mirror
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-093 |
+| **Date**       | 2026-11-19 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 4eb3ca0 (VERIFY-092's change; its close, a record, is pushed with this): `1` and `3` to `6` #83, `8` #134; `2` #116 red, its `embedded` job stopped at the install twice, and #115, at a7b4d87, 2's last green run. |
+| **Scope**      | `.github/actions/apt-install/`, new: `action.yml` and `fetch.sh`. `.github/workflows/platforms.yml`: the install steps of `embedded` and `cortex-m` use it. `.github/workflows/README.md`: a line on it. No library or test file. |
+| **Category**   | The author's decision of 2026-11-19, on VERIFY-092's V4: make the install robust. |
+
+### What is missing
+
+A GitHub runner fetches Ubuntu's packages from Azure's mirror of the Ubuntu
+archive. On 2026-11-19 that mirror sent them at about 0.1 MB/s for more
+than three hours: `embedded`, which needs 380 MB, stopped at its install
+step's 30-minute limit twice (VERIFY-092's V4), and `cortex-m (m4, newlib)`
+took 17 minutes for its own. A re-run fetches the same files from the same
+mirror. The step had stalled before, for 2 h 48 min at VERIFY-061, when it
+had no limit.
+
+### What is decided
+
+- **A composite action, `.github/actions/apt-install`, for both jobs.**
+  1. `apt-get update` checks Ubuntu's signed indexes; then `apt-get
+     install --print-uris -o Acquire::ForceHash=SHA256` lists the files the
+     install needs, each with its size and its SHA-256 from them.
+  2. `actions/cache/restore` restores the files of the list, its key the
+     list's names, sizes and hashes; failing that, the job's latest entry.
+  3. `fetch.sh` keeps a restored file whose SHA-256 is the index's, and
+     fetches the others from Canonical's archive (`archive.ubuntu.com`)
+     first and Azure's mirror second, giving a mirror up when it sends
+     less than 500 kB/s for 30 s, and keeping a file only if its SHA-256
+     is the index's. A mirror that fails a file, by an error or by that
+     speed, is not asked for the next ones, so that two slow mirrors cost
+     about two minutes, not the step's thirty. Files the list does not name
+     go. A file no mirror gives is left to apt.
+  4. The kept files go to apt's archive directory, and apt installs,
+     fetching itself what `fetch.sh` left.
+  5. `actions/cache/save` saves them, when the entry restored was not the
+     list's.
+- **The checks of SHA-256 are `fetch.sh`'s.** apt 2.8 does not check a file
+  of the right size already in its archive directory (measured here), so
+  every file apt finds there has been checked by `fetch.sh` against the
+  index that `apt-get update` checked against Ubuntu's signature. A cache
+  entry of other files cannot get past it.
+- **Canonical's archive first**: the archive the mirror mirrors, its
+  indexes signed by the same key. Azure's second, as the runner's apt
+  would use it.
+- **Each list of packages its cache entry**: `embedded`;
+  `cortex-m-ubuntu`, QEMU and Ubuntu's Arm toolchain, for the four jobs
+  with Ubuntu's toolchain; `cortex-m-arm-15.3.rel2`, QEMU, for the two with
+  the Arm GNU Toolchain's. The 30-minute limits stay.
+- **Not the other workflows' installs.** Those of 1, 3 and 11 are smaller
+  and have not stalled; the action is there for them.
+
+**Not claimed.** When both mirrors are slow, a list's first run after its
+files change still waits on them: apt fetches what `fetch.sh` left at any
+speed, within the 30 minutes. GitHub keeps 10 GB of cache per repository
+and evicts the entries used least recently; these add 380 MB for
+`embedded` and some 200 MB for `cortex-m`'s two, and the repository's use
+is not readable from here (the proxy refuses the cache API). If they push
+out another entry, such as a Frama-C opam switch, that entry is built again
+once.
+
+### Measured here
+
+- **`fetch.sh`**, on three packages not installed here (`cowsay`, `sl`,
+  `libtext-charwidth-perl`), against Canonical's archive: into an empty
+  directory, "3 package file(s): 0 from the cache, 3 fetched, 0 left to
+  apt"; again, "3 from the cache, 0 fetched"; with one file damaged and one
+  the list does not name, the first fetched again and the second removed;
+  with the first mirror refusing, the file from the second, and the next
+  file from the second without asking the first; with every mirror
+  refusing, the three left to apt in under a second. With its downloads
+  held to 100 kB/s, `golang-1.22-src`'s 19.7 MB were given up at each of
+  two mirrors after two tries of 30 s, and left to apt, in 2 min 6 s.
+- **apt with those files in its archive directory**: "Need to get 0
+  B/40.6 kB of archives", and the three installed.
+- **apt does not check a file of the right size there.** A copy of `sl`'s
+  with 64 bytes zeroed went to `dpkg`, which stopped at "lzma error:
+  compressed data is corrupt" only because the damage fell in compressed
+  data. The SHA-256 checks of `fetch.sh` are what hold a file to the index.
+- **The list's hash.** apt 2.8.3 (Ubuntu 24.04.5) prints each file's MD5
+  with `--print-uris`; with `-o Acquire::ForceHash=SHA256`, its SHA-256,
+  the index's: `cowsay`'s file as fetched from Canonical's archive had it.
+  The list needs no root.
+- **The mirrors from here.** `https://archive.ubuntu.com` serves the
+  pool's files; Azure's mirror does not answer here, so `fetch.sh`'s second
+  mirror is tried first in CI.
+- actionlint 1.7.12 (installed in this environment): `platforms.yml`
+  clean, as it was before.
+- `tools/which_workflows.py`: 1 to 6 and 8.
+
+Not measured: the form of the runner's URIs for its files, whose apt reads
+a list of mirrors; `fetch.sh` takes the path from `/pool/` on, which both
+forms have. The runner's apt hooks: this machine's apt empties its archive
+directory after `dpkg` runs and after an update; the action copies the
+files there after the update, and saves them from its own directory.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| W1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| W2 | **2 is green at its first attempt.** In `embedded`, the first run of its list, the cache empty: "11 package file(s): 0 from the cache, 11 fetched, 0 left to apt", and the step ends within its 30 minutes; in each `cortex-m` job, nothing left to apt. | a failure, or a file left to apt | M: the speed of Canonical's archive from GitHub's runners is not measured here. |
+| W3 | **VERIFY-092's V4, carried**: `embedded` gives #115's notices, times aside, the slowest header's name among them: the two tests compiled, 227 of 227 at each of the 18 configurations. 2's other jobs give #115's too. | another notice | H, given W2 |
+| W4 | **The cache serves the next run of 2**, a re-run of `embedded` once this push is green or the next push that starts 2: "11 package file(s): 11 from the cache, 0 fetched, 0 left to apt". | a file fetched or left to apt | M–H |
+| W5 | **1 and 3 to 6 as at #83, and 8 green.** | a failure, or another notice | H |
+| W6 | **VERIFY-090's T3 where it failed** (VERIFY-092's V3, carried): a Windows `build` Release job on MSVC 19.52, if one runs, builds `smallvec_test.c` without C4789 and the test passes. If none runs, W6 is not scored and is carried to the next push that runs 1. | C4789, or another error | M–H |
+
+### What follows
+
+W1 to W6 scored, W4 at the next run of 2, and the record closes, with W6
+scored or carried. Then the list: Analog Devices' SHARC in
+`docs/architectures.md`, and item 7's next part, a target whose `int` has
+16 bits.
