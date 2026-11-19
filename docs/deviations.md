@@ -40844,6 +40844,7 @@ What it shows:
 | **ID**         | VERIFY-094 |
 | **Date**       | 2026-11-19 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-19 — Scored: X1 and X2 MATCH. CLOSED: two of two scored ("Scored", below). The Status above is the record as committed. |
 | **Baseline**   | f4f3098 (VERIFY-093's change; its close, a record, is pushed with this): `8` #135. |
 | **Scope**      | `docs/architectures.md`: a row in "Not supported", and its sources. No code and no workflow. |
 | **Category**   | The list's item since 2026-11-18, when the author added Analog Devices' SHARC to it, for the "Not supported" section as the C28x is, for its 32-bit `char`. The record checks that claim against Analog Devices' compiler manuals before the row says it. |
@@ -40894,3 +40895,35 @@ Analog Devices' later manuals may change the default; the row cites
 X1 and X2 scored, and the record closes. VERIFY-093's W6 waits for the
 next push that runs 1. Then item 7's next part: a target whose `int` has
 16 bits.
+
+### Scored (2026-11-19)
+
+The push of d134cb6, b440da2 and 7c5c93a started one workflow: `8` #136,
+green at its first attempt, its two jobs, `workflow-size` and
+`record-coverage`, passing.
+
+| # | scored |
+|---|--------|
+| X1 | **MATCH.** 8 alone ran. |
+| X2 | **MATCH.** 8 is green: `record-coverage` passed with this record and the row. |
+
+Two of two scored.
+
+**Closed.** `docs/architectures.md` lists Analog Devices' SHARC before
+SHARC+, and SHARC+ built with `-char-size-32`, as not supported, for their
+32-bit `char`, with the two manuals the row rests on; SHARC+ as built by
+default, its `char` 8 bits, is neither excluded nor tried. VERIFY-093's W6
+waits for the next push that runs 1. The close changes nothing but this
+record.
+
+What it shows:
+
+- **A claim read before it is written can narrow.** The list said SHARC;
+  the manuals say the classic SHARC, and SHARC+ built for words, and not
+  SHARC+ as its compiler builds by default. The row says the narrower
+  thing, and what it does not cover.
+- **What a source does not show is said too.** The table of processors
+  that address bytes was not in what was read; the row names the families
+  Analog Devices' FAQ names, and the record says why it names no more.
+
+---
