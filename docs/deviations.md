@@ -40350,6 +40350,7 @@ What it shows:
 | **ID**         | VERIFY-091 |
 | **Date**       | 2026-11-19 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-19 — Scored: U1, U2 and U4 to U10 MATCH; U3 not scored, no Windows `build` Release job having drawn MSVC 19.52. U2's run shows `diag_test` passing, not that its test at `usize`'s maximum was compiled with MSVC. CLOSED: nine of nine scored ("Scored", below); VERIFY-092 carries U3 and U2's MSVC part. The Status above is the record as committed. |
 | **Baseline**   | f8e7cd9 (VERIFY-090's change; its close, a record, is pushed with this): `1`, `3` to `6` #81, `2` #114 and `8` #132. The workflows that ran last before it: `7` #34, `13` #16 (`frama-c-array` and `frama-c-diag`), `14` #26 and `15` #5, at 778a730; `13` #15, at ba0ebd2, for the other 25 units, whose files have not changed since; `9` #37 (778a730) and #38 (de6d4df); `16` #2, at 3055981. |
 | **Scope**      | `semantics/diag.h`: the frame's line, shared by `diag_print`, `diag_render_frame` and `diag_render`, with the size's conversion and its cast; `data/hashmap/hashmap_fmt.h`: the header line's; `test/semantics/diag_test.c`: a test at `usize`'s maximum. The pins they move: `tools/cortexm/pins.txt` (two lines out), `tools/size/pins.txt` (two token figures) and `docs/code-size.md`'s rows, the ten `tools/eva/pins/` files (one line number). The README's stdio note, `docs/architectures.md` and `tools/cortexm/README.md`. |
 | **Category**   | A measure of VERIFY-089's run 1. On 2026-11-18 the author decided that the library stops using `%zu`, in a record of its own with the proofs and pins it moves. |
@@ -40497,3 +40498,54 @@ might be read by one tomorrow.
 U1 to U10 scored, and the record closes, with U3 scored or carried. Then
 the list: Analog Devices' SHARC in `docs/architectures.md`'s "Not
 supported", and item 7's next part, a target whose `int` has 16 bits.
+
+### Scored (2026-11-19)
+
+The push of d97bb17, 9760faa and a7b4d87 started thirteen workflows: `1`
+and `3` to `6` #82, `2` #115, `7` #35, `8` #133, `9` #39, `13` #17, `14`
+#27, `15` #6 and `16` #3, each green at its first attempt: 319 jobs, 307
+passed and 12 of 9's probes skipped.
+
+| # | scored |
+|---|--------|
+| U1 | **MATCH.** 1 to 9 and 13 to 16 ran, and no other; 13 at the 27 units (110 jobs: each unit's three provers and its agreement, the units' job and the total), 16 at the 27 (28 jobs). |
+| U2 | **MATCH, with a part the run does not show.** 1 is green, its 27 jobs; their notices are #81's, 27 of 27. `diag_test` passed in each job that runs the suite. The logs name the test, not its parts: that the test at `usize`'s maximum was compiled rests, for GCC, Clang and MinGW-w64's GCC, on what was measured here (their preprocessors read `SIZE_MAX` as their compilers size `size_t`), and for MSVC on its `<stdint.h>`, which this run does not show. The test was compiled only where the preprocessor read `SIZE_MAX` as 64 or 32 bits, the reading `diag.h`'s choice rests on: a reading that went wrong would have left the choice narrower and the test out, both silently. VERIFY-092 compiles the test everywhere. |
+| U3 | **Not scored.** No Windows `build` Release job drew MSVC 19.52: both ran on image 20261103.298.1, MSVC 19.51.36260.0. One Windows job did, `build (windows-latest, Debug, clang)`, on 20261116.315.1 with MSVC 19.52.37029.0: a Debug build, where the optimizer whose analysis gives C4789 does not run; it built `smallvec_test` without C4789 and passed it. Carried to VERIFY-092 (V3). |
+| U4 | **MATCH.** On both CPUs, Ubuntu's newlib at Debug and Release: "61 tests, 58 passed, 2 failed (impl_defined_test 5, file_test 1), 1 not built (time_test); as pinned"; at RelWithDebInfo and MinSizeRel: "61 tests, 57 passed, 3 failed (option_test 1, impl_defined_test 5, file_test 1), 1 not built (time_test); as pinned". The picolibc legs and the Arm GNU Toolchain's gave #114's notices. |
+| U5 | **MATCH.** "as pinned: 57 rows, 798 figures"; "56 headers alone: 418582 tokens of Canon-C after preprocessing, the most 25271 (data/hashmap/hashmap_range.h)"; each target's bytes #114's. Of 2's 22 jobs, 19 gave #114's notices, times aside; the three that did not are U4's two and the `embedded` job, by its token figure. |
+| U6 | **MATCH.** 3's six jobs gave #81's notices: misra "as pinned: 57 real finding(s) in 32 file and rule pair(s)", coverage "MC/DC 2066 / 2232", CERT C 0 in the library's code, `compcert` "61 / 61 compiled, 61 ran". |
+| U7 | **MATCH.** 5's `frama-c-diag`: "proved 3071 / 3071; unproved 0; failed/invalid/stepout 0". 3 to 6's 36 jobs gave #81's notices, and 7's seven #34's. |
+| U8 | **MATCH.** 14's 14 jobs gave #26's notices, times aside: `diag` as pinned at the ten models, its library call at `semantics/diag.h:1041`. |
+| U9 | **MATCH.** 13 is green: at each of the 27 units, "Against its pins: 0 difference(s)". Its notices are not #15's and #16's in 31 of 110 jobs, as they vary between runs with the provers' times: 24 per-prover notices move goals among Timeout, Unknown and Failed, three of them by one or two proved; six units' slow goals, left out of the comparison, or the classes they leave; the total, whose goals, 77138 where #15 had 77150, are VERIFY-087's change to `array.h` and `diag.h`, both units at #16's counts. 15's three jobs gave #5's notices, and 16's 28 #2's, times aside. |
+| U10 | **MATCH.** 9 is green: `pointer-probe` and `aorai-probe` gave #37's notices and `smoke-probe` #38's, but for one: GitHub's annotations give `pointer-probe (frama-c-lifetime)`'s "no pointer_value goal" twice, where the job's log prints it once (its line 563); GitHub's, not the probe's. 8 is green: "cortexm check: 6 pins, 61 tests in CMakeLists.txt; 0 problem(s)". |
+
+Nine of nine scored; U3 not scored, and carried.
+
+**Closed.** The library prints a size without C99's `%zu`: `diag.h`'s
+frame, through `DIAG_FRAME_FMT_`, and `hashmap_fmt.h`'s header line, with
+`%lu` where `size_t` has 32 bits or fewer and `%llu` where it is wider.
+With Ubuntu's newlib on Cortex-M, `diag_test` and `hashmap_test` pass,
+and each pin the change moved moved as this record measured it. Two
+things are left: that the test at `usize`'s maximum ran with MSVC, which
+the run does not show, and VERIFY-090's configuration on MSVC 19.52,
+which the run did not reach. VERIFY-092 carries both. The close changes
+nothing but this record.
+
+What it shows:
+
+- **A change's pins can be named before it runs.** Two Cortex-M lines,
+  two token figures and one line number in the Eva pins: each moved as
+  measured here, and nothing else did.
+- **A test compiled under a condition cannot show the condition held.**
+  The test at `usize`'s maximum was left to the preprocessor's reading of
+  `SIZE_MAX`, the reading it was there to check; where the reading went
+  wrong, the test would have gone with it, without a word. VERIFY-092
+  writes the expected texts out by division, so that it is compiled at
+  every width.
+- **13 is read by its comparison, not its notices.** Its notices carry
+  the provers' times and the goals near the time limit; its pins, which
+  leave the slow goals out, are what it checks, and they held at every
+  unit.
+- **GitHub's annotations can double a notice.** The probe printed one
+  line, and the annotations API gives two; a comparison of notices needs
+  the log to settle such a difference.
