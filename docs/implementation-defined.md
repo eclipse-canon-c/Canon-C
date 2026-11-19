@@ -32,7 +32,8 @@ Clang and CompCert. CI's Windows jobs named `clang` build with MSVC
 it runs under QEMU with newlib, where its five checks of `rename` fail
 through QEMU's semihosting, and is not built with picolibc, which has no
 `rename` (`tools/cortexm/pins.txt`); RV32 and RV64 compile it and do not
-run it.
+run it; on MSP430X it is not built, since it includes Tier 1 headers,
+which refuse that target's `size_t`.
 
 Clauses are C99's. "GCC says" quotes GCC's manual, "C Implementation-Defined
 Behavior"; "MSVC says" quotes Microsoft's C language and C runtime
@@ -54,7 +55,8 @@ optional (7.18.1.1). **Canon-C** uses `u8` to `i64` throughout. **Checked**:
 and capacity limits need 32 bits. **Checked**: `core/primitives/limits.h`
 refuses a smaller `size_t` (`#error`, Tier 1), and `2 · Platforms` checks
 the refusal with AVR's 16-bit `size_t` (`tools/avr_tier_check.sh`). Tier 0's
-headers stay usable there.
+headers stay usable there. On MSP430X (`msp430`, VERIFY-096) the tests are
+built at a 16-bit `size_t` and at a 20-bit one, and those below Tier 1 run.
 
 ### 3. Pointers as flat byte addresses
 

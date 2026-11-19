@@ -31,6 +31,7 @@ points here for them.
 | PowerPC 32, big-endian | Linux, glibc | GCC | `big-endian-32` (`platforms.yml`), under qemu-user, also with `CANON_LIFETIME=debug`; `char` is unsigned there, and the 64-bit atomic of `lifetime.h` is libatomic's |
 | Cortex-M0+ (Armv6-M, soft float) | bare metal: newlib; picolibc | GCC 13.2 (Ubuntu's `arm-none-eabi`), with newlib and picolibc; GCC 15.3 (the Arm GNU Toolchain 15.3.Rel2), with its newlib | `cortex-m` (`platforms.yml`, `tools/cortexm/`), under QEMU's micro:bit, whose Cortex-M0 runs Armv6-M code, its memory enlarged; at `-O0`, `-O2`, `-O3` and `-Os`; the tests that do not pass pinned with the reason |
 | Cortex-M4 (Armv7E-M, hard float) | bare metal: newlib; picolibc | the same | `cortex-m`, under QEMU's mps2-an386 |
+| MSP430X, 16-bit `int` | bare metal: newlib 2.4 (TI's) | GCC 9.3.1 (TI's MSP430-GCC-OPENSOURCE 9.3.1.2, Mitto Systems' build) | `msp430` (`platforms.yml`, `tools/msp430/`), under the GDB simulator the toolchain ships; the small memory model (16-bit `size_t`) and the large (20-bit); at `-O0`, `-O2`, `-O3` and `-Os`; the tests below Tier 1 only, which refuses both `size_t`s; VERIFY-096's first run report-only |
 
 On Cortex-M, GCC 13.2 compiles one check of `option_test` wrong at `-O2`
 and `-Os`, and GCC 15.3 compiles it right (the README's bare-metal
@@ -72,7 +73,6 @@ measured where the list says so:
 - SPARC LEON3 and LEON4.
 - MIPS (PIC32).
 - WebAssembly (wasm32).
-- MSP430, 16-bit `size_t`: Tier 0, as AVR.
 - 8051 and STM8, with SDCC: Tier 0, once `f64` is optional. SDCC has no
   64-bit `double` (it reads `double` as `float`), so `types.h` refuses it
   today.

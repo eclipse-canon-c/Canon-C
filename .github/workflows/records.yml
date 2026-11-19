@@ -7,8 +7,9 @@ name: "8 · Records"
 # checked against their records (VERIFY-068), the size pins checked
 # (VERIFY-070), MetAcsl's units checked against the proof units
 # (VERIFY-086), the smoke tests' pins checked against the units
-# (VERIFY-088), the Cortex-M pins against the tests (VERIFY-089) and the
-# workflow-size guard. Map: .github/workflows/README.md.
+# (VERIFY-088), the Cortex-M pins against the tests (VERIFY-089), the
+# MSP430 pins against the tests (VERIFY-096) and the workflow-size guard.
+# Map: .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -27,6 +28,7 @@ on:
       - 'tools/metacsl/**'
       - 'tools/smoke/**'
       - 'tools/cortexm/**'
+      - 'tools/msp430/**'
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
@@ -106,6 +108,12 @@ jobs:
         # CMakeLists.txt, and no two for the same test on the same CPU,
         # C library and build type.
         run: python3 tools/cortexm/cortexm.py check
+      - name: "The MSP430 pins name the suite's tests (VERIFY-096)"
+        # tools/msp430/pins.txt holds the tests that do not pass on MSP430X
+        # under the GDB simulator: each line well formed and naming a test
+        # of CMakeLists.txt, and no two for the same test, model and build
+        # type.
+        run: python3 tools/msp430/msp430.py check
 
   # -------------------------------------------------------------------------
   # Workflow size guard (VERIFY-047). GitHub runs no workflow file of 500 KB

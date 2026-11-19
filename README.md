@@ -1027,8 +1027,12 @@ For what Canon-C intentionally omits, established C libraries exist:
 > default avr-gcc is refused at `types.h`. CI checks
 > both halves on AVR with avr-gcc 7 (job `embedded`, VERIFY-048): the
 > refusal, and, with that one check removed in a scratch copy, that
-> Tier 0 compiles and Tier 1 is refused by its `#error`. MSP430 is not
-> checked. Tier 0 means "freestanding plus
+> Tier 0 compiles and Tier 1 is refused by its `#error`. On MSP430X,
+> whose `int` has 16 bits, the job `msp430` (VERIFY-096) builds each
+> test with TI's GCC, whose `double` has 64 bits, at the small memory
+> model (a 16-bit `size_t`) and the large (a 20-bit one), and runs those
+> that build under the GDB simulator: Tier 1 refuses both `size_t`s, so
+> the tests that build are those below it. Tier 0 means "freestanding plus
 > stub-capable libc headers": `contract.h` pulls in `<stdio.h>` and
 > `<stdlib.h>` for its default panic handler — swap the handler as
 > described above and stdio is never reached.

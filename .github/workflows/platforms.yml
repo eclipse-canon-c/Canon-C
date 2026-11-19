@@ -1,8 +1,8 @@
 name: "2 · Platforms"
 # Portability beyond the build matrix: musl, Linux AArch64, C11 to C23,
 # big-endian s390x and 32-bit PowerPC under qemu, the embedded compile
-# checks (Cortex-M, RISC-V, AVR), and the tests on Cortex-M0+ and Cortex-M4
-# under QEMU.
+# checks (Cortex-M, RISC-V, AVR), the tests on Cortex-M0+ and Cortex-M4
+# under QEMU, and on MSP430X under the GDB simulator.
 # Map: .github/workflows/README.md.
 on:
   push:
@@ -233,7 +233,9 @@ jobs:
             if readelf -d "$f" | grep -q 'NEEDED.*libatomic'; then need="$need ${f#build/}"; fi
           done
           echo "linked with libatomic:$need"
-          echo "::notice title=big-endian-32 (${{ matrix.build_type }}, ${{ matrix.lifetime }})::$(echo $need | wc -w) of $all test binaries linked with libatomic"
+          # No title: a notice's properties are separated by commas
+          # (VERIFY-095), so the leg is in the message.
+          echo "::notice::big-endian-32 ${{ matrix.build_type }} ${{ matrix.lifetime }}: $(echo $need | wc -w) of $all test binaries linked with libatomic"
           case " $need " in
             *" lifetime_test "*) ;;
             *) echo "::error::lifetime_test is not linked with libatomic"; exit 1 ;;
@@ -408,5 +410,64 @@ jobs:
           path: |
             cortexm_out/*.json
             cortexm_out/*.build.log
+          if-no-files-found: warn
+          retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # 1j. MSP430X under the GDB simulator — the tests at a 16-bit int
+  #     (VERIFY-096)
+  #
+  #    TI's msp430-elf-gcc (the Mitto Systems GCC 9.3.1.11, its newlib),
+  #    and msp430-elf-run, the GDB simulator the toolchain ships, which
+  #    carries a test's output and exit status through newlib's simulator
+  #    runtime (-msim). int has 16 bits at both models; size_t and
+  #    pointers 16 at the small model, 20 at the large (__int20). A size_t
+  #    below 32 bits is Tier 1's refusal, so the tests that build are
+  #    those below Tier 1. tools/msp430/msp430.py builds each model at the
+  #    four build types, after a probe that the simulator carries a
+  #    program's output and exit status, and holds the outcomes against
+  #    tools/msp430/pins.txt; VERIFY-096's run is report-only.
+  # -------------------------------------------------------------------------
+  msp430:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [small, large]
+    env:
+      # TI's MSP430-GCC-OPENSOURCE 9.3.1.2, its toolchain for x86-64 Linux,
+      # where TI publishes it, and its SHA-256 as three recipes that fetch
+      # the same file pin it (two Nix derivations, lwext4's CI image).
+      TI_URL: https://dr-download.ti.com/software-development/ide-configuration-compiler-or-debugger/MD-LlCjWuAbzH/9.3.1.2/msp430-gcc-9.3.1.11_linux64.tar.bz2
+      TI_SHA256: b60851b61565e3ddd2193298a3fac5120c2402597174106cc5f8482b9e9986e6
+    steps:
+      - uses: actions/checkout@v6
+      - name: Cache TI's MSP430 toolchain's package
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/msp430-gcc.tar.bz2
+          key: msp430-gcc-${{ env.TI_SHA256 }}
+      - name: Fetch TI's MSP430 toolchain, its checksum checked
+        timeout-minutes: 15
+        run: |
+          pkg="$RUNNER_TEMP/msp430-gcc.tar.bz2"
+          [ -f "$pkg" ] || curl -fsSL --retry 3 -o "$pkg" "$TI_URL"
+          echo "$TI_SHA256  $pkg" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/msp430-gcc"
+          tar -xjf "$pkg" -C "$RUNNER_TEMP/msp430-gcc" --strip-components=1
+          echo "$RUNNER_TEMP/msp430-gcc/bin" >> "$GITHUB_PATH"
+      - name: "The tests on MSP430X under the GDB simulator: ${{ matrix.model }} model"
+        timeout-minutes: 90
+        env:
+          MODEL: ${{ matrix.model }}
+        run: python3 tools/msp430/msp430.py run "$MODEL"
+      - name: Upload the builds' logs and summaries
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: msp430-${{ matrix.model }}
+          path: |
+            msp430_out/*.json
+            msp430_out/*.build.log
           if-no-files-found: warn
           retention-days: 90

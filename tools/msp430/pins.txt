@@ -1,0 +1,10 @@
+# tools/msp430/pins.txt -- the tests that do not pass on MSP430X under the
+# GDB simulator (tools/msp430/msp430.py, VERIFY-096). Each line: the test,
+# the memory models (all, small, large), the build types (all, or a list of
+# Debug, Release, RelWithDebInfo and MinSizeRel), and what the test does
+# there: "not-built", or "fails N", N the lines of its output that begin
+# with FAIL. A test no line names must pass. The lines are measures: none
+# yet. VERIFY-096's run 1 is report-only, the toolchain not run before it;
+# its measure is pinned with the reason of each line.
+#
+# TEST              MODELS  BUILDS  OUTCOME
