@@ -939,9 +939,13 @@ For what Canon-C intentionally omits, established C libraries exist:
 > **`CANON_LIFETIME_DEBUG` without 64-bit atomics**
 > The debug mode's token counter is a 64-bit atomic (`lifetime.h`'s
 > ladder). Where the target has no lock-free one (a Cortex-M has
-> none), GCC compiles it to a call of `__atomic_fetch_add_8`, which
-> neither libgcc nor newlib or picolibc provides there, and the link
-> fails. Define
+> none, nor has 32-bit PowerPC), GCC compiles it to a call of
+> `__atomic_fetch_add_8`. On Linux, GCC's libatomic provides it,
+> race-free by a mutex: link with `-latomic`. The test build does so
+> where its check finds the call needs it (`CMakeLists.txt`,
+> VERIFY-095), as the `big-endian-32` job shows on 32-bit PowerPC.
+> On bare metal neither libgcc nor newlib or picolibc provides it, and
+> the link fails. Define
 > `CANON_LIFETIME_NO_ATOMICS` for a single thread of execution: the
 > counter is then a plain increment, not race-free
 > (`CANON_LIFETIME_ATOMIC_IDS` is 0). Or provide

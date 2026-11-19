@@ -25,11 +25,14 @@ behaviour turned out to be one of three kinds:
 
 `test/integration/impl_defined_test.c` checks each assumption a running
 program can check. It runs wherever CI runs the tests: Linux on x86-64,
-AArch64, i386 and big-endian s390x, with glibc and with musl; macOS; Windows
-with MSVC and with MinGW-w64's GCC; with GCC, Clang and CompCert. CI's
-Windows jobs named `clang` build with MSVC (VERIFY-074), so Clang is not
-run on Windows. The bare-metal targets (Cortex-M0+, Cortex-M4, RV32,
-RV64) compile it and do not run it.
+AArch64, i386, and big-endian s390x and 32-bit PowerPC, with glibc and
+with musl; macOS; Windows with MSVC and with MinGW-w64's GCC; with GCC,
+Clang and CompCert. CI's Windows jobs named `clang` build with MSVC
+(VERIFY-074), so Clang is not run on Windows. On Cortex-M0+ and Cortex-M4
+it runs under QEMU with newlib, where its five checks of `rename` fail
+through QEMU's semihosting, and is not built with picolibc, which has no
+`rename` (`tools/cortexm/pins.txt`); RV32 and RV64 compile it and do not
+run it.
 
 Clauses are C99's. "GCC says" quotes GCC's manual, "C Implementation-Defined
 Behavior"; "MSVC says" quotes Microsoft's C language and C runtime
@@ -206,7 +209,7 @@ compiler reports, never the code it generates.
 |---------------------------|-----------------------------------|
 | right shift of a negative value, and bitwise operators on signed values (J.3.5; 6.5.7p5) | Every shift in the library acts on an unsigned operand (read for this page), and Cppcheck's MISRA rule 10.1 check, which flags a bitwise operator on a signed operand, reports none (`tools/misra/pins.txt`). Cppcheck shows one finding per line, and none of the 57 lines with another finding has a bitwise operator. |
 | how signed integers are represented (J.3.5) | The exact-width types are two's complement by definition (7.18.1.1), and nothing depends on how `int`, `long` or `ptrdiff_t` are represented. |
-| whether plain `char` is signed (J.3.4) | Characters become integers only through `unsigned char`: intern's hash and `str_compare`. Measured: signed on x86-64, unsigned on Arm and RISC-V. |
+| whether plain `char` is signed (J.3.4) | Characters become integers only through `unsigned char`: intern's hash and `str_compare`. Measured: signed on x86-64, unsigned on Arm, RISC-V and PowerPC. |
 | the execution character set's values (J.3.4) | Characters are compared for equality only, with `'\0'`, the whitespace characters and `'-'`, all of the basic character set. `str_compare` orders by byte value, as `strcmp` does. |
 | the integer type of an enumeration (J.3.9; 6.7.2.2p4) | `Error` is `unsigned int`, 4 bytes, on x86-64 and RISC-V, and `unsigned short`, 2 bytes, on arm-none-eabi, whose ABI makes enumerations short ("On some targets, -fshort-enums is the default", GCC says). `error_in_range` compares through `int`, and no code reads an enumeration's bytes. |
 | bit-fields (J.3.9) | There are none. |
@@ -214,7 +217,7 @@ compiler reports, never the code it generates.
 | significant characters in identifiers (J.3.3; 5.2.4.1) | C guarantees 63 significant characters in an internal name and 31 in an external one. No function in the tests' objects has a name longer than 54. The separate-compilation headers make names external: the tests' 170 differ within their first 31 characters. A program's own type names lengthen them; GCC says that for internal names "all characters are significant". |
 | `malloc(0)` and `realloc(p, 0)` (J.3.12; 7.20.3) | Every call asks for at least one byte, and `mem_alloc(0)` returns `NULL` without calling `malloc`. |
 | whether `abort` flushes open streams (J.3.12; 7.20.4.1) | The default contract handler flushes `stderr` before it calls `abort`. |
-| byte order (J.3.13; 6.2.6.1) | No code reads an object's bytes as another type; bits.h's byte swaps are arithmetic. `2 · Platforms` runs every test on big-endian s390x. |
+| byte order (J.3.13; 6.2.6.1) | No code reads an object's bytes as another type; bits.h's byte swaps are arithmetic. `2 · Platforms` runs every test on big-endian s390x and 32-bit PowerPC. |
 | `inline` and `register` (J.3.8) | `inline` is a hint and is taken as one; `register` is not used. |
 
 ## Passed on

@@ -119,6 +119,45 @@ if(ENABLE_FUZZING)
     add_link_options(-fsanitize=address,undefined)
 endif()
 
+# ---------------------------------------------------------------------------
+# libatomic, where the 64-bit atomic needs it (VERIFY-095)
+#
+# lifetime.h's token counter is a 64-bit atomic. On a target with no
+# lock-free one (32-bit PowerPC among them) GCC compiles it to a call of
+# __atomic_fetch_add_8, which GCC's libatomic provides on Linux, and the
+# tests are then linked with it. Where the program links without it
+# (x86, x86-64, AArch64, s390x), nothing is added; MSVC's level of the
+# ladder uses none of these builtins and is not checked. Under a toolchain
+# whose checks compile without linking (tools/cortexm/toolchain.cmake's),
+# the first check passes and nothing is added either: on bare metal, the
+# README's "CANON_LIFETIME_DEBUG without 64-bit atomics" says what to do.
+# ---------------------------------------------------------------------------
+set(CANON_C_LIBATOMIC "")
+if(NOT MSVC)
+    include(CheckCSourceCompiles)
+    include(CMakePushCheckState)
+    set(canon_c_atomic64_src_ "
+#include <stdint.h>
+uint64_t canon_c_counter_ = 1;
+int main(void)
+{
+    return (int)__atomic_fetch_add(&canon_c_counter_, (uint64_t)1,
+                                   __ATOMIC_RELAXED);
+}
+")
+    check_c_source_compiles("${canon_c_atomic64_src_}" CANON_C_ATOMIC64_LINKS)
+    if(NOT CANON_C_ATOMIC64_LINKS)
+        cmake_push_check_state()
+        list(APPEND CMAKE_REQUIRED_LIBRARIES atomic)
+        check_c_source_compiles("${canon_c_atomic64_src_}" CANON_C_ATOMIC64_LINKS_LIBATOMIC)
+        cmake_pop_check_state()
+        if(CANON_C_ATOMIC64_LINKS_LIBATOMIC)
+            set(CANON_C_LIBATOMIC atomic)
+            message(STATUS "Canon-C: the tests are linked with libatomic")
+        endif()
+    endif()
+endif()
+
 enable_testing()
 
 # ---------------------------------------------------------------------------
@@ -137,7 +176,9 @@ enable_testing()
 #   #endif
 #
 # All special cases (libm, forced assertions, include quirks) are handled
-# inside the source file — not here.
+# inside the source file — not here. The one exception is libatomic, which
+# a source file cannot ask for: each test binary is linked with it where
+# CANON_C_LIBATOMIC, set above, names it.
 #
 # Usage:
 #   canon_c_test(
@@ -162,6 +203,9 @@ function(canon_c_test)
     foreach(inc IN LISTS T_INCLUDES)
         target_include_directories(${T_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/${inc})
     endforeach()
+    if(CANON_C_LIBATOMIC)
+        target_link_libraries(${T_NAME} PRIVATE ${CANON_C_LIBATOMIC})
+    endif()
 
     add_test(NAME ${T_NAME} COMMAND ${T_NAME})
 
@@ -174,6 +218,9 @@ function(canon_c_test)
         foreach(inc IN LISTS T_INCLUDES)
             target_include_directories(${FUZZ_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/${inc})
         endforeach()
+        if(CANON_C_LIBATOMIC)
+            target_link_libraries(${FUZZ_NAME} PRIVATE ${CANON_C_LIBATOMIC})
+        endif()
 
         # Activates LLVMFuzzerTestOneInput, suppresses main()
         target_compile_definitions(${FUZZ_NAME} PRIVATE CANON_FUZZING)

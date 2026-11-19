@@ -1,7 +1,8 @@
 name: "2 · Platforms"
 # Portability beyond the build matrix: musl, Linux AArch64, C11 to C23,
-# big-endian s390x under qemu, the embedded compile checks (Cortex-M,
-# RISC-V, AVR), and the tests on Cortex-M0+ and Cortex-M4 under QEMU.
+# big-endian s390x and 32-bit PowerPC under qemu, the embedded compile
+# checks (Cortex-M, RISC-V, AVR), and the tests on Cortex-M0+ and Cortex-M4
+# under QEMU.
 # Map: .github/workflows/README.md.
 on:
   push:
@@ -170,6 +171,73 @@ jobs:
         run: |
           file build/bitset_test
           file build/bitset_test | grep -q "MSB.*IBM S/390"
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure --no-tests=error
+
+  # -------------------------------------------------------------------------
+  # 1f2. Big-endian, 32-bit — Linux PowerPC, GCC cross-compiler, run under
+  #      qemu-user (VERIFY-095)
+  #
+  #    s390x, above, is big-endian with 64-bit pointers; 32-bit PowerPC is
+  #    big-endian with 32-bit ones, so a 32-bit size_t meets the other byte
+  #    order. Its char is unsigned, and a uint64_t in a struct is aligned to
+  #    8 bytes, where i386 aligns it to 4: each build type runs with
+  #    CANON_LIFETIME=debug too, for the lifetime_t field in each owner. It
+  #    has no lock-free 64-bit atomic, so lifetime.h's counter calls
+  #    libatomic, which CMakeLists.txt links where its check finds that
+  #    needed; the job names the test binaries linked with it. Packages
+  #    through .github/actions/apt-install (VERIFY-093). No sanitizers, as
+  #    above. --no-tests=error: a leg that finds no test fails.
+  # -------------------------------------------------------------------------
+  big-endian-32:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+        lifetime: ["off", "debug"]   # quoted: YAML 1.1 reads a bare off as false
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install the PowerPC cross toolchain and qemu-user
+        # From the Actions cache, or from Canonical's archive before Azure's
+        # mirror (VERIFY-093); the limit fails a stalled install in 30 minutes.
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-install
+        with:
+          cache-name: big-endian-32
+          packages: gcc-powerpc-linux-gnu libc6-dev-powerpc-cross qemu-user
+      - name: Show the compiler's and qemu's versions
+        run: |
+          powerpc-linux-gnu-gcc --version | head -1
+          qemu-ppc --version | head -1
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=powerpc \
+            -DCMAKE_C_COMPILER=powerpc-linux-gnu-gcc \
+            "-DCMAKE_CROSSCOMPILING_EMULATOR=qemu-ppc;-L;/usr/powerpc-linux-gnu" \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCANON_LIFETIME=${{ matrix.lifetime }} \
+            -S .
+      - name: Build
+        run: cmake --build build -j
+      - name: Check the binaries are 32-bit big-endian PowerPC, and which need libatomic
+        run: |
+          file build/bitset_test
+          file build/bitset_test | grep -q "ELF 32-bit MSB.*PowerPC"
+          all=0; need=""
+          for f in $(find build -maxdepth 1 -type f -perm -u+x -name '*_test' | sort); do
+            all=$((all + 1))
+            if readelf -d "$f" | grep -q 'NEEDED.*libatomic'; then need="$need ${f#build/}"; fi
+          done
+          echo "linked with libatomic:$need"
+          echo "::notice title=big-endian-32 (${{ matrix.build_type }}, ${{ matrix.lifetime }})::$(echo $need | wc -w) of $all test binaries linked with libatomic"
+          case " $need " in
+            *" lifetime_test "*) ;;
+            *) echo "::error::lifetime_test is not linked with libatomic"; exit 1 ;;
+          esac
       - name: Test
         working-directory: build
         run: ctest --output-on-failure --no-tests=error

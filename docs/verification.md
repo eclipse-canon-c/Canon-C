@@ -804,13 +804,17 @@ What these proofs rest on, and what they do not show:
 Tested, not proved:
 - big-endian s390x, under qemu (`big-endian`);
 - the data/ and semantics/ units at any model but x86_64, and at i386
-  (`build-32bit`) every unit but arena.h; AArch64 Linux (`build-arm64`) is
-  tested for all and proved for core/.
+  (`build-32bit`) every unit but arena.h; AArch64 Linux (`build-arm64`) and
+  big-endian 32-bit PowerPC Linux, under qemu (`big-endian-32`), are tested
+  for all and proved for core/: the proofs do not represent PowerPC's byte
+  order, and the tests run in it.
 
-Compiled only, with nothing run (`embedded`): Cortex-M0+ and Cortex-M4 with
-newlib and picolibc, where enums are short and `int32_t` is `long`; RV32
-and RV64 with picolibc; and AVR, at a 16-bit `size_t`, for the platform
-tiers.
+Run under QEMU (`cortex-m`, VERIFY-089): the tests on Cortex-M0+ and
+Cortex-M4, with newlib and picolibc, each that does not pass pinned with
+the reason (`tools/cortexm/pins.txt`). Compiled, with nothing run
+(`embedded`): the same two with newlib and picolibc, where enums are short
+and `int32_t` is `long`; RV32 and RV64 with picolibc; and AVR, at a 16-bit
+`size_t`, for the platform tiers.
 
 ### The other builds, and what each is evidence for
 
@@ -820,7 +824,8 @@ tiers.
 | `coverage` | GCC 14, Debug, `-DCANON_NO_REQUIRE` and both `FORCE_FALLBACK` flags | MC/DC of the proved paths (`docs/traceability.md`) |
 | `compcert` | CompCert 3.17 on x86_64, `-fall -DCANON_NO_GNU_EXTENSIONS` and both `FORCE_FALLBACK` flags; `require` on | the portable C99 paths compile under CompCert, a verified compiler, and pass the tests; informational (`continue-on-error`) and on the upstream repository only, so a failure blocks nothing |
 | `build` (GCC, Clang, MSVC), sanitizers, `fuzzing`, `valgrind`, `mingw` | compiler defaults, `require` on | the shipped configurations, on the tests and fuzz inputs. GCC and Clang run checked.h's and bits.h's builtins, not the proved paths; MSVC runs checked.h's fallback and bits.h's intrinsics |
-| `build-32bit`, `musl`, `build-arm64`, `big-endian` | i386, Alpine's musl, AArch64, s390x under qemu | the tests on those platforms |
+| `build-32bit`, `musl`, `build-arm64`, `big-endian`, `big-endian-32` | i386, Alpine's musl, AArch64, s390x and 32-bit PowerPC under qemu | the tests on those platforms |
+| `cortex-m` | Cortex-M0+ and Cortex-M4 under QEMU: Ubuntu's GCC 13.2 with newlib and picolibc, the Arm GNU Toolchain's GCC 15.3 with newlib; CMake's four build types | the tests on those cores; each that does not pass pinned with the reason |
 | `c-standards` | C11, C17 and C23 with GCC 14 and Clang, Debug, sanitizers on | the tests at those standards, where the C11 arms are compiled (`_Alignof(max_align_t)`, `_Static_assert`) |
 | `embedded` | Cortex-M, RV32, RV64 and AVR, bare metal | that the headers and tests compile there; nothing runs |
 | `lifetime-debug`, `lifetime-token-concurrency` | `CANON_LIFETIME_DEBUG`; the atomic levels, with ThreadSanitizer | the lifetime plumbing and the token generation, by tests |
