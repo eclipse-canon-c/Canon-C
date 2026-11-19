@@ -40236,6 +40236,7 @@ nine of nine, run 3 five of six. What it shows:
 | **ID**         | VERIFY-090 |
 | **Date**       | 2026-11-19 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-19 — Scored: T1 to T4 MATCH; T2's count of jobs wrong, and T3 met by another configuration than the one that failed: `lifetime-debug`'s Release job, the one Windows Release job on MSVC 19.52. CLOSED: four of four ("Scored", below). VERIFY-091's U3 predicts the configuration that failed. The Status above is the record as committed. |
 | **Baseline**   | 9943bc1 (VERIFY-089's run 3): `1 · Build & test` #80 red, its job `build (windows-latest, Release, clang)` failed on runner image `windows-2025-vs2026` 20261116.315.1 (MSVC 19.52.37029.0), and the six jobs that need `build` skipped; `2` #113, `3` to `6` #80 and `8` #131 green. |
 | **Scope**      | `test/data/convenience/smallvec_test.c`: an MSVC-only `#pragma warning(disable: 4789)` and its comment. |
 | **Category**   | A runner image's update, found by VERIFY-089's run 3 (its S2). On 2026-11-19 the author chose to silence the warning in the test, over a guard in `smallvec.h` that the invariant makes redundant, and over pinning the image. |
@@ -40297,3 +40298,45 @@ match it. `tools/which_workflows.py`: 1 to 6 and 8 run.
 
 T1 to T4 scored, and the record closes once a job has built the test with
 MSVC 19.52. Then the record on `%zu`, VERIFY-091.
+
+### Scored (2026-11-19)
+
+The push of 86df965, 0e360e7 and f8e7cd9 started seven workflows: `1`,
+`3` to `6` #81, `2` #114 and `8` #132, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| T1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| T2 | **MATCH.** 1 is green: each of its jobs passed. They are 27, not the sixteen the prediction says: sixteen is #80's count, in which the six jobs that need `build` were skipped whole; run, they expand to their matrices' 17 jobs, as at #79. The count was copied from the red run and is wrong; the prediction's test, a failure, did not occur. The four Windows `build` jobs ran on image 20261103.298.1, MSVC 19.51.36260.0. |
+| T3 | **MATCH, on a weaker case than meant.** One Windows Release job ran on MSVC 19.52: `lifetime-debug (windows-latest, Release, cl)`, on image 20261116.315.1, MSVC 19.52.37029.0. It built `smallvec_test.c` with no C4789 and no other warning, and its 61 tests passed, `smallvec_test` among them. It is not the configuration that failed: it configures `CANON_LIFETIME=debug`, so that `smallvec_int` carries a `lifetime_t` and its insert checks it, and MSVC 19.52 had not compiled it without the pragma (skipped at #80; on 19.51 from #75 to #79). So it shows that the pragma builds and passes on MSVC 19.52, not that the pragma is what keeps C4789 away; the `build` jobs' Release legs, where the warning fired, ran on 19.51. |
+| T4 | **MATCH.** 1's 27 jobs gave #79's notices; 2's 22 gave #113's, and 3 to 6's 36 gave #80's, times aside; 8 is green. |
+
+Four of four.
+
+**Closed.** `test/data/convenience/smallvec_test.c` turns MSVC's warning
+C4789 off for the file: MSVC 19.52's false positive on the test's
+out-of-bounds insert, a store that `smallvec.h`'s invariant makes
+unreachable. `1 · Build & test` is green again, on both images. The
+record closes as it said it would, once a job had built the test with
+MSVC 19.52; that job was `lifetime-debug`'s, and the configuration that
+failed has not yet met MSVC 19.52 with the pragma. VERIFY-091, whose
+push runs 1 again, predicts it (its U3), rather than this record reading
+more into T3 than T3 shows. The close changes nothing but this record.
+
+What it shows:
+
+- **A condition can be met by a weaker case than its author meant.** T3
+  named "a Windows Release job"; the one the image's rollout gave was
+  another configuration. Said here, and carried forward as a prediction.
+- **A count is a claim too.** "Sixteen" came from the red run, where
+  skipped jobs are not expanded; a green run has 27.
+- **The matrix's Windows `clang` is MSVC**, as VERIFY-074 found: the job
+  that failed is named `build (windows-latest, Release, clang)`, and its
+  log says "The C compiler identification is MSVC 19.52.37029.0". CMake's
+  Visual Studio generator compiles with `cl.exe` whatever
+  `-DCMAKE_C_COMPILER` says, so each of the eight Windows jobs of `build`
+  and `lifetime-debug` is MSVC's. Clang on Windows, or the jobs named for
+  what they build with, is on the list.
+- **A runner image moves under a project.** Two runs drew one Windows job
+  each on the new image (#80 and #81); a fix for it is shown only when the
+  rollout reaches the job that failed.
