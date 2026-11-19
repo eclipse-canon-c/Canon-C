@@ -1,0 +1,96 @@
+# .github/actions/apt-install/action.yml
+#
+# Installs Ubuntu packages without waiting on a stalled mirror (VERIFY-093).
+# A GitHub runner gets them from Azure's mirror of the Ubuntu archive. On
+# 2026-11-19 that mirror sent the embedded job's 380 MB at about 0.1 MB/s
+# for hours, and its install stopped at the step's 30-minute limit twice
+# (2 · Platforms #116), where it takes 20 to 40 seconds. Here:
+#   1. `apt-get update` checks Ubuntu's signed indexes, and apt lists the
+#      files the install needs, each with its SHA-256 from them;
+#   2. the files already fetched are restored from the Actions cache;
+#   3. fetch.sh checks each restored file's SHA-256 against the index's,
+#      and fetches the others, from Canonical's archive first and Azure's
+#      mirror second, giving a mirror up below 500 kB/s, keeping a file only
+#      if its SHA-256 is the index's;
+#   4. the files go to apt's archive directory, and apt installs. apt takes
+#      a file there of the right size as it is: apt 2.8 does not check its
+#      hash again (measured, VERIFY-093), so fetch.sh's checks are what hold
+#      each file to the signed index. What fetch.sh left, apt fetches itself
+#      and checks;
+#   5. the files are saved to the cache when the entry restored was not
+#      this list's.
+#
+# The calling job MUST run actions/checkout@v6 first: a local action needs
+# the repository checked out.
+
+name: "apt install, from the cache first"
+description: "Install Ubuntu packages, their files from the Actions cache, Canonical's archive or Azure's mirror, checked against Ubuntu's signed indexes"
+
+inputs:
+  packages:
+    description: "The packages, separated by spaces; installed without the packages apt recommends"
+    required: true
+  cache-name:
+    description: "The name of the cache entry, one for each list of packages"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: List the files the install needs, with their SHA-256
+      id: list
+      shell: bash
+      env:
+        PKGS: ${{ inputs.packages }}
+        NAME: ${{ inputs.cache-name }}
+      run: |
+        sudo apt-get update
+        list="$RUNNER_TEMP/apt-install-$NAME.txt"
+        # shellcheck disable=SC2086
+        apt-get install --print-uris -qq --no-install-recommends \
+          -o Acquire::ForceHash=SHA256 $PKGS > "$list"
+        awk '{ n++; s += $3 } END { printf "%d package file(s) to install, %.0f MB\n", n, s / 1048576 }' "$list"
+        prefix="apt-$NAME-$RUNNER_OS-$RUNNER_ARCH-"
+        sum=$(awk '{ print $2, $3, $4 }' "$list" | sort | sha256sum | cut -c1-16)
+        {
+          echo "list=$list"
+          echo "prefix=$prefix"
+          echo "key=$prefix$sum"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Restore the files from the cache
+      id: restore
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/apt-install/${{ inputs.cache-name }}
+        key: ${{ steps.list.outputs.key }}
+        restore-keys: ${{ steps.list.outputs.prefix }}
+
+    - name: Fetch the files the cache does not hold
+      shell: bash
+      env:
+        LIST: ${{ steps.list.outputs.list }}
+        NAME: ${{ inputs.cache-name }}
+      run: |
+        bash "$GITHUB_ACTION_PATH/fetch.sh" "$LIST" "$HOME/apt-install/$NAME"
+        if compgen -G "$HOME/apt-install/$NAME/*.deb" > /dev/null; then
+          sudo cp "$HOME/apt-install/$NAME/"*.deb /var/cache/apt/archives/
+        fi
+
+    - name: Install from the files checked against Ubuntu's signed index
+      shell: bash
+      env:
+        PKGS: ${{ inputs.packages }}
+      run: |
+        # shellcheck disable=SC2086
+        sudo apt-get install -y --no-install-recommends $PKGS
+
+    - name: Save the files to the cache
+      # Only when the entry restored was not this list's; another job saving
+      # the same key at the same time is reported, not an error.
+      if: steps.restore.outputs.cache-hit != 'true'
+      continue-on-error: true
+      uses: actions/cache/save@v5
+      with:
+        path: ~/apt-install/${{ inputs.cache-name }}
+        key: ${{ steps.list.outputs.key }}

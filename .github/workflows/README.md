@@ -77,6 +77,11 @@ still there for detail.
   way, add a per-line debug step for it in the coverage job (VERIFY-055 left
   hashmap's out; VERIFY-056 added it).
 - **A new platform or portability check**: a job in `platforms.yml`.
+  Its Ubuntu packages go through `.github/actions/apt-install`, as
+  `embedded`'s and `cortex-m`'s do (VERIFY-093): their files come from the
+  Actions cache, or from Canonical's archive before Azure's mirror, each
+  checked against Ubuntu's signed index; each list of packages with its
+  own `cache-name`.
 - **Something experimental**: a job in `probes.yml`, with its paths added to
   the `changes` job's filter. Workflows 1 to 6 ignore `probes.yml`, which
   none of them reads (VERIFY-080), so editing it starts 8 and 9 alone, and

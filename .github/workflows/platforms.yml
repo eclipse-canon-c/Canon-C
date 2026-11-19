@@ -207,14 +207,17 @@ jobs:
         # MB of it the Arm C++ library, which these C compile checks do not
         # use, and the step took 2 h 48 min at a stalled Ubuntu mirror
         # (2 · Platforms #37; VERIFY-061, phase A's run 2). Every package the
-        # checks use is named here. The limit fails a stalled install in 30
-        # minutes; a re-run usually takes one.
+        # checks use is named here. Their files, 380 MB, come from the
+        # Actions cache, or from Canonical's archive before Azure's mirror,
+        # which sent them at 0.1 MB/s on 2026-11-19 (VERIFY-093). The limit
+        # fails a stalled install in 30 minutes.
         timeout-minutes: 30
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            gcc-arm-none-eabi libnewlib-arm-none-eabi \
-            picolibc-arm-none-eabi gcc-riscv64-unknown-elf \
+        uses: ./.github/actions/apt-install
+        with:
+          cache-name: embedded
+          packages: >-
+            gcc-arm-none-eabi libnewlib-arm-none-eabi
+            picolibc-arm-none-eabi gcc-riscv64-unknown-elf
             picolibc-riscv64-unknown-elf gcc-avr avr-libc
       - name: Compile for Cortex-M (newlib, picolibc) and RISC-V RV32, RV64 (picolibc)
         run: tools/embedded_compile_check.sh
@@ -301,16 +304,13 @@ jobs:
       - uses: actions/checkout@v6
       - name: Install QEMU, and Ubuntu's Arm toolchain, newlib and picolibc
         # Without the packages apt recommends, as the embedded job installs
-        # them; the limit fails a stalled mirror in 30 minutes.
+        # them, and as it does, from the Actions cache first (VERIFY-093);
+        # the limit fails a stalled mirror in 30 minutes.
         timeout-minutes: 30
-        run: |
-          pkgs="qemu-system-arm"
-          if [ "$TOOLCHAIN" = "ubuntu" ]; then
-            pkgs="$pkgs gcc-arm-none-eabi libnewlib-arm-none-eabi picolibc-arm-none-eabi"
-          fi
-          sudo apt-get update
-          # shellcheck disable=SC2086
-          sudo apt-get install -y --no-install-recommends $pkgs
+        uses: ./.github/actions/apt-install
+        with:
+          cache-name: cortex-m-${{ matrix.toolchain }}
+          packages: ${{ matrix.toolchain == 'ubuntu' && 'qemu-system-arm gcc-arm-none-eabi libnewlib-arm-none-eabi picolibc-arm-none-eabi' || 'qemu-system-arm' }}
       - name: Cache the Arm GNU Toolchain's package
         if: matrix.toolchain != 'ubuntu'
         uses: actions/cache@v5
