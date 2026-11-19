@@ -1051,36 +1051,62 @@ static void test_render_zero_size_returns_zero_buf_untouched(void)
 /* VERIFY-091: the index and the line are usize, rendered without C99's %zu
  * (semantics/diag.h, DIAG_USIZE_FMT_). At usize's maximum they render
  * whole; a conversion narrower than size_t, as %lu where long is narrower
- * (64-bit Windows), would cut them here. The texts are per width of
- * size_t; at another width the test is not compiled. */
-#if defined(SIZE_MAX) && (SIZE_MAX == 0xFFFFFFFFFFFFFFFF)
-#  define FULL_WIDTH_FRAME \
-    "[18446744073709551614] w.c:18446744073709551615 in fn() -- error "
-#  define FULL_WIDTH_CHAIN "[0] w.c:18446744073709551615 in fn() -- error "
-#elif defined(SIZE_MAX) && (SIZE_MAX == 0xFFFFFFFF)
-#  define FULL_WIDTH_FRAME "[4294967294] w.c:4294967295 in fn() -- error "
-#  define FULL_WIDTH_CHAIN "[0] w.c:4294967295 in fn() -- error "
-#endif
+ * (64-bit Windows), would cut them here. The texts they must render as are
+ * written out by division, not by a printf's conversion of a size, so that
+ * the test is compiled at every width of size_t: where the preprocessor
+ * read SIZE_MAX otherwise than the compiler sizes usize, diag.h's choice
+ * would be narrower than usize, and the test fails instead of being left
+ * out (VERIFY-092). */
+static void decimal_of_usize(usize v, char *out, usize out_size)
+{
+    char  rev[24];                           /* a 64-bit usize: 20 digits */
+    usize n = 0u;
+    usize i;
 
-#ifdef FULL_WIDTH_FRAME
+    do {
+        rev[n] = (char)('0' + (int)(v % 10u));
+        n++;
+        v /= 10u;
+    } while ((v != 0u) && (n < sizeof(rev)));
+    for (i = 0u; (i < n) && ((i + 1u) < out_size); i++) {
+        out[i] = rev[n - 1u - i];
+    }
+    out[i] = '\0';
+}
+
 static void test_render_index_and_line_at_full_width(void)
 {
     Diag             d = diag_init();
     char             buf[256];
+    char             want[96];
+    char             max_dec[24];
+    char             below_dec[24];
     const DiagFrame *f;
+
+    /* diag.h's conversion holds a usize (VERIFY-092) */
+    EXPECT(sizeof(diag_usize_fmt_) >= sizeof(usize));
+
+    decimal_of_usize(SIZE_MAX, max_dec, sizeof(max_dec));
+    decimal_of_usize(SIZE_MAX - 1u, below_dec, sizeof(below_dec));
 
     diag_push(&d, "w.c", SIZE_MAX, "fn", ERR_UNKNOWN, "m");
     f = diag_root(&d);
     EXPECT_NOT_NULL(f);
+    if (f == NULL) {
+        return;
+    }
     EXPECT(f->line == SIZE_MAX);
 
+    (void)snprintf(want, sizeof(want), "[%s] w.c:%s in fn() -- error ",
+                   below_dec, max_dec);
     (void)diag_render_frame(f, SIZE_MAX - 1u, buf, sizeof(buf));
-    EXPECT(strncmp(buf, FULL_WIDTH_FRAME, strlen(FULL_WIDTH_FRAME)) == 0);
+    EXPECT(strncmp(buf, want, strlen(want)) == 0);
 
+    (void)snprintf(want, sizeof(want), "[0] w.c:%s in fn() -- error ",
+                   max_dec);
     (void)diag_render(&d, buf, sizeof(buf));
-    EXPECT(strncmp(buf, FULL_WIDTH_CHAIN, strlen(FULL_WIDTH_CHAIN)) == 0);
+    EXPECT(strncmp(buf, want, strlen(want)) == 0);
 }
-#endif
 
 /* ============================================================================
    Frame ordering — root = first pushed, latest = last pushed
@@ -1327,9 +1353,7 @@ int main(void)
     test_render_empty_chain_returns_zero_empty_buf();
     test_render_null_buf_returns_zero();
     test_render_zero_size_returns_zero_buf_untouched();
-#ifdef FULL_WIDTH_FRAME
     test_render_index_and_line_at_full_width();
-#endif
 
     /* Frame ordering */
     test_frame_ordering_three_pushes();

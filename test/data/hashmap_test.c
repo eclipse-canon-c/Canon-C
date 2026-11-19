@@ -860,6 +860,11 @@ static void test_range_and_fmt(void)
     EXPECT(hashmap_to_stringbuf(&sb, &m));
     EXPECT(strstr(stringbuf_str(&sb), "len=5") != NULL);
     EXPECT(strstr(stringbuf_str(&sb), "[3] => 30") != NULL);
+
+    /* VERIFY-092: the header line, its len and cap printed without %zu by
+     * a conversion that holds a usize (VERIFY-091) */
+    EXPECT(strstr(stringbuf_str(&sb), "hashmap { len=5, cap=16, load=") != NULL);
+    EXPECT(sizeof(hashmap_usize_fmt_) >= sizeof(usize));
 }
 
 /* VERIFY-054: the extensions' refusals. range: NULL arguments, and a vec too
