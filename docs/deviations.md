@@ -40549,3 +40549,93 @@ What it shows:
 - **GitHub's annotations can double a notice.** The probe printed one
   line, and the annotations API gives two; a comparison of notices needs
   the log to settle such a difference.
+
+---
+
+## VERIFY-092: Pre-registration — The Test at `usize`'s Maximum Is Compiled at Every Width, and Checks that Each Header's Conversion Holds a `usize`
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-092 |
+| **Date**       | 2026-11-19 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | a7b4d87 (VERIFY-091's change; its close, a record, is pushed with this): `1` and `3` to `6` #82, `2` #115, `8` #133. |
+| **Scope**      | `test/semantics/diag_test.c`: `test_render_index_and_line_at_full_width`, compiled at every width of `size_t`, the texts it expects written out by division; and a check that `diag_usize_fmt_` is as wide as `usize`. `test/data/hashmap_test.c`: the header line checked through its `cap`, and the same check of `hashmap_usize_fmt_`. No library file. |
+| **Category**   | VERIFY-091's U2: its run shows `diag_test` passing with MSVC, not that the test was compiled there. |
+
+### What is missing
+
+VERIFY-091's test at `usize`'s maximum is compiled only where the
+preprocessor reads `SIZE_MAX` as 64 or 32 bits, and `diag.h` chooses its
+conversion by the same reading. Where the reading went wrong (`SIZE_MAX`
+undefined, or read as narrower), `diag.h` would take `%lu`, which on
+64-bit Windows holds 32 bits, and the test would not be compiled: the
+cut and the test's absence would both be silent. GCC's, Clang's and
+MinGW-w64's GCC's readings were measured here; MSVC's rests on its
+`<stdint.h>`, and the logs of `1`, which name a test and not its parts,
+cannot show it. `hashmap_test` checks the header line's `len`, not its
+`cap`, and nothing checks `hashmap_fmt.h`'s choice, whose numbers in a
+test are too small to be cut.
+
+### What is decided
+
+- **The test is compiled at every width.** `decimal_of_usize` writes a
+  `usize` out in decimal by division by ten, and `snprintf` with `%s`
+  alone puts the texts together: no conversion of a size is in the test.
+  `SIZE_MAX` and `SIZE_MAX - 1` are rendered and compared as before.
+- **A check of each choice.** `EXPECT(sizeof(diag_usize_fmt_) >=
+  sizeof(usize))` and `EXPECT(sizeof(hashmap_usize_fmt_) >=
+  sizeof(usize))`: each header's test reads its private name, for the
+  one property VERIFY-091's choice is there to give. Where the
+  preprocessor read `SIZE_MAX` otherwise than the compiler sizes `usize`,
+  they fail.
+- **The header line through its `cap`**: "hashmap { len=5, cap=16, load="
+  where `hashmap_test` read "len=5".
+- **Not a check in the headers.** A compile-time assertion in `diag.h`
+  and `hashmap_fmt.h` would stop a user's build where the choice is
+  narrower; it would also move the library's tokens and its MISRA
+  findings (an unused typedef of an array, C99 having no
+  `_Static_assert`), and run the proof workflows. This record asks for
+  the platforms CI runs the tests on: the hosted ones of 1 and 2, and
+  Cortex-M under QEMU.
+
+**Not claimed.** A platform where the tests do not run (the AVR's Tier 0
+compile, the 16-bit targets of the list) is not checked by them; there
+`diag.h` takes `%lu`, which holds a `size_t` of 32 bits or fewer.
+
+### Measured here
+
+- **The tests.** GCC 13.3.0 and Clang 18.1.3, Debug with the sanitizers
+  and Release: 61 of 61. GCC with `-m32`, Debug and Release: 61 of 61. GCC
+  14 and Clang 18 at C11, C17 and C23: `diag_test` and `hashmap_test`
+  pass. MinGW-w64's GCC 13: both compile with `-Wall -Wextra -Wformat=2
+  -Werror`.
+- **What the checks catch.** With `diag.h`'s wide pair made `unsigned
+  int` and `%u`, three checks of `diag_test` fail: the width, the frame
+  and the chain. With `hashmap_fmt.h`'s made so, one of `hashmap_test`
+  fails, the width: the header's numbers, 5 and 16, print right either
+  way.
+- **Cortex-M**, `cortexm.py` with Ubuntu's toolchain: the 16 runs as
+  pinned, with VERIFY-091's counts.
+- **The embedded jobs.** `tools/embedded_compile_check.sh`: 227 of 227 at
+  each of the 18 configurations.
+- **Static analysis.** clang-tidy 18.1.3 on the two tests: nothing. Its
+  CERT C checks: none in the library's code. Cppcheck 2.13.0 with the
+  static-analysis job's options, on the two tests: exit 0.
+- `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| V1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| V2 | **1 is green**, its 27 jobs: `diag_test` and `hashmap_test` pass in each, the test at `usize`'s maximum and the two checks of width with them, at every job. On the eight MSVC jobs, Windows `build` and `lifetime-debug`, that pass shows what VERIFY-091's U2 could not: that `diag.h`'s and `hashmap_fmt.h`'s conversions hold a `usize` there. Its notices as at #82, GitHub's own aside. | a failure, or another notice | M–H: MSVC's reading of `SIZE_MAX` is its `<stdint.h>`'s, not measured here. |
+| V3 | **VERIFY-090's T3 where it failed** (VERIFY-091's U3, carried): a Windows `build` Release job on MSVC 19.52, if one runs, builds `smallvec_test.c` without C4789 and the test passes. If none runs, V3 is not scored and is carried to the next push that runs 1. | C4789, or another error | M–H |
+| V4 | **2 is green**, its notices as at #115, times aside, the slowest header's name among them: `cortex-m` with #115's counts. | a failure, or another notice | H: measured. |
+| V5 | **3 to 6 as at #82, and 8 green**, its checks as at #133. | a failure, or another notice | H |
+
+### What follows
+
+V1 to V5 scored, and the record closes, with V3 scored or carried. Then
+the list: Analog Devices' SHARC in `docs/architectures.md`, and item 7's
+next part, a target whose `int` has 16 bits.
