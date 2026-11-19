@@ -40340,3 +40340,160 @@ What it shows:
 - **A runner image moves under a project.** Two runs drew one Windows job
   each on the new image (#80 and #81); a fix for it is shown only when the
   rollout reaches the job that failed.
+
+---
+
+## VERIFY-091: Pre-registration — The Library Prints a Size without C99's `%zu`: `%lu` Where `size_t` Has 32 Bits or Fewer, `%llu` Where It Is Wider
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-091 |
+| **Date**       | 2026-11-19 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | f8e7cd9 (VERIFY-090's change; its close, a record, is pushed with this): `1`, `3` to `6` #81, `2` #114 and `8` #132. The workflows that ran last before it: `7` #34, `13` #16 (`frama-c-array` and `frama-c-diag`), `14` #26 and `15` #5, at 778a730; `13` #15, at ba0ebd2, for the other 25 units, whose files have not changed since; `9` #37 (778a730) and #38 (de6d4df); `16` #2, at 3055981. |
+| **Scope**      | `semantics/diag.h`: the frame's line, shared by `diag_print`, `diag_render_frame` and `diag_render`, with the size's conversion and its cast; `data/hashmap/hashmap_fmt.h`: the header line's; `test/semantics/diag_test.c`: a test at `usize`'s maximum. The pins they move: `tools/cortexm/pins.txt` (two lines out), `tools/size/pins.txt` (two token figures) and `docs/code-size.md`'s rows, the ten `tools/eva/pins/` files (one line number). The README's stdio note, `docs/architectures.md` and `tools/cortexm/README.md`. |
+| **Category**   | A measure of VERIFY-089's run 1. On 2026-11-18 the author decided that the library stops using `%zu`, in a record of its own with the proofs and pins it moves. |
+
+### What is missing
+
+A printf built without C99's formats prints `%zu` as written and leaves
+its argument to the next conversion, which then reads it as its own.
+Ubuntu's newlib 4.4.0 is built so (`_WANT_IO_C99_FORMATS` is not in its
+`newlib.h`; VERIFY-089), and so is newlib-nano's printf. The library has
+four format strings with `%zu`: `semantics/diag.h`'s three renderings of a
+frame, `diag_print`'s, `diag_render_frame`'s and `diag_render`'s, which
+print its index and its line, and the header line of
+`data/hashmap/hashmap_fmt.h`, its `len` and `cap`. With Ubuntu's newlib on
+Cortex-M, `diag_test` fails 19 checks and `hashmap_test` one, pinned so by
+VERIFY-089.
+
+### What is decided
+
+- **The conversion goes by the width of `size_t`.** Where `SIZE_MAX` is
+  at most 0xFFFFFFFF, `%lu`, with a cast to `unsigned long`: C89's, which
+  every printf has, and `unsigned long` has at least 32 bits, so the cast
+  keeps the value. Where it is wider, `%llu`, with a cast to `unsigned
+  long long`: C99's `long long`, at least 64 bits. `SIZE_MAX` is read
+  under `defined()`, as `core/primitives/limits.h` reads it, for the
+  static analyzers that do not read system headers (Cppcheck, which
+  reads none, sees the `%lu` branch, its cast with it). Not `ULONG_MAX`:
+  under `-I core/primitives`, `<limits.h>` is the project's own
+  (`types.h`'s note), which does not define it. So a 64-bit Linux or
+  macOS, whose `unsigned long` would hold `size_t`, takes `%llu` too.
+- **Each header has its own pair, private** (the trailing underscore of
+  `smallvec.h`'s internal names): `diag_usize_fmt_` and `DIAG_USIZE_FMT_`
+  in `diag.h`, `hashmap_usize_fmt_` and `HASHMAP_USIZE_FMT_` in
+  `hashmap_fmt.h`, which says it makes `diag.h`'s choice. Not a public
+  macro in `core/primitives/types.h`: a new public name is the author's
+  call, and a typedef there would add tokens to every header's build cost.
+- **`diag.h`'s three renderings share one format**, `DIAG_FRAME_FMT_`,
+  `diag_print` and `diag_render` with a newline after it, as their
+  documentation says they print the same line. Each call keeps its lines.
+- **A test at `usize`'s maximum.** `diag_test`'s
+  `test_render_index_and_line_at_full_width` renders a frame whose line is
+  `SIZE_MAX`, at index `SIZE_MAX - 1`, and the chain with it, and compares
+  the text, written out for a 64-bit and a 32-bit `size_t`; at another
+  width it is not compiled. Where `long` has 32 bits and `size_t` 64
+  (64-bit Windows), `%lu` would cut both numbers: the test is what shows
+  that the wide branch is taken there.
+
+**Not claimed.** The doc comments' examples (`diag.h`'s of
+`DIAG_PUSH_FMT`, `bitset.h`'s) keep `%zu`: their formats are a caller's,
+not the library's. A printf with no `long long` (newlib-nano's) still
+prints a size wrong on a 64-bit target; the README says so. The header
+line's `%.3f` needs a printf with floating point (newlib-nano's needs
+`-u _printf_float`); unchanged, and not this record's. The tests' own
+messages print with `%zu` here and there; with Ubuntu's newlib their text
+is wrong, and no check reads it.
+
+### Measured here
+
+- **The three printfs**, under QEMU on the Cortex-M4 with Ubuntu's
+  toolchain: `snprintf` of `%zu`, then `%d`, of 7 and 42 gives "zu" and 7
+  with newlib and with newlib-nano, and 7 and 42 with picolibc 1.8.6.
+  `%llu` of 5 gives 5 with newlib and picolibc; newlib-nano prints "lu",
+  and the next argument goes wrong (-12). `%lu` of 4294967295 is right
+  with all three.
+- **The branch each compiler takes**, read from the preprocessor's
+  output: GCC for x86-64 Linux, `unsigned long long` and `%llu`; with
+  `-m32`, `unsigned long` and `%lu`; `arm-none-eabi-gcc`, `%lu`;
+  MinGW-w64's GCC 13 (x86-64, where `long` has 32 bits), `%llu`.
+- **The tests.** GCC 13.3.0 and Clang 18.1.3, Debug with the sanitizers
+  and Release: 61 of 61 pass. GCC with `-m32`, Debug and Release: 61 of
+  61, the 32-bit texts. GCC 14 and Clang 18 at C11, C17 and C23: 61 of 61.
+  With `diag.h`'s wide pair made `unsigned int` and `%u`, narrower than
+  `size_t`, the new test's two checks fail, and no other. MinGW-w64:
+  `diag_test.c` and `hashmap_test.c` compile with `-Wall -Wextra
+  -Wformat=2 -Werror`; not run, as Wine does not start here ("free():
+  invalid pointer", with a new prefix too): their run on Windows is CI's.
+- **Cortex-M**, `cortexm.py` with Ubuntu's toolchain, at the four build
+  types: with newlib, `diag_test` and `hashmap_test` pass on both CPUs, and
+  with the new pins each run is as pinned: "61 tests, 58 passed, 2 failed
+  (impl_defined_test 5, file_test 1), 1 not built (time_test)" at Debug
+  and Release, "61 tests, 57 passed, 3 failed (option_test 1,
+  impl_defined_test 5, file_test 1), 1 not built (time_test)" at
+  RelWithDebInfo and MinSizeRel. With picolibc, as at #114.
+- **The embedded jobs.** `tools/embedded_compile_check.sh`: 227 of 227 at
+  each of the 18 configurations. `tools/avr_tier_check.sh`: "80 headers:
+  29 compile, 49 refused by Tier 1, 2 other", before and after; `diag.h`
+  among those that compile, at a 16-bit `size_t`, so `%lu`. `size.py run`
+  gives the pins at f8e7cd9 ("as pinned: 57 rows, 798 figures"); with the
+  change, the bytes at the twelve settings are the same, and two token
+  figures move: `diag.h` 2002 to 2040, `hashmap_fmt.h` 18437 to 18447,
+  418534 to 418582 in all. `metrics.py run` (Frama-C 25, whose figures CI's
+  Frama-C 29 matched at VERIFY-081): "as pinned, 858 functions",
+  statements 9037, as at #114.
+- **Static analysis.** The misra job's command (cppcheck 2.13.0, as the
+  runner's): real 57, canary 3, total 60, before and after, the same
+  findings at the same files and rules: "as pinned". clang-tidy 18.1.3
+  with `.clang-tidy`, on `diag_test.c` and `hashmap_test.c`: nothing,
+  before and after; its CERT C checks: none in the library's code (the
+  tests' own, not checked, 317 before and 321 after: the new test's four
+  `EXPECT`s' `fprintf`). MC/DC, with the coverage job's flags and sums
+  (gcc-14): the same before and after (here 1658 / 1812; `diag.h` 86 of
+  88, `hashmap_fmt.h` 17 of 18).
+- **Eva**, Frama-C 25 at x86_64, msvc_x86_64 and ppc_32, on
+  `tools/eva/programs/diag.c`: the same block but for the line of
+  `diag_render`'s library call, `semantics/diag.h:1020` before and 1041
+  after, the 21 lines this change puts before it; with the new pins, as
+  pinned. Report's table, 844 properties at each model, is the same, the
+  lines of `diag.h` aside. `eva.py native diag`: GCC and Clang compile it
+  and it returns 0 under ASan and UBSan.
+- **Not measured here: WP.** This Frama-C (25, Ubuntu's `frama-c-base`)
+  has no WP. The goals of `diag.h`'s units are predicted from what the
+  change is: the format strings are arguments that `diag.h`'s trusted
+  `snprintf` and `fprintf` do not read (under `-variadic-no-translation`
+  the variadic arguments carry no specification), and a cast of an
+  unsigned value to an unsigned type as wide or wider adds no RTE goal.
+- `tools/which_workflows.py`: 1 to 9 and 13 to 16; 13 and 16 at all 27
+  units, since `data/hashmap/hashmap_fmt.h` is a header that no unit
+  includes; 14's programs including a changed file, `diag`; 9's probes,
+  `pointer`, `aorai` and `smoke`.
+
+### The workflows
+
+`1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`, `13`, `14`, `15` and `16`
+run; `10`, `11` and `12` do not. 13 and 16 prove all 27 units: the push is
+long, the cost of their rule for a header that no unit includes, which
+might be read by one tomorrow.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| U1 | **1 to 9 and 13 to 16 run**, and no other; 13 and 16 at the 27 units. | another set | H |
+| U2 | **1 is green**, its 27 jobs: `diag_test` passes in each, the test at `usize`'s maximum with it, at 64 bits on Linux, macOS and Windows (MSVC, and MinGW-w64's GCC, where `long` has 32 bits) and at 32 in `build-32bit`. Its notices as at #81, GitHub's own aside. | a failure, or another notice | M–H: MSVC, macOS and a run on Windows not measured here. |
+| U3 | **VERIFY-090's T3 where it failed**: a Windows `build` Release job on MSVC 19.52, if one runs, builds `smallvec_test.c` without C4789 and the test passes. If none runs, U3 is not scored and is carried to the next push that runs 1. | C4789, or another error | M–H: Microsoft's rule for code-generation warnings; not compiled with MSVC here. |
+| U4 | **2 is green, and `cortex-m` with Ubuntu's newlib as pinned without `diag_test`'s and `hashmap_test`'s lines**: on both CPUs, at Debug and Release "61 tests, 58 passed, 2 failed (impl_defined_test 5, file_test 1), 1 not built (time_test); as pinned", at RelWithDebInfo and MinSizeRel "61 tests, 57 passed, 3 failed (option_test 1, impl_defined_test 5, file_test 1), 1 not built (time_test); as pinned". The picolibc legs and the Arm GNU Toolchain's as at #114. | a difference, or another count | H: measured with the runner's packages; the Arm legs, where the two tests passed before, not. |
+| U5 | **The size figures as pinned, two token figures moved**: "as pinned: 57 rows, 798 figures"; each target's bytes as at #114; "56 headers alone: 418582 tokens of Canon-C after preprocessing, the most 25271 (data/hashmap/hashmap_range.h)". `embedded`'s other notices, `metrics` and 2's other jobs as at #114, times aside, the slowest header's name among them. | a difference, or another notice | H: measured. |
+| U6 | **3 as at #81**: misra "as pinned: 57 real finding(s) in 32 file and rule pair(s)", "real 57; canary 3; total 60"; coverage "MC/DC 2066 / 2232" with #81's figures for `vmacros/coverage/`; CERT C, 0 in the library's code; `compcert` "61 / 61 compiled, 61 ran". | another notice | H for misra and CERT C, measured; M–H for MC/DC (the same sums here) and CompCert (not run here). |
+| U7 | **WP as before**: 5's `frama-c-diag` "proved 3071 / 3071; unproved 0; failed/invalid/stepout 0", 5's other units and 4's and 6's as at #81; 7 as at #34. | another count | M–H: reasoned, not measured. |
+| U8 | **14 is green**: `diag` as pinned at the ten models, its library call at `semantics/diag.h:1041`; its notices as at #26, times aside. | a program not as pinned, or another notice | H at x86_64, msvc_x86_64 and ppc_32 (measured with Frama-C 25); M–H at the other seven and with Frama-C 29. |
+| U9 | **13, 15 and 16 are green**: 13 at each of the 27 units, the goals one or two provers prove alone being its pins'; 15 as at #5 and 16's 27 units as at #2, times aside. | a failure, or another notice from 15 or 16 | M–H: as U7. |
+| U10 | **9 and 8 are green**: 9's `pointer-probe` and `aorai-probe` as at #37 and its `smoke-probe` as at #38; 8's `cortexm check` "6 pins, 61 tests in CMakeLists.txt; 0 problem(s)". | a failure, or another notice | H |
+
+### What follows
+
+U1 to U10 scored, and the record closes, with U3 scored or carried. Then
+the list: Analog Devices' SHARC in `docs/architectures.md`'s "Not
+supported", and item 7's next part, a target whose `int` has 16 bits.
