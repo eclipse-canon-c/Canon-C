@@ -40683,6 +40683,7 @@ What it shows:
 | **ID**         | VERIFY-093 |
 | **Date**       | 2026-11-19 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-19 — Scored: W1 to W5 MATCH, W4 at the author's re-run of `embedded`; W6 not scored, no Windows `build` Release job having drawn MSVC 19.52. CLOSED: five of five scored ("Scored", below); W6 waits for the next push that runs 1. The Status above is the record as committed. |
 | **Baseline**   | 4eb3ca0 (VERIFY-092's change; its close, a record, is pushed with this): `1` and `3` to `6` #83, `8` #134; `2` #116 red, its `embedded` job stopped at the install twice, and #115, at a7b4d87, 2's last green run. |
 | **Scope**      | `.github/actions/apt-install/`, new: `action.yml` and `fetch.sh`. `.github/workflows/platforms.yml`: the install steps of `embedded` and `cortex-m` use it. `.github/workflows/README.md`: a line on it. No library or test file. |
 | **Category**   | The author's decision of 2026-11-19, on VERIFY-092's V4: make the install robust. |
@@ -40793,3 +40794,43 @@ W1 to W6 scored, W4 at the next run of 2, and the record closes, with W6
 scored or carried. Then the list: Analog Devices' SHARC in
 `docs/architectures.md`, and item 7's next part, a target whose `int` has
 16 bits.
+
+### Scored (2026-11-19)
+
+The push of 1b7169c, 3389221 and f4f3098 started seven workflows: `1` and
+`3` to `6` #84, `2` #117 and `8` #135, each green at its first attempt.
+For W4 the author re-ran 2's `embedded` job afterwards: its second
+attempt, green.
+
+| # | scored |
+|---|--------|
+| W1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| W2 | **MATCH.** 2 is green at its first attempt. `embedded`: "11 package file(s) to install, 362 MB" (apt's 380 MB, in millions of bytes) and "11 package file(s): 0 from the cache, 11 fetched, 0 left to apt", each file from Canonical's archive; apt then had "0 B/380 MB of archives" to get, and the step took 57 s, where at #116 it had stopped twice at its 30 minutes. The four `cortex-m` jobs with Ubuntu's toolchain: 18 files, 151 MB, 0 from the cache, 18 fetched, 0 left to apt; the two with the Arm GNU Toolchain's: 13 files, 14 MB, 0, 13 and 0; each file from Canonical's archive, each install about 21 s. One job saved each list's entry; the others were told "Unable to reserve cache with key ..., another job may be creating this cache", which the action takes for no error. |
+| W3 | **MATCH.** 2's 22 jobs gave #115's notices, times aside, `embedded`'s among them: VERIFY-092's two tests compiled, 227 of 227 at each of the 18 configurations. VERIFY-092's V4, carried here, is shown. |
+| W4 | **MATCH.** The re-run of `embedded`: "Cache hit for: apt-embedded-Linux-X64-88e1eea8324cd17a", "11 package file(s): 11 from the cache, 0 fetched, 0 left to apt", and apt "0 B/380 MB"; the step took 43 s, and the entry was not saved again. Its notices are #115's but for the times and the slowest header's name (`data/queue.h`, where #115 had `algo/any_all/any_all.h`), which W3 set aside. |
+| W5 | **MATCH.** The 65 jobs of 1, 3 to 6 and 8 gave #83's and #134's notices. |
+| W6 | **Not scored.** The two Windows `build` Release jobs ran on image 20261103.298.1, MSVC 19.51. Two Debug jobs, `build (windows-latest, Debug, cl)` and `lifetime-debug (windows-latest, Debug, clang)`, drew 20261116.315.1 with MSVC 19.52 and passed `smallvec_test` without C4789, at Debug, where the optimizer that gives C4789 does not run. Carried to the next push that runs 1. |
+
+Five of five scored; W6 not scored, and carried.
+
+**Closed.** `embedded` and `cortex-m` install their packages through
+`.github/actions/apt-install`: from the Actions cache, or from Canonical's
+archive before Azure's mirror, each file checked against Ubuntu's signed
+index. The first run fetched every file from Canonical's archive, the 380
+MB of `embedded` in under a minute, where Azure's mirror had stopped the
+job twice; the re-run took every file from the cache. VERIFY-090's T3
+where it failed, W6 here, waits for the next push that runs 1. The close
+changes nothing but this record.
+
+What it shows:
+
+- **The order of the mirrors was the fix.** Canonical's archive, asked
+  first, gave every file at speed, and Azure's mirror was not asked; the
+  cache is for the runs after.
+- **A tool's guarantee is worth a measure.** apt does not check a file
+  already in its archive directory: a cache that put files there would
+  have trusted them unread. The action checks each file itself, and the
+  record says so.
+- **A carried prediction waits on what it cannot hurry.** VERIFY-090's
+  T3 has waited four pushes for GitHub's rollout to reach a Windows
+  `build` Release job; carrying it costs a line a record.
