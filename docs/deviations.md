@@ -40927,3 +40927,132 @@ What it shows:
   Analog Devices' FAQ names, and the record says why it names no more.
 
 ---
+
+## VERIFY-095: Pre-registration — The Tests on Big-Endian 32-Bit PowerPC under qemu-user, and the Tests Linked with libatomic Where `lifetime.h`'s 64-Bit Atomic Needs It
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-095 |
+| **Date**       | 2026-11-19 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 7c5c93a (VERIFY-094's change; its close, a record, is pushed with this): `8` #136; `1` and `3` to `6` #84 and `2` #117, at f4f3098, the last push that ran them. |
+| **Scope**      | `CMakeLists.txt`: a check for the 64-bit atomic, and the test binaries linked with libatomic where it finds that needed. `.github/workflows/platforms.yml`: a job, `big-endian-32`. `README.md`: the note on `CANON_LIFETIME_DEBUG` without 64-bit atomics. `docs/architectures.md`: a row in "Tested on". The lists of where the tests run, in `docs/implementation-defined.md`, `docs/verification.md`, `docs/autosar-classic.md` and the workflow map: 32-bit PowerPC, and Cortex-M where VERIFY-089 left it out. No library or test file. |
+| **Category**   | The list's item 7a-3, which the author chose on 2026-11-19 to take before MSP430: the tests on a 32-bit big-endian target, with Ubuntu's packages, as the s390x job runs them. |
+
+### What is missing
+
+Every test runs big-endian on s390x alone (`big-endian`, VERIFY-045), whose
+pointers and `size_t` have 64 bits; each 32-bit target that runs the tests
+(i386, Cortex-M0+, Cortex-M4) is little-endian. A 32-bit `size_t` has not
+met big-endian byte order in a run. 32-bit PowerPC Linux is one of the
+machine models the ten core/ units are proved at, and Eva's programs run at
+(VERIFY-060, VERIFY-066), and the proofs do not represent byte order
+(`docs/verification.md`): the target is proved at, and was never tested.
+
+### What is found
+
+Measured here, with Ubuntu 24.04's packages: `gcc-powerpc-linux-gnu`
+(GCC 13.3.0-6ubuntu2~24.04.1), `libc6-dev-powerpc-cross` (glibc 2.39) and
+`qemu-user` (qemu-ppc 8.2.2):
+
+- **The suite does not build.** `lifetime_test`, which defines
+  `CANON_LIFETIME_DEBUG` itself, does not link, at Release and at Debug:
+  "undefined reference to `__atomic_fetch_add_8'", and make stops there.
+  32-bit PowerPC has no lock-free 64-bit atomic
+  (`__GCC_ATOMIC_LLONG_LOCK_FREE` is 1, and `__atomic_is_lock_free(8, p)`
+  0), so GCC compiles `lifetime.h`'s counter, a `u64`, to a call, which
+  GCC's libatomic provides on Linux. The README's note on that counter
+  names bare metal alone, where no library provides the call.
+- **`-DCMAKE_EXE_LINKER_FLAGS=-latomic` is not the fix.** CMake puts those
+  flags before the objects, and Ubuntu's GCC links with `--as-needed`,
+  which drops a library no object before it needs: the same error. Linked
+  after the objects, the library is kept.
+- **With libatomic linked, the 61 tests pass**, at Release and Debug, with
+  `CANON_LIFETIME` off and debug. One 64-bit fetch-and-add takes one
+  `pthread_mutex_lock` (counted through an interposed function): libatomic
+  makes it race-free by a mutex, not lock-free. The test reports level 2
+  of the ladder, `CANON_LIFETIME_ATOMIC_IDS` 1.
+
+### What changes
+
+- **`CMakeLists.txt`** checks whether a program with a 64-bit
+  `__atomic_fetch_add` links; if not, whether it links with libatomic;
+  and if so, links each test binary with it (`target_link_libraries`,
+  after the objects), and says so: "Canon-C: the tests are linked with
+  libatomic". MSVC is not checked: its level of the ladder is
+  `_InterlockedIncrement64`. Under a toolchain whose checks compile
+  without linking, as `tools/cortexm/toolchain.cmake`'s do, the first
+  check passes and nothing is added; there the README's note applies, as
+  before.
+- **`big-endian-32`**, in `platforms.yml`, after `big-endian`: the three
+  packages above, through `.github/actions/apt-install` (VERIFY-093), its
+  cache name `big-endian-32`; Release and Debug, each with
+  `CANON_LIFETIME` off and debug. The debug legs are for the `lifetime_t`
+  field in each owner: 32-bit PowerPC aligns a `uint64_t` in a struct to 8
+  bytes, where i386 aligns it to 4 (`struct { char c; uint64_t u; }` is 16
+  bytes there, 12 on i386). A step checks that the binaries are 32-bit
+  big-endian PowerPC, and gives a notice of how many test binaries are
+  linked with libatomic, failing if `lifetime_test` is not one; ctest runs
+  each test under qemu-ppc, `--no-tests=error`. The matrix values are
+  quoted: YAML 1.1 reads a bare `off` as false.
+- **`README.md`**: the note says what a Linux target does: link
+  `-latomic`, as the test build now does where it is needed.
+- **The documents.** `docs/architectures.md`'s row; and its sentence that
+  the README's architecture badges follow it, which the README has never
+  had (it points to the file), corrected. 32-bit PowerPC in the lists of
+  where the tests run (`docs/implementation-defined.md`, twice, with its
+  `char`, measured unsigned; `docs/verification.md`;
+  `docs/autosar-classic.md`; the workflow map). Found while editing them:
+  `docs/implementation-defined.md` said the bare-metal targets compile
+  `impl_defined_test` and do not run it, and `docs/verification.md` listed
+  Cortex-M as compiled only, where since VERIFY-089 `cortex-m` runs the
+  tests under QEMU; `impl_defined_test` among them with newlib, its five
+  checks of `rename` pinned. Each now says so, and
+  `docs/autosar-classic.md` lists Cortex-M among the jobs that run its two
+  tests.
+
+**Not claimed.** libatomic's mutex makes the counter race-free between
+threads; it is not async-signal-safe, and no test installs a signal
+handler. The check is for GCC's and Clang's builtins; a compiler that
+has neither is not linked with anything (CompCert's job builds without
+CMake).
+
+### Measured here
+
+- **The check elsewhere**: GCC and Clang on x86-64 at Release, GCC at
+  Debug with the sanitizers, GCC `-m32` at Release and Debug, MinGW-w64's
+  GCC (configured and built, not run: Wine does not work here), and the
+  Cortex-M4 toolchain with picolibc (configured): "CANON_C_ATOMIC64_LINKS
+  - Success", and no test binary linked with libatomic; the suite passes
+  where it is run.
+- **At PowerPC**: "CANON_C_ATOMIC64_LINKS - Failed", then
+  "CANON_C_ATOMIC64_LINKS_LIBATOMIC - Success"; `lifetime_test` alone
+  linked with libatomic with `CANON_LIFETIME` off, 24 of the 61 with it
+  debug; 61 of 61 tests passed at each of the four legs, the tests in about
+  a second each time.
+- **Ubuntu's `gcc-multilib` and its PowerPC cross GCC exclude each
+  other**: installing one removes the other. The job installs no
+  `gcc-multilib`.
+- `tools/which_workflows.py`: 1 to 6 and 8.
+- `tools/record_coverage.py --strict --complete` and
+  `tools/cortexm/cortexm.py check`: no problem.
+
+Not measured: Apple Clang, AArch64 and s390x, whose jobs configure the
+check, and the runner's install of the three packages.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Y1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| Y2 | **The four `big-endian-32` jobs are green at their first attempt**, 61 of 61 tests passed in each. | a failure | M–H: measured here with the same packages, not on a runner |
+| Y3 | **The check in each of them**: "CANON_C_ATOMIC64_LINKS - Failed", "CANON_C_ATOMIC64_LINKS_LIBATOMIC - Success" and "Canon-C: the tests are linked with libatomic"; the notice "1 of 61 test binaries linked with libatomic" in the two `off` jobs, "24 of 61" in the two `debug` jobs. | another line or count | H, given Y2 |
+| Y4 | **The install**: nothing left to apt in each job, each within its 30 minutes; the entry saved by one job. | a file left to apt, a step over its limit, or no entry saved | M: as VERIFY-093's W2, the archive's speed from GitHub's runners and the four jobs' race to save are not measured here |
+| Y5 | **The check adds nothing elsewhere**: each job of 1, 2 and 3 that configures CMake with GCC or Clang, but the four of Y3, logs "CANON_C_ATOMIC64_LINKS - Success" and not "linked with libatomic"; no MSVC job runs the check. | a check failed, or an MSVC job that runs it | H: measured here for GCC, Clang, i386, MinGW and the Cortex-M toolchain |
+| Y6 | **Nothing else changes**: 1 and 3 to 6 give #84's notices, 2's other jobs #117's (times, and `embedded`'s slowest header's name, aside), and 8 is green with this record. | another notice, or a failure | H |
+| Y7 | **VERIFY-090's T3 where it failed** (VERIFY-093's W6, carried): a Windows `build` Release job on MSVC 19.52, if one runs, builds `smallvec_test.c` without C4789 and the test passes. If none runs, Y7 is not scored and is carried to the next push that runs 1. | C4789, or another error | M–H |
+
+### What follows
+
+Y1 to Y7 scored, Y7 scored or carried, and the record closes. Then item
+7a-2: MSP430X, a target whose `int` has 16 bits.
