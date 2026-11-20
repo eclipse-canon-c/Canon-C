@@ -41434,6 +41434,7 @@ What it shows:
 | **ID**         | VERIFY-098 |
 | **Date**       | 2026-11-20 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-20 — Scored: B1 to B6 MATCH. CLOSED: six of six scored ("Scored", below). Every test that builds on MSP430X passes, at both models. The Status above is the record as committed. |
 | **Baseline**   | cca86e2 (VERIFY-097's change; its close, a record, is pushed with this): `2` #120, `8` #139. |
 | **Scope**      | `tools/msp430/` alone: `tmpfile.c` (new), linked into each test; `msp430.py` (the object built, the file probe widened, a memory probe); `toolchain.cmake` (`CANON_MSP_LINK`); `pins.txt` (`diag_test` and `log_test` unpinned); `README.md`. No library or test file, and no workflow. |
 | **Category**   | VERIFY-097's finding, that newlib's `tmpfile()` does not return under the simulator, and the step proposed to the author with its run: a `tmpfile()` for the MSP430 build alone. |
@@ -41492,3 +41493,36 @@ their first `tmpfile()` at a 16-bit `int`.
 ### What follows
 
 B1 to B6 scored, and the record closes. Then the list's item 8.
+
+### Scored (2026-11-20)
+
+The push of 004c0c1, b755707 and f3fca2e started two workflows: `2` #121
+and `8` #140, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| B1 | **MATCH.** 2 and 8 ran, and no other. |
+| B2 | **MATCH.** At both models the memory probe printed its seven steps, "fgets read "canon"" among them, and exited with 0 after "tmpfile: fclose returned 0". |
+| B3 | **MATCH.** Both jobs green, each of the eight legs "61 tests, 18 passed, 0 failed, 43 not built; as pinned"; `diag_test` and `log_test` passed in 0.1 s or less. |
+| B4 | **MATCH.** At both models the file probe was stopped at 30 s, after "tmpnam()". Before it the named file's round trip passed whole: `fopen` returned a stream, `fputs` and `fflush` 0, `fgets` read "canon", `fclose` 0. The simulator's file I/O works; newlib's `tmpnam()` does not return there, and `tmpfile()`, which calls it, neither. |
+| B5 | **MATCH.** 2's other jobs gave #120's conclusions and notices, `embedded` but for its slowest header's name (`util/str/str_split.h`, not `algo/any_all/any_all.h`), which B5 set aside; 8 green. |
+| B6 | **MATCH.** The test steps took 299 s (small) and 475 s (large), each leg 1.1 to 2.0 minutes. `random_test` took 61 to 69 s at the small model and 101 to 116 s at the large, the reverse of VERIFY-097's run (120 to 135, and 66 to 74): the job's runner sets the pace, not the model. |
+
+Six of six scored.
+
+**Closed.** On MSP430X every test that builds passes, at both memory
+models and each build type: the 18 below Tier 1 but `time_test`, which
+newlib's `clock_gettime` keeps unbuilt; the 42 others Tier 1 refuses, by
+design. `diag_test` and `log_test` write to a `tmpfile()` in memory there,
+newlib's own not returning under the simulator. The close changes nothing
+but this record.
+
+What it shows:
+
+- **A probe narrows a hang one step at a time.** VERIFY-097's put it
+  inside `tmpfile()`; this one, with a named file and `tmpnam()` before
+  it, puts it in `tmpnam()`, and clears the simulator's file I/O, which a
+  reading had suspected.
+- **Read the tests before choosing their stand-in.** The `tmpfile()`
+  first proposed, returning NULL, would have pinned ten failures in
+  `log_test`; reading its guards chose a stream in memory, which runs them.
