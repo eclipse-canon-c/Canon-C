@@ -86,7 +86,12 @@ still there for detail.
   `embedded`'s and `cortex-m`'s do (VERIFY-093): their files come from the
   Actions cache, or from Canonical's archive before Azure's mirror, each
   checked against Ubuntu's signed index; each list of packages with its
-  own `cache-name`.
+  own `cache-name`. A target whose only C compilers are commercial, or
+  free but downloaded behind a vendor's sign-in, gets no job: it goes in
+  `docs/architectures.md`'s "Waiting for a compiler", planned, with what
+  holds it back and what would let it in (VERIFY-100). A free compiler CI
+  can download itself, its checksum pinned, is usable, as TI's is for
+  `msp430`.
 - **Something experimental**: a job in `probes.yml`, with its paths added to
   the `changes` job's filter. Workflows 1 to 6 ignore `probes.yml`, which
   none of them reads (VERIFY-080), so editing it starts 8 and 9 alone, and

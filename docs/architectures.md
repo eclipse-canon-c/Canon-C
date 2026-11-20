@@ -13,8 +13,10 @@ are three kinds of evidence, from running code to proof:
 
 Each entry names the CI job that shows it. An entry marked *planned* is on
 the project's list and shows nothing yet; it moves into its table when its
-job runs. This file is the one place these facts are kept; the README
-points here for them.
+job runs. An architecture that waits only for a compiler CI can use is
+planned too, and listed under "Waiting for a compiler" with what holds it
+back. This file is the one place these facts are kept; the README points
+here for them.
 
 ## Tested on
 
@@ -66,7 +68,7 @@ measured where the list says so:
 - Cortex-R5 and Cortex-R52.
 - 32-bit Arm, big-endian.
 - TriCore (Infineon AURIX).
-- PowerPC e200, big-endian (NXP MPC5xxx).
+- PowerPC e200, big-endian (NXP MPC5xxx): waiting for a compiler (below).
 - Renesas RH850, if a usable GCC exists.
 - Renesas RX, big-endian.
 - Xtensa (ESP32).
@@ -78,6 +80,12 @@ measured where the list says so:
   today.
 - TI C29x (C2000's newer core), if its compiler's type sizes give 8-bit
   bytes; not yet checked.
+- dsPIC and PIC24, with Microchip's XC16, a port of GCC, free with its
+  optimization limited (`-O0`, `-O1`): `int`, `size_t` and pointers of
+  16 bits, so Tier 0 only, with `-fno-short-double`, without which
+  `double` has 32 bits and `types.h` refuses it. Compiled first, as AVR
+  is; run later, if Microchip's simulator (MPLAB X's, through its
+  command-line debugger) runs in CI. QEMU has no model of them.
 
 ## Proved at
 
@@ -104,13 +112,37 @@ twelve goals the provers leave (`coq.yml`), and Eva runs the 26 programs of
 *Planned:* models for bare-metal AArch64, Cortex-R52, SPARC LEON3, TriCore
 and PowerPC e200, generated from their compilers as the seven are.
 
+## Waiting for a compiler
+
+Some architectures can be checked only with a compiler that is
+commercial, or free to use but downloaded behind a vendor's sign-in, which
+a CI job cannot do. What holds them back is the toolchain, not Canon-C:
+each is planned, and listed here with what holds it back and what would
+let it in. This is the rule for every such architecture, those found so
+far and those found later: one whose only C compilers are of this kind
+goes in this table, not under "Not supported", which is for architectures
+whose C implementation Canon-C cannot work with. When a compiler CI can
+use appears, or the project has a licence and a runner for one, the entry
+moves to the table its job then fills.
+
+A compiler is usable when CI can download it itself, its checksum pinned,
+as the `msp430` job fetches TI's and `cortex-m` Arm's; a free compiler
+with no emulator for its target is usable too, and its target compiled
+only, as AVR is.
+
+| architecture | its C compilers | what holds it back | what would let it in, and what it would check |
+|--------------|-----------------|--------------------|-----------------------------------------------|
+| NXP S12, S12X and S12Z (16-bit, MagniV) | NXP's CodeWarrior and Cosmic's, both commercial and for Windows | no free C compiler: GCC's 68HC11 and 68HC12 port, which covered HCS12, was declared obsolete in GCC 4.6 and removed; S12X and S12Z were never in GCC, and GNU binutils assembles S12Z with no compiler behind it | a licence for one of them, and a Windows runner. A 16-bit `int`; where `size_t` has 16 bits, Tier 0 only, as on AVR |
+| PowerPC e200 with VLE (NXP MPC5xxx) | NXP's GCC 4.9.4 with its VLE patches (`powerpc-eabivle-gcc`, in S32 Design Studio for Power Architecture), free to use | GCC does not generate VLE code (binutils assembles it), and NXP's compiler is downloaded behind its sign-in. QEMU has no e200 machine: nothing would run, it would be compiled only | a copy of NXP's compiler CI can fetch, or a public release. Big-endian 32-bit PowerPC's data model is tested already (`big-endian-32`); e200 would add VLE code, and the machine model planned under "Proved at" |
+| Analog Devices SHARC+ addressing bytes (`-char-size-8`: ADSP-SC58x, ADSP-2158x) | Analog Devices' CrossCore Embedded Studio, commercial | no free C compiler: GCC has no SHARC port | a licence for it, and a runner it installs on. Its type sizes are not yet checked; the SHARC+ built for words is not supported (below) |
+
 ## Not supported
 
 | architecture | why |
 |--------------|-----|
 | TI C28x (C2000's classic core) and other processors with 16-bit bytes | the smallest addressable unit is 16 bits, so `uint8_t` cannot exist, and the C standard does not allow it to; Canon-C's `u8`, its byte views and its byte counts assume 8-bit bytes. Supporting them would mean redesigning the library's foundations. |
 | 8051 and STM8, for now | SDCC, their free compiler, has no 64-bit `double`; planned above, Tier 0 once `f64` is optional |
-| Analog Devices SHARC before SHARC+ (ADSP-2106x to ADSP-2148x), and SHARC+ built with `-char-size-32` | word-addressed: `char` has 32 bits, as `short`, `int` and `long` do, each of `sizeof` 1, so `uint8_t` cannot exist, as on the C28x. SHARC+ processors that address bytes (ADSP-SC58x and ADSP-2158x among them) do so by default, with `-char-size-8`, their `char` 8 bits: this row does not exclude them, and they are not tried: their compiler is Analog Devices' CrossCore Embedded Studio, which this project does not use. |
+| Analog Devices SHARC before SHARC+ (ADSP-2106x to ADSP-2148x), and SHARC+ built with `-char-size-32` | word-addressed: `char` has 32 bits, as `short`, `int` and `long` do, each of `sizeof` 1, so `uint8_t` cannot exist, as on the C28x. SHARC+ processors that address bytes (ADSP-SC58x and ADSP-2158x among them) do so by default, with `-char-size-8`, their `char` 8 bits: this row does not exclude them; they wait for a compiler (above). |
 
 Sources for the compilers named here: [SDCC's
 `double`](https://sourceforge.net/p/sdcc/feature-requests/351), [byte
