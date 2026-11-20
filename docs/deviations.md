@@ -41301,3 +41301,86 @@ What it shows:
 - **Print what can be printed.** The linker script's regions, printed
   rather than asserted, are not the ones the source read here says; a
   test that is stopped should leave its output too.
+
+---
+
+## VERIFY-097: Pre-registration — MSP430's Pins Enforced, Three Tests' Arithmetic Fixed at a 16-Bit `int`, and a File Probe for the Two That Time Out
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-097 |
+| **Date**       | 2026-11-20 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | f15a810 (VERIFY-096's change; its close, a record, is pushed with this): `1` and `3` to `6` #86, `2` #119, `8` #138. |
+| **Scope**      | `test/core/primitives/lifetime_test.c`, `test/util/random_test.c`, `test/core/primitives/compare_test.c`: each one loop counter or one width. `tools/msp430/msp430.py`: `ENFORCE` on, the outcome `times-out`, a test's own limit, its output kept when it is stopped, each test's seconds, and a file probe. `tools/msp430/pins.txt`: run 1's measure. The README's platform tiers and the documents that named run 1 report-only. No library file. |
+| **Category**   | VERIFY-096's findings, with the author's decisions of 2026-11-20: the three tests fixed rather than pinned; the pins enforced, the two time-outs pinned at a 60 s limit, and a probe to show where they stop. |
+
+### What changes
+
+- **The three tests**, as the author chose, each so that it means at a
+  16-bit `int` what it means at 32 bits, and does the same at 32:
+  - `lifetime_test`: the sustained loop's counter a `u32`, which reaches
+    100000, where an `unsigned int` of 16 bits does not.
+  - `random_test`: the uniformity check draws with a `u32 k` to `n`,
+    not an `int i` to `(int)n`, which is -31072 at 16 bits.
+  - `compare_test`: `isize`'s minimum is `-max - 1`, from its maximum,
+    not `(usize)1 << (sizeof(isize) * 8 - 1)`, whose width is not
+    `sizeof` times 8 where `isize` has 20 bits in 4 bytes.
+- **`msp430.py`**: `ENFORCE` on. A pin may say `times-out`; a test so
+  pinned is stopped at 60 s (`PINNED_TIMEOUT`), the others at 300
+  (`TIMEOUT`, 180 at run 1). The script runs each test itself rather than
+  through `cortexm.run_test`, which keeps nothing of a test it stops: the
+  output written before the stop is kept, and each test's seconds printed
+  and written to the summary. Before the tests, a file probe: a program
+  that writes a line to a `tmpfile()` and reads it back, each step on
+  `stderr`, stopped at 30 s, its steps and how it ended in the log and a
+  notice; it fails nothing.
+- **`pins.txt`**: run 1's measure: the 42 tests Tier 1 refuses and
+  `time_test`, not built at both models and each build type; `diag_test`
+  and `log_test`, `times-out`.
+- **The documents**: the README's platform tiers name the headers whose
+  tests pass on MSP430X, and `slice.h`'s test among them; the workflow
+  map, `docs/architectures.md`, `docs/verification.md` and the tool's
+  README say the pins are enforced; `docs/implementation-defined.md`'s
+  plain `char` measured unsigned on MSP430 too (the probe); and the map's
+  "A new test file" says where a test that does not pass on MSP430X goes.
+
+### Measured here
+
+- **The fixes, natively**: GCC 13.3 and Clang 18 at Debug with the
+  sanitizers: the three tests pass. clang-tidy, the project's checks: no
+  finding in the three files.
+- **At MSP430's small model** (clang 18's MSP430 target, newlib 4.4's
+  headers, the runner's `CANON_LIFETIME_NO_ATOMICS`): `lifetime_test`
+  compiles, which it did not; `random_test` and `compare_test` compile.
+  The large model is not clang's.
+- **What else the three do at 16 bits**, read: `lifetime_test`'s other
+  loops count to 8 and 64; `random.h`'s `random_u32` and `random_range`
+  compute in `u32` and `u64` throughout. `test_distinct_live_owners`'s
+  ids, `counter ^ address`, with `int`s 2 bytes apart: no two of the 64
+  equal, for any even base address, at the counter's value there (100016,
+  after the sustained loop) or at 16 (computed).
+- **The runner**, with the stand-in toolchain (VERIFY-096's, made to
+  refuse each source that includes `limits.h`, as Tier 1's `#error` does,
+  to refuse `time_test.c`, and to hang `diag_test` and `log_test` after a
+  line): the leg "as pinned", exit 0 with `ENFORCE`; the two stopped at
+  60 s, their line kept; the file probe's seven steps, on the host's
+  `tmpfile()`. `msp430.py check`: 45 pins, no problem.
+- `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| A1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| A2 | **Both `msp430` jobs are green, enforced**: each leg "61 tests, 16 passed, 2 failed (diag_test times-out, log_test times-out), 43 not built; as pinned", at both models and each build type. | a difference, or a failed job | M: `lifetime_test` has not run on MSP430, nor `compare_test` at the large model, and `random_test`'s 100000 draws under the simulator are not timed |
+| A3 | **The three fixed tests pass there**: `lifetime_test` at both models, at level 4; `random_test` with no `FAIL` line; `compare_test` at the large model too; each within 300 s. | a failure, or a time-out | M, as A2 |
+| A4 | **The file probe does not end with 0** at either model: it is stopped at 30 s, or exits otherwise, at a step between `tmpfile()` and "fgets read". | an exit with 0 | M–L: a reading of newlib's MSP430 `write` (TI's CIO channel, given the target's descriptor) beside the simulator's own `open`; nothing measured |
+| A5 | **Elsewhere the three tests do as before**: 1 and 3 to 6 give #86's notices, 2's other jobs #119's (times, and `embedded`'s slowest header's name, aside), the `cortex-m` legs as pinned; 8 is green. | another notice, or a failure | H: at a 32-bit `int` each fix computes the same values |
+| A6 | **The time**: each `msp430` job's test step under 30 minutes, the two pinned time-outs costing 2 minutes a leg rather than 6. | 30 minutes or more | M–H |
+
+### What follows
+
+A1 to A6 scored, and the record closes. What the file probe and the kept
+output show decides what `diag_test` and `log_test` need; then the list's
+next item.
