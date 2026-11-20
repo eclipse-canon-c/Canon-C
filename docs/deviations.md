@@ -41793,3 +41793,138 @@ What it shows:
   implementation it cannot work with; "waiting for a compiler" is a limit
   of the project's means. Kept apart, the first says what Canon-C is, the
   second what it has not yet been able to check.
+
+---
+
+## VERIFY-101: Pre-registration — The Tests on Renesas RH850 under GDB's Simulator, with GCC and newlib Built from Ubuntu's Source Packages; newlib's V850 `_open` Replaced, and `memory_test`'s Alignment Fixed
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-101 |
+| **Date**       | 2026-11-20 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | a8f42e5 (VERIFY-100's change; its close, a record, is pushed with this): `1` and `3` to `6` #88, `2` #122, `8` #142. |
+| **Scope**      | `tools/renesas/` (new: `build.sh`, `renesas.py`, `toolchain.cmake`, `open.c`, `pins.txt`, `README.md`); `test/core/memory_test.c`: two tests' 8-aligned base, and a comment; `.github/workflows/platforms.yml`: a job, `renesas`; `.github/workflows/records.yml`: a step, `renesas.py check`; the README's bare-metal section, `docs/architectures.md` (a row; RH850 out of the planned list; the rule of "Waiting for a compiler" naming a compiler built from Ubuntu's sources usable), `docs/verification.md`, `docs/implementation-defined.md` and the workflow map. No library file. |
+| **Category**   | The list's item 8, its next target, which the author chose on 2026-11-20: Renesas, through GDB's simulators, RH850 first; and the author's two decisions of 2026-11-20 on what its first measure found: newlib's V850 `_open` replaced in the tests' link, and `memory_test` fixed. |
+
+### What is missing
+
+No test has run on a Renesas core, nor under an ABI whose 8-byte objects
+are aligned to less than 8. `docs/architectures.md` plans RH850 "if a
+usable GCC exists". No Ubuntu package ships one; Ubuntu ships the sources
+of one.
+
+### What changes
+
+- **`tools/renesas/build.sh`**: binutils 2.42, GCC 13.3.0 (C, without
+  LTO), newlib 4.4.0 and GDB 15.1's simulator for `v850-elf`, built from
+  the release tarballs of Ubuntu's `binutils-source`, `gcc-13-source`,
+  `newlib-source` and `gdb-source` (Ubuntu's own patches, for its Linux
+  builds, not applied), and installed stripped.
+- **`tools/renesas/renesas.py`**, modeled on `tools/aarch64/aarch64.py`:
+  each test built for two variants, `rh850` (`-mv850e3v5`: RH850's
+  V850E3V5, the RH850 ABI, GCC's default, and its FPU) and `rh850-soft`
+  (the same with `-msoft-float`), each at CMake's four build types, with
+  `CANON_LIFETIME_NO_ATOMICS`; run under `v850-elf-run`. Before the
+  tests, a probe that prints the type sizes and alignments and exits with
+  3, which must come back, and a file probe, which fails nothing. Each
+  leg's binaries checked: the V850's, under the RH850 ABI, their notes
+  saying 8-byte objects aligned to 4 and the variant's FPU (`FPU-3.0`, or
+  not set), compiled with the variant's flags. `ENFORCE` on from run 1.
+- **`tools/renesas/open.c`**, linked into each test: an `_open` with the
+  variadic type newlib's callers call it through (below), as the author
+  chose.
+- **`test/core/memory_test.c`**, as the author chose: its two tests that
+  took a static `u64` array for an 8-aligned address take the first
+  8-aligned address inside a static byte buffer; the heap test's comment
+  says that 8 is the C libraries' alignment, not C99's.
+- **`renesas`**, in `platforms.yml`, one job per variant: the four source
+  packages, GMP, MPFR, MPC, flex and bison through
+  `.github/actions/apt-install`; the toolchain from the Actions cache, its
+  key the packages' versions and `build.sh`'s hash, or built; the tests;
+  the logs and summaries uploaded.
+- **`records.yml`**: `renesas.py check`, and `tools/renesas/**` among its
+  paths.
+- **The documents** name the job, and RH850 leaves the planned list.
+
+### Measured here
+
+Ubuntu's four source packages, unpacked here: `binutils-source`
+2.42-4ubuntu2.10, `gcc-13-source` 13.3.0-6ubuntu2~24.04.1, `newlib-source`
+4.4.0.20231231-2 and `gdb-source` 15.1-1ubuntu1~24.04.1, with GMP, MPFR,
+MPC and flex from the same archive, as the author's rule allows. `build.sh`
+built the toolchain in 20 minutes on 2 CPUs, 149 MB installed:
+"v850-elf-gcc (GCC) 13.3.0", "GNU simulator (SIM) 15.1". A first build
+stopped at binutils' `arlex.c` without flex: the job installs flex and
+bison.
+
+- **The run**, with the scripts and the toolchain as committed, at both
+  variants and each build type, enforced: each leg "61 tests, 60 passed,
+  0 failed, 1 not built (time_test); as pinned", in 0.2 or 0.3 minutes on
+  2 CPUs; `random_test` the slowest, 0.9 to 2.5 s with the FPU and 3.3 to
+  7.4 s without. `time_test` stops at `util/time.h:147`'s `clock_gettime`:
+  newlib declares it, and `nanosleep`, only where `_POSIX_TIMERS` is
+  defined, which its `sys/features.h` does for RTEMS and Cygwin alone.
+  Each leg's binaries "ELF32, 2's complement, little endian, Renesas V850
+  (using RH850 ABI)", their notes "8-byte objects aligned 4-byte", and the
+  FPU "FPU-3.0" at rh850 and "not set" at rh850-soft.
+- **The probe**, at both variants: "renesas probe: int 4, long 4, long
+  long 8, pointer 4, size_t 4 (SIZE_MAX 4294967295), double 8, long
+  double 8; aligned: long long 4, double 4, long double 4, pointer 4;
+  char signed"; exit 3. GCC's V850 port aligns nothing to more than 4
+  bytes unless `-m8byte-align` is given, and the RH850 ABI is its default.
+- **The atomics**: `__atomic_fetch_add` of 4 and of 8 bytes calls
+  `__atomic_fetch_add_4` and `_8`, which nothing provides ("undefined
+  reference"): hence `CANON_LIFETIME_NO_ATOMICS`.
+- **The first measure**, newlib's `_open` in the link, at rh850 Debug: 54
+  passed; `scope_test` 1 `FAIL` (the file it wrote did not read back),
+  `file_test` 3 and `impl_defined_test` 6 (its file writes, and
+  `rename`'s checks), `memory_test` 3, `diag_test` and `log_test` stopped
+  at 300 s; `time_test` not built.
+- **newlib's `_open`**: `_open_r`, disassembled, moves the path into r6,
+  stores the flags and the mode at 0[sp] and 4[sp], and calls `_open`,
+  which takes r7, the path's address still, for its flags. Traced on the
+  host, a target's `open("w.txt", O_WRONLY | O_CREAT | O_TRUNC)` reached
+  `openat` as `O_RDONLY|O_EXCL|O_NONBLOCK|O_SYNC|O_NOFOLLOW`. Broken too
+  with `-mgcc-abi`, the old ABI. With `open.c` linked, the same program's
+  `open`, `write`, `read` and its create with `O_EXCL` work. The file
+  probe: newlib's `_open` "fopen w NULL; exit 1" at rh850, "fopen w a
+  stream; fclose 0; fopen r NULL; exit 2" at rh850-soft; `open.c`'s
+  "fopen w a stream; fclose 0; fopen r a stream; read "canon"; exit 0" at
+  both.
+- **`tmpnam()`'s files.** The first measure's `diag_test` and `log_test`
+  left 5,709,410 empty files `/tmp/t1.*` on this machine: `tmpnam()`
+  tries `/tmp/t1.0`, `/tmp/t1.1` and on until one does not open, and
+  newlib's `_open` created each. With `open.c` linked, the two still ran
+  until stopped, `tmpnam()` now trying each name the first measure had
+  made (`/tmp/t1.0` to `/tmp/t1.38adb` in the first 20 s of a trace); with
+  the files deleted, they pass, and the runs leave none.
+- **`memory_test`**: 3 `FAIL` lines at each leg (its lines 368, 401 and
+  408: a static `u64` array, aligned to 4 there, taken for 8-aligned).
+  Fixed: it passes on the host, and clang-tidy, with the repository's
+  configuration, and Cppcheck 2.13 (`--enable=warning --std=c99`) report
+  nothing on it.
+- **The refusals**, each made to fire: a probe status other than 3; a
+  binary whose FPU note or flags are not the variant's; pins that do not
+  hold, exit 1, and 0 with `--report-only`.
+- `renesas.py check`: 1 pin, 61 tests, no problem, under Python 3.11,
+  3.12 and 3.13.
+- `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| E1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| E2 | **The toolchain**: each `renesas` job installs the four source packages, finds no toolchain in the cache, and builds it in under 60 minutes, "v850-elf-gcc (GCC) 13.3.0" and "GNU simulator (SIM) 15.1"; one of the two saves the entry. | a failed install or build, another version, or 60 minutes or more | M–H: built here, not on GitHub's runner |
+| E3 | **The probes**, word for word: at both variants the probe exits with 3 and prints the line measured here, and the file probe prints the two lines measured here for the variant. | another status, word or line | M–H: newlib's `_open` takes its flags from the path's address, which the same build should give |
+| E4 | **Both `renesas` jobs are green**, enforced: each of the eight legs "61 tests, 60 passed, 0 failed, 1 not built (time_test); as pinned", its binaries' notes as measured here. | a difference, or a failed job | H |
+| E5 | **Each `renesas` job's test step under 5 minutes.** | 5 minutes or more | H: about 0.8 minutes a variant here |
+| E6 | **Nothing else changes**: `memory_test` passes in every job that runs it; 1 and 3 to 6 give #88's notices, 2's other jobs #122's (times, and `embedded`'s slowest header's name, aside), and 8 is green, its new step among its checks. | another notice, or a failure | H |
+
+**Not predicted**: the install's size, and which job saves the entry.
+
+### What follows
+
+E1 to E6 scored, and the record closes. Then RX and RL78, with the same
+recipe for their targets, as the author chose.
