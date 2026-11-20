@@ -41526,3 +41526,135 @@ What it shows:
 - **Read the tests before choosing their stand-in.** The `tmpfile()`
   first proposed, returning NULL, would have pinned ten failures in
   `log_test`; reading its guards chose a stream in memory, which runs them.
+
+---
+
+## VERIFY-099: Pre-registration — The Tests on Bare-Metal AArch64 under QEMU: Cortex-A78AE and Cortex-R82, with picolibc, Enforced from Run 1
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-099 |
+| **Date**       | 2026-11-20 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | f3fca2e (VERIFY-098's change; its close, a record, is pushed with this): `1` and `3` to `6` #87, `2` #121, `8` #140. |
+| **Scope**      | `tools/aarch64/` (new: `aarch64.py`, `toolchain.cmake`, `pins.txt`, `README.md`); `.github/workflows/platforms.yml`: a job, `aarch64`; `.github/workflows/records.yml`: a step, `aarch64.py check`; the README's bare-metal section and platform tiers; `docs/architectures.md`, `docs/verification.md`, `docs/implementation-defined.md` and the workflow map, on the new job. No library or test file. |
+| **Category**   | The list's item 8, its first target, which the author chose on 2026-11-20: bare-metal AArch64 (Cortex-A78AE, Cortex-R82), planned in `docs/architectures.md`. |
+
+### What is missing
+
+AArch64 runs the tests on Linux, with glibc (`build-arm64`), and on macOS;
+never without an operating system, where the C library is a small one and
+the cores are those Arm makes for cars and real-time systems.
+`docs/architectures.md` plans it, to be compiled for, nothing more.
+
+### What changes
+
+- **`tools/aarch64/aarch64.py`**, modeled on `tools/msp430/msp430.py`,
+  whose steps it shares, and through it `tools/cortexm/cortexm.py`'s: each
+  test of `CMakeLists.txt` built with Ubuntu 24.04's
+  `aarch64-linux-gnu-gcc` and picolibc in place of glibc
+  (`--specs=picolibc.specs`; picolibc's semihosting start file, library
+  and linker script), for two cores, `-mcpu=cortex-a78ae` (Armv8.2-A) and
+  `-mcpu=cortex-r82` (Armv8-R AArch64), each at CMake's four build types,
+  nothing defined for `lifetime.h`; run under `qemu-system-aarch64`'s
+  `virt` board on its `max` CPU, which has the instructions of both, QEMU
+  8.2 modelling neither, through semihosting. Before the tests, a probe: a
+  program that prints the core's macros, the type sizes, `char`'s
+  signedness, the exception level and its `SCTLR`'s M and A bits, and an
+  unaligned load, and exits with 3, which must come back, its profile the
+  core's, or the run fails. The run checks that each leg's binaries are
+  64-bit little-endian AArch64 and that its tests were compiled with the
+  core's flag. `ENFORCE` on from run 1: the pins (`pins.txt`) are this
+  record's measure, below.
+- **`aarch64`**, in `platforms.yml`, one job per core: the three packages
+  from Ubuntu's archive (`qemu-system-arm`, `gcc-aarch64-linux-gnu`,
+  `picolibc-aarch64-linux-gnu`), through `.github/actions/apt-install`,
+  cache name `aarch64`; the logs and summaries uploaded.
+- **`records.yml`**: `aarch64.py check`, as `msp430.py check`, and
+  `tools/aarch64/**` among its paths.
+- **The documents.** `docs/architectures.md`'s "Tested on" gains the
+  row, and its planned "Compiled for" list loses "AArch64, bare metal
+  (Cortex-A78AE, Cortex-R82)", tested now. The README's bare-metal section
+  names the job; its paragraph on `CANON_LIFETIME_DEBUG` says that the
+  `msp430` job defines `CANON_LIFETIME_NO_ATOMICS` too, and that `aarch64`
+  needs nothing. Its platform tiers' MSP430 list, last written at
+  VERIFY-096's run, gains `lifetime.h`, `random.h`, `diag.h`, `log.h` and
+  the AUTOSAR integration, whose tests pass there since VERIFY-097 and 098.
+
+### Measured here
+
+Ubuntu 24.04's packages, as the job installs them: `aarch64-linux-gnu-gcc`
+13.3.0 (13.3.0-6ubuntu2~24.04.1), picolibc 1.8.6 (1.8.6-2), QEMU 8.2.2
+(1:8.2.2+ds-0ubuntu1.18); signed by Ubuntu's archive and installed with
+apt, as the author's rule allows.
+
+- **The run**, with the script as committed, at both cores and each build
+  type: each leg "61 tests, 58 passed, 0 failed, 3 not built
+  (impl_defined_test, file_test, time_test); as pinned", in 0.2 to 0.4
+  minutes on 2 CPUs, each test in 0.1 s or less. `time_test` stops at
+  `util/time.h:147`, "implicit declaration of function 'clock_gettime'":
+  picolibc declares it, and `nanosleep`, only where `_POSIX_TIMERS` is
+  defined, which its `sys/features.h` does for RTEMS and Cygwin alone.
+  `file_test` and `impl_defined_test` stop at "undefined reference to
+  `rename'", which picolibc's semihosting does not provide. The three are
+  those picolibc leaves unbuilt on Cortex-M (`tools/cortexm/pins.txt`).
+- **The probe**: at a78ae "aarch64 probe: __ARM_ARCH 8, profile A, LSE
+  atomics yes, long 8, pointer 8, long double 16, char unsigned, EL1,
+  SCTLR M 0 A 0, an unaligned load 0x04030201", at r82 the same with
+  "profile R"; exit 3.
+- **The headers the runner has.** The compiler is Ubuntu's for AArch64
+  Linux: picolibc's specs put picolibc's headers first, and the compiler
+  still searches `/usr/aarch64-linux-gnu/include` and `/usr/include` after
+  them, and pre-includes `stdc-predef.h`. glibc's AArch64 headers are
+  installed here (`libc6-dev-arm64-cross`, which apt only recommends and
+  the job does not install), and a first run took `stdc-predef.h` from
+  them. The run above was made with them hidden, an empty directory
+  mounted over them in a mount namespace of its own: `stdc-predef.h` came
+  from `/usr/include`, the host's glibc, as it will on the runner, and the
+  outcomes were the same. Every other header in the 504 dependency files
+  of the eight legs is picolibc's or GCC's. The file's macros
+  (`__STDC_IEC_559__`, `__STDC_ISO_10646__`) are glibc's claims; nothing in
+  Canon-C reads them.
+- **The links**: each of the 464 (58 tests, eight legs), traced with
+  `--trace`, read the test's objects, picolibc's `crt0-semihost.o`,
+  `libc.a` and `libsemihost.a`, and GCC's `libgcc.a`; nothing else.
+- **The MMU.** picolibc 1.8.6's start file writes `CPACR_EL1` (the
+  floating point) and `TPIDR_EL0` (the thread pointer), and leaves the MMU
+  off: a program that reads `CurrentEL` and `SCTLR_EL1` there gives EL1, M
+  0, A 0, C 0, at both cores. With its MMU off, an A-profile core treats
+  data memory as Device memory, where an unaligned access faults. The
+  probe's unaligned `stur` and `ldur` complete: QEMU 8.2 does not fault
+  them, so the tests run as with an MMU that maps memory as normal.
+- **The atomics**: `lifetime_test`'s token counter compiles to `ldadd`
+  (LSE), inline, at both cores and each build type looked at; picolibc's
+  own code, built without LSE, calls libgcc's outline helpers (`raise`
+  calls `__aarch64_cas8_acq_rel`).
+- **The refusals**, each made to fire: a probe status other than 3, a
+  probe compiled for the other profile, a binary that is not AArch64, a
+  test without the core's flag; and pins that do not hold (`time_test`
+  unpinned and `bits_test` pinned to fail, at once): exit 1, and 0 with
+  `--report-only`.
+- `aarch64.py check`: 3 pins, 61 tests, no problem, under Python 3.11,
+  3.12 and 3.13.
+- `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| C1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| C2 | **The packages**: in each `aarch64` job the install step installs the three; GCC reports 13.3.0, QEMU 8.2.2, picolibc 1.8.6. | a failed install, or another version | H: an update to the archive before the run would change Ubuntu's revision, not these |
+| C3 | **The probe** exits with 3 at both cores and prints, word for word, the lines measured here. | another status, or another word | H |
+| C4 | **Both `aarch64` jobs are green**, enforced: each of the eight legs "61 tests, 58 passed, 0 failed, 3 not built (impl_defined_test, file_test, time_test); as pinned", the three for the reasons measured here, and its binaries "ELF64, 2's complement, little endian, AArch64", compiled with the core's flag. | a difference, another reason, or a failed job | H: measured with the packages and the headers the runner has |
+| C5 | **Each `aarch64` job's test step under 5 minutes.** | 5 minutes or more | M–H: about 1.1 minutes a core here, on 2 CPUs |
+| C6 | **Nothing else changes**: 1 and 3 to 6 give #87's notices, 2's other jobs #121's (times, and `embedded`'s slowest header's name, aside), and 8 is green, its new step among its checks. | another notice, or a failure | H |
+
+**Not predicted**: the install's size and time, and which job saves the
+cache entry.
+
+### What follows
+
+C1 to C6 scored, and the record closes. Then the list's item 8, at the
+target the author chooses next; the look at S12 and S12Z, dsPIC and PIC24,
+and PowerPC e200 that the author asked for is put to the author with this
+record's run.
