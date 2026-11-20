@@ -41311,6 +41311,7 @@ What it shows:
 | **ID**         | VERIFY-097 |
 | **Date**       | 2026-11-20 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-20 — Scored: A1 to A6 MATCH. CLOSED: six of six scored ("Scored", below). The file probe stops inside `tmpfile()`, at both models. The Status above is the record as committed. |
 | **Baseline**   | f15a810 (VERIFY-096's change; its close, a record, is pushed with this): `1` and `3` to `6` #86, `2` #119, `8` #138. |
 | **Scope**      | `test/core/primitives/lifetime_test.c`, `test/util/random_test.c`, `test/core/primitives/compare_test.c`: each one loop counter or one width. `tools/msp430/msp430.py`: `ENFORCE` on, the outcome `times-out`, a test's own limit, its output kept when it is stopped, each test's seconds, and a file probe. `tools/msp430/pins.txt`: run 1's measure. The README's platform tiers and the documents that named run 1 report-only. No library file. |
 | **Category**   | VERIFY-096's findings, with the author's decisions of 2026-11-20: the three tests fixed rather than pinned; the pins enforced, the two time-outs pinned at a 60 s limit, and a probe to show where they stop. |
@@ -41384,3 +41385,42 @@ What it shows:
 A1 to A6 scored, and the record closes. What the file probe and the kept
 output show decides what `diag_test` and `log_test` need; then the list's
 next item.
+
+### Scored (2026-11-20)
+
+The push of ba3514c, 97ee39e and cca86e2 started seven workflows: `1` and
+`3` to `6` #87, `2` #120 and `8` #139, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| A1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| A2 | **MATCH.** Both `msp430` jobs green, each of the eight legs "61 tests, 16 passed, 2 failed (diag_test times-out, log_test times-out), 43 not built; as pinned". |
+| A3 | **MATCH.** `lifetime_test` passed at both models and each build type, its own check holding the level at 4 under `CANON_LIFETIME_NO_ATOMICS`; `random_test` with no `FAIL` line; `compare_test` at the large model too. `random_test` is the slowest test there: 119.5 to 134.5 s at the small model, 65.9 to 74.3 s at the large; `lifetime_test` 1.1 s at most; the others under a second. |
+| A4 | **MATCH.** At both models the file probe printed one step, "file probe: tmpfile()", and was stopped at 30 s: `tmpfile()` itself does not return under the simulator. |
+| A5 | **MATCH.** The 91 jobs other than the two `msp430` gave the baseline's conclusions and notices, times aside, the `cortex-m` legs as pinned among them; 8 green. |
+| A6 | **MATCH.** The test steps took 1033 s (small) and 805 s (large), 17 and 13 minutes, each leg 4.1 to 4.3 and 3.2 to 3.3; the package came from the cache entry VERIFY-096's run saved. |
+
+Six of six scored.
+
+**What the run shows of the time-outs.** `diag_test` and `log_test`, kept
+output and all, printed nothing before their stop at 60 s: no `FAIL` line
+from the tests that run before their first `tmpfile()`. The probe's one
+step puts the stop inside `tmpfile()`. The two tests do not read a NULL
+alike: `diag_test`'s two calls skip on NULL (`EXPECT(1)`, a "restricted
+environment"), and `log_test`'s ten count it a failure (`EXPECT(false)`).
+
+**Closed.** MSP430X's pins are enforced, 16 tests passing at each leg of
+both models; the three tests fixed for a 16-bit `int` pass there, and
+compute the same elsewhere. `diag_test` and `log_test` stay pinned to time
+out until `tmpfile()` is dealt with. The close changes nothing but this
+record.
+
+What it shows:
+
+- **A step printed is a step located.** The two stopped tests left no
+  line; the probe's one line put the stop inside one library call.
+- **A fix for 16 bits can change nothing at 32.** The 91 other jobs gave
+  their notices unchanged.
+- **The simulator's cost is in software arithmetic.** `random_test`'s
+  100000 draws, each a 64-bit multiply done in software on a 16-bit CPU,
+  take two minutes at the small model; the rest of the suite, seconds.
