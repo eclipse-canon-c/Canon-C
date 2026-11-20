@@ -353,23 +353,30 @@ static void test_is_aligned_null(void)
     EXPECT(!mem_is_aligned(NULL, 8));
 }
 
+/* An address that is a multiple of 8, inside storage: storage's first byte
+ * whose address is. Not a u64 array's: a u64's alignment is the platform's,
+ * and Renesas' RH850 ABI, GCC's default for the V850, aligns 8-byte types to
+ * 4 (VERIFY-101). storage has 7 bytes to spare for the step. */
+static u8* aligned_8_in(u8* storage)
+{
+    return storage + ((8u - (usize)((uintptr_t)storage % 8u)) % 8u);
+}
+
 /* REPLACES test_is_aligned_true. The original used a conditional EXPECT
  * inside an unreachable if-block plus a tautological EXPECT(1). This
  * version asserts at a known-aligned address without C11 _Alignof. */
 static void test_is_aligned_at_known_address(void)
 {
-    /* A static u64 array has at least 8-byte natural alignment on every
-     * supported platform (where _Alignof(u64) >= 8 — but we don't depend
-     * on _Alignof, we depend on the fact). */
-    static u64 aligned_buf[8];
+    static u8 storage[8 * 8 + 7];
+    u8* aligned_buf = aligned_8_in(storage);
     EXPECT(mem_is_aligned(aligned_buf, 1));
     EXPECT(mem_is_aligned(aligned_buf, 2));
     EXPECT(mem_is_aligned(aligned_buf, 4));
     EXPECT(mem_is_aligned(aligned_buf, 8));
 
-    /* Misaligned offset from a u64-aligned base is not 2/4/8-aligned */
+    /* Misaligned offset from an 8-aligned base is not 2/4/8-aligned */
     {
-        u8* misaligned = (u8*)aligned_buf + 1;
+        u8* misaligned = aligned_buf + 1;
         EXPECT(!mem_is_aligned(misaligned, 2));
         EXPECT(!mem_is_aligned(misaligned, 4));
         EXPECT(!mem_is_aligned(misaligned, 8));
@@ -378,8 +385,10 @@ static void test_is_aligned_at_known_address(void)
 
 /* REPLACES test_is_aligned_heap. The original had a tautological
  * EXPECT (`x || !x`). C99 §7.20.3 guarantees malloc returns a pointer
- * "suitably aligned ... [for] any type of object" — at least 8 bytes
- * on every supported platform. */
+ * "suitably aligned ... [for] any type of object". That is 4 bytes under
+ * the RH850 ABI, whose types need no more; the 8 checked below is what
+ * every C library the tests run with gives, newlib's there among them
+ * (VERIFY-101). */
 static void test_is_aligned_heap_guarantees_natural_align(void)
 {
     void* p = mem_alloc(64);
@@ -387,7 +396,7 @@ static void test_is_aligned_heap_guarantees_natural_align(void)
     EXPECT(mem_is_aligned(p, 1));
     EXPECT(mem_is_aligned(p, 2));
     EXPECT(mem_is_aligned(p, 4));
-    EXPECT(mem_is_aligned(p, 8));   /* C99 floor for malloc */
+    EXPECT(mem_is_aligned(p, 8));   /* the C libraries', not C99's */
     mem_free(p);
 }
 
@@ -396,16 +405,17 @@ static void test_is_aligned_heap_guarantees_natural_align(void)
  * AND across multiple alignment values relative to a known-aligned base. */
 static void test_is_aligned_mcdc(void)
 {
-    static u64 base[4];
+    static u8 storage[4 * 8 + 7];
+    u8* base = aligned_8_in(storage);
     EXPECT(mem_is_aligned(base, 1));
     EXPECT(mem_is_aligned(base, 8));
 
     /* Offsets isolate each bit of the alignment mask */
-    EXPECT(!mem_is_aligned((u8*)base + 1, 2));
-    EXPECT( mem_is_aligned((u8*)base + 2, 2));
-    EXPECT(!mem_is_aligned((u8*)base + 2, 4));
-    EXPECT( mem_is_aligned((u8*)base + 4, 4));
-    EXPECT(!mem_is_aligned((u8*)base + 4, 8));
+    EXPECT(!mem_is_aligned(base + 1, 2));
+    EXPECT( mem_is_aligned(base + 2, 2));
+    EXPECT(!mem_is_aligned(base + 2, 4));
+    EXPECT( mem_is_aligned(base + 4, 4));
+    EXPECT(!mem_is_aligned(base + 4, 8));
 }
 
 /* ── mem_get_alignment ───────────────────────────────────────────────────── */

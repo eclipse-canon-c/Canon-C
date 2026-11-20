@@ -925,7 +925,11 @@ For what Canon-C intentionally omits, established C libraries exist:
 > there, and why. On bare-metal AArch64 they are built with Ubuntu's
 > GCC 13.3 and picolibc for Cortex-A78AE and Cortex-R82, and run under
 > QEMU at the four build types (job `aarch64`, VERIFY-099);
-> `tools/aarch64/pins.txt` names those that do not pass. On RISC-V they
+> `tools/aarch64/pins.txt` names those that do not pass. On Renesas
+> RH850 they are built with GCC 13.3 and newlib 4.4, themselves built
+> from Ubuntu's source packages, and run under GDB's V850 simulator, with
+> the FPU and without (job `renesas`, VERIFY-101);
+> `tools/renesas/pins.txt` names those that do not pass. On RISC-V they
 > are compiled, not run.
 >
 > **GCC 13.2 at `-O2` and `-Os`**
@@ -954,7 +958,9 @@ For what Canon-C intentionally omits, established C libraries exist:
 > counter is then a plain increment, not race-free
 > (`CANON_LIFETIME_ATOMIC_IDS` is 0). Or provide
 > `__atomic_fetch_add_8` yourself, with interrupts masked around it.
-> The `cortex-m` and `msp430` jobs define `CANON_LIFETIME_NO_ATOMICS`.
+> The `cortex-m`, `msp430` and `renesas` jobs define
+> `CANON_LIFETIME_NO_ATOMICS`; GCC's V850 port, `renesas`'s, has no
+> atomic at all.
 > The `aarch64` job defines nothing: both its cores have Armv8.1's
 > atomics, and GCC compiles the counter to one instruction (`ldadd`).
 >

@@ -1,0 +1,16 @@
+# tools/renesas/pins.txt -- the tests that do not pass on the Renesas
+# variants under GDB's simulator (tools/renesas/renesas.py, VERIFY-101).
+# Each line: the test, the variants (all, rh850, rh850-soft), the build
+# types (all, or a list of Debug, Release, RelWithDebInfo and MinSizeRel),
+# and what the test does there: "not-built"; "fails N", N the lines of its
+# output that begin with FAIL; or "times-out". A test no line names must
+# pass. The lines are measures, taken with the toolchain build.sh builds,
+# before VERIFY-101's run 1: at both variants and each build type, with
+# tools/renesas/open.c linked into each test.
+#
+# TEST              VARIANTS  BUILDS  OUTCOME
+
+# util/time.h calls clock_gettime and the test nanosleep, which newlib
+# declares only where _POSIX_TIMERS is defined, which it is not here (as
+# on Cortex-M and MSP430).
+time_test           all       all     not-built
