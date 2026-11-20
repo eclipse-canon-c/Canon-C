@@ -813,7 +813,8 @@ Run under QEMU (`cortex-m`, VERIFY-089): the tests on Cortex-M0+ and
 Cortex-M4, with newlib and picolibc, each that does not pass pinned with
 the reason (`tools/cortexm/pins.txt`). Run under the GDB simulator
 (`msp430`, VERIFY-096): the tests below Tier 1 on MSP430X, at a 16-bit
-`int`, at the small and large memory models, the first run report-only.
+`int`, at the small and large memory models, each that does not pass
+pinned with the reason (`tools/msp430/pins.txt`, VERIFY-097).
 Compiled, with nothing run
 (`embedded`): the same two with newlib and picolibc, where enums are short
 and `int32_t` is `long`; RV32 and RV64 with picolibc; and AVR, at a 16-bit
@@ -829,7 +830,7 @@ and `int32_t` is `long`; RV32 and RV64 with picolibc; and AVR, at a 16-bit
 | `build` (GCC, Clang, MSVC), sanitizers, `fuzzing`, `valgrind`, `mingw` | compiler defaults, `require` on | the shipped configurations, on the tests and fuzz inputs. GCC and Clang run checked.h's and bits.h's builtins, not the proved paths; MSVC runs checked.h's fallback and bits.h's intrinsics |
 | `build-32bit`, `musl`, `build-arm64`, `big-endian`, `big-endian-32` | i386, Alpine's musl, AArch64, s390x and 32-bit PowerPC under qemu | the tests on those platforms |
 | `cortex-m` | Cortex-M0+ and Cortex-M4 under QEMU: Ubuntu's GCC 13.2 with newlib and picolibc, the Arm GNU Toolchain's GCC 15.3 with newlib; CMake's four build types | the tests on those cores; each that does not pass pinned with the reason |
-| `msp430` | MSP430X under the GDB simulator: TI's GCC 9.3.1 with its newlib; the small and large memory models; CMake's four build types | the tests below Tier 1 at a 16-bit `int`, and 16- and 20-bit `size_t`s; report-only at VERIFY-096's first run |
+| `msp430` | MSP430X under the GDB simulator: TI's GCC 9.3.1 with its newlib; the small and large memory models; CMake's four build types | the tests below Tier 1 at a 16-bit `int`, and 16- and 20-bit `size_t`s; each that does not pass pinned with the reason |
 | `c-standards` | C11, C17 and C23 with GCC 14 and Clang, Debug, sanitizers on | the tests at those standards, where the C11 arms are compiled (`_Alignof(max_align_t)`, `_Static_assert`) |
 | `embedded` | Cortex-M, RV32, RV64 and AVR, bare metal | that the headers and tests compile there; nothing runs |
 | `lifetime-debug`, `lifetime-token-concurrency` | `CANON_LIFETIME_DEBUG`; the atomic levels, with ThreadSanitizer | the lifetime plumbing and the token generation, by tests |

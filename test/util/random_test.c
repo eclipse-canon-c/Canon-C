@@ -308,12 +308,15 @@ TEST(range_uniformity) {
     Random r;
     u32 buckets[10];
     int i;
+    u32 k;
     u32 n = 100000u;
 
     random_seed(&r, 42, 1);
     memset(buckets, 0, sizeof(buckets));
 
-    for (i = 0; i < (int)n; i++) {
+    /* k, not i: (int)n is negative where int has 16 bits (MSP430), and
+     * the loop would draw nothing (VERIFY-097). */
+    for (k = 0; k < n; k++) {
         u32 v = random_range(&r, 10);
         buckets[v]++;
     }

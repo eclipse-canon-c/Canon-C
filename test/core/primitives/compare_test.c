@@ -273,10 +273,12 @@ TEST(cmp_usize) {
 }
 
 TEST(cmp_isize) {
-    /* isize_min without overflow */
+    /* isize_min without overflow, from the maximum: sizeof(isize) * 8 is
+     * not its width where isize has 20 bits in 4 bytes (MSP430's large
+     * model, VERIFY-097). */
     {
-        isize min_val = (isize)(((usize)1) << (sizeof(isize) * 8 - 1));
         isize max_val = (isize)(((usize)~(usize)0) >> 1);
+        isize min_val = -max_val - 1;
         isize zero    = 0;
         CONTRACT3(isize, algo_cmp_isize, min_val, max_val, zero);
     }

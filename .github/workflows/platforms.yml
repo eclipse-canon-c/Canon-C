@@ -425,8 +425,9 @@ jobs:
   #    below 32 bits is Tier 1's refusal, so the tests that build are
   #    those below Tier 1. tools/msp430/msp430.py builds each model at the
   #    four build types, after a probe that the simulator carries a
-  #    program's output and exit status, and holds the outcomes against
-  #    tools/msp430/pins.txt; VERIFY-096's run is report-only.
+  #    program's output and exit status and a file probe, and holds the
+  #    outcomes against tools/msp430/pins.txt: report-only at VERIFY-096's
+  #    run, enforced since VERIFY-097.
   # -------------------------------------------------------------------------
   msp430:
     runs-on: ubuntu-24.04

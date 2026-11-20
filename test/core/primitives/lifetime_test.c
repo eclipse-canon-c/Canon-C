@@ -124,11 +124,12 @@ static void test_never_returns_reserved_id(void)
 
 /* Sustained: the postcondition is a claim about every call, not the first
  * few. 100k calls is cheap and would catch a counter-derived id landing on
- * zero within the range the test can reach. */
+ * zero within the range the test can reach. The counter is a u32: an
+ * unsigned int of 16 bits (MSP430) never reaches 100000 (VERIFY-097). */
 static void test_never_returns_reserved_id_sustained(void)
 {
     int      owner = 0;
-    unsigned i;
+    u32      i;
     int      zero_seen = 0;
 
     for (i = 0; i < 100000u; i++) {

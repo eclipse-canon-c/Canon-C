@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 msp430.py -- the test suite on MSP430X under the GDB simulator
-(VERIFY-096).
+(VERIFY-096, VERIFY-097).
 
 MSP430's int has 16 bits, which no other target that runs the tests has.
 Each test of CMakeLists.txt is built with TI's msp430-elf-gcc (the Mitto
@@ -25,26 +25,31 @@ includes a Tier 1 header is not built, and those that build are the tests
 of the headers below it. Each model is built at the four build types of
 CMake: Debug (-O0), Release (-O3), RelWithDebInfo (-O2) and MinSizeRel
 (-Os), with CANON_LIFETIME_NO_ATOMICS defined: MSP430 has no 64-bit
-atomic. A test passes when it exits with status 0. Before the tests, a
-probe checks that the simulator carries a program's output and its exit
-status, and prints the model's type sizes as the target has them.
+atomic. A test passes when it exits with status 0, within TIMEOUT
+seconds. Before the tests, a probe checks that the simulator carries a
+program's output and its exit status, and prints the model's type sizes as
+the target has them; and a file probe writes a line to a tmpfile() and
+reads it back, each step on stderr, to show how far a file's I/O goes
+under the simulator (it fails nothing).
 
 The tests that do not pass are pinned, with the reason, in pins.txt: each
 line a test, the models and build types it holds for, and what the test
-does there, "not-built" or "fails N" (N the lines its output begins with
-FAIL). A test the pins do not name must pass. An outcome other than its
-pin's is a difference; with ENFORCE, a difference fails the run, unless
-the run is --report-only. A run that cannot configure, whose probe fails,
-that finds no test, builds none, or builds a binary that is not MSP430X
-at the model (its MSPABI attributes), always fails.
+does there: "not-built", "fails N" (N the lines its output begins with
+FAIL), or "times-out", stopped at PINNED_TIMEOUT seconds rather than
+TIMEOUT. A test the pins do not name must pass. A test that is stopped
+leaves its output so far in the log. An outcome other than its pin's is a
+difference; with ENFORCE, a difference fails the run, unless the run is
+--report-only. A run that cannot configure, whose probe fails, that finds
+no test, builds none, or builds a binary that is not MSP430X at the model
+(its MSPABI attributes), always fails.
 
     python3 tools/msp430/msp430.py run MODEL [BUILD...] [--report-only]
     python3 tools/msp430/msp430.py check
 
 "run" writes its builds and its summaries to msp430_out/, run from the
 repository's root, with the toolchain's bin directory on the PATH. The
-steps it shares with tools/cortexm/cortexm.py (CTest's list, a test's run
-and its FAIL lines) are that script's. "check" is 8 · Records': each pin
+steps it shares with tools/cortexm/cortexm.py (CTest's list and its FAIL
+lines) are that script's. "check" is 8 · Records': each pin
 well formed, naming a test of CMakeLists.txt, no two pins for the same
 test and leg, and the support files there.
 """
@@ -65,8 +70,9 @@ import cortexm  # noqa: E402  (the steps both runners share)
 
 PINS = os.path.join(HERE, 'pins.txt')
 OUT = 'msp430_out'
-ENFORCE = False       # VERIFY-096 run 1: report-only, nothing measured before it
-TIMEOUT = 180         # seconds a test, under the simulator
+ENFORCE = True        # VERIFY-097: a difference fails the run (VERIFY-096 report-only)
+TIMEOUT = 300         # seconds a test, under the simulator (180 at VERIFY-096)
+PINNED_TIMEOUT = 60   # seconds a test pinned to time out (the author's, 2026-11-20)
 SHOWN = 6             # differences named in a notice
 
 GCC = 'msp430-elf-gcc'
@@ -90,7 +96,8 @@ MODELS = {
 DEFINES = '-DCANON_LIFETIME_NO_ATOMICS'
 BUILDS = cortexm.BUILDS
 SUPPORT = ('toolchain.cmake', 'pins.txt', 'README.md')
-PIN = re.compile(r'^(\w+)\s+(all|small|large)\s+(\S+)\s+(not-built|fails)(?:\s+(\d+))?$')
+PIN = re.compile(r'^(\w+)\s+(all|small|large)\s+(\S+)\s+(not-built|fails|times-out)'
+                 r'(?:\s+(\d+))?$')
 PROBE = r'''#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -107,6 +114,42 @@ int main(void)
 }
 '''
 PROBE_STATUS = 3
+# Each step on stderr, which newlib leaves unbuffered, so that a step that
+# does not end leaves the ones before it.
+FILE_PROBE = r'''#include <stdio.h>
+#include <string.h>
+
+#define STEP(...) (fprintf(stderr, __VA_ARGS__), fputc('\n', stderr))
+
+int main(void)
+{
+    char buf[16] = {0};
+    FILE *f;
+    int rc;
+
+    STEP("file probe: tmpfile()");
+    f = tmpfile();
+    STEP("file probe: tmpfile() returned %s", (f != NULL) ? "a stream" : "NULL");
+    if (f == NULL) {
+        return 4;
+    }
+    rc = fputs("canon\n", f);
+    STEP("file probe: fputs returned %d", rc);
+    rc = fflush(f);
+    STEP("file probe: fflush returned %d", rc);
+    rewind(f);
+    STEP("file probe: rewound");
+    if (fgets(buf, (int)sizeof(buf), f) == NULL) {
+        STEP("file probe: fgets returned NULL");
+        return 5;
+    }
+    STEP("file probe: fgets read \"%.*s\"", (int)strcspn(buf, "\n"), buf);
+    rc = fclose(f);
+    STEP("file probe: fclose returned %d", rc);
+    return (strcmp(buf, "canon\n") == 0) ? 0 : 6;
+}
+'''
+FILE_PROBE_LIMIT = 30  # seconds
 
 sh, rel, shown, described = cortexm.sh, cortexm.rel, cortexm.shown, cortexm.described
 
@@ -130,7 +173,7 @@ def read_pins():
                 continue
             if (outcome == 'fails') != (fails is not None):
                 problems.append(f'pins.txt:{n}: "fails" takes a count of FAIL lines, '
-                                f'"not-built" none')
+                                f'"not-built" and "times-out" none')
                 continue
             pins.append({'line': n, 'test': test, 'model': model, 'builds': builds,
                          'outcome': outcome,
@@ -222,6 +265,51 @@ def probe(model, out):
     return lines[0]
 
 
+def file_probe(model, out):
+    """Build and run FILE_PROBE: its steps on stderr, and how it ended.
+    It fails nothing: it shows how far a file's I/O goes here."""
+    d = os.path.abspath(os.path.join(out, 'probe-' + model))
+    os.makedirs(d, exist_ok=True)
+    src, elf = os.path.join(d, 'file_probe.c'), os.path.join(d, 'file_probe')
+    with open(src, 'w', encoding='utf-8') as f:
+        f.write(FILE_PROBE)
+    r = sh([GCC, *MODELS[model]['flags'].split(), '-msim', '-std=c99', '-O1', src, '-o', elf])
+    if r.returncode != 0:
+        shown(r.stdout + r.stderr)
+        return [], 'does not build'
+    t = {'command': [RUN, elf], 'cwd': d}
+    got = run_test(t, FILE_PROBE_LIMIT)
+    steps = [line for line in got['tail'] if line.startswith('file probe:')]
+    last = steps[-1][len('file probe: '):] if steps else 'no step'
+    if got['outcome'] == 'times-out':
+        return steps, f'stopped at {FILE_PROBE_LIMIT} s, after "{last}"'
+    return steps, f'exited with {got["rc"]}, after "{last}"'
+
+
+def run_test(t, limit):
+    """A test under the simulator, stopped at limit seconds: its outcome
+    ("passes", "fails", "times-out"), exit status, FAIL lines, last lines
+    and seconds. A stopped test's output so far is kept: run() hands it
+    over as bytes."""
+    start = time.time()
+    try:
+        r = subprocess.run(t['command'], cwd=t['cwd'], capture_output=True, text=True,
+                           errors='replace', timeout=limit)
+        rc, text, outcome = r.returncode, (r.stdout or '') + (r.stderr or ''), None
+    except subprocess.TimeoutExpired as e:
+        rc, outcome = None, 'times-out'
+        text = ''.join(x.decode('utf-8', 'replace') if isinstance(x, bytes) else (x or '')
+                       for x in (e.stdout, e.stderr))
+    lines = [line.rstrip() for line in rel(text).splitlines()]
+    fails = [line for line in lines if cortexm.FAIL_LINE.match(line)]
+    rest = [line for line in lines if not cortexm.FAIL_LINE.match(line)]
+    if outcome is None:
+        outcome = 'passes' if rc == 0 else 'fails'
+    return {'outcome': outcome, 'rc': rc,
+            'fails': len(fails) if outcome == 'fails' else None, 'fail_lines': fails,
+            'tail': rest[-8:], 'seconds': round(time.time() - start, 1)}
+
+
 def environment(model):
     env = dict(os.environ)
     env['CANON_MSP_FLAGS'] = MODELS[model]['flags'] + ' ' + DEFINES
@@ -291,12 +379,12 @@ def leg(model, build, out, env, pins):
         raise RuntimeError(f'{model} {build}: CTest lists no test')
     rows = []
     for t in tests:
+        want = expected(pins, t['name'], model, build)
         if os.path.exists(t['command'][-1]):
-            got = cortexm.run_test(t)
+            got = run_test(t, PINNED_TIMEOUT if want[0] == 'times-out' else TIMEOUT)
         else:
             got = {'outcome': 'not-built', 'rc': None, 'fails': None, 'fail_lines': [],
-                   'why': why_not_built(b, t['name'], env)}
-        want = expected(pins, t['name'], model, build)
+                   'why': why_not_built(b, t['name'], env), 'seconds': None}
         rows.append({'name': t['name'], 'got': got, 'want': want})
     built = [t for t in tests if os.path.exists(t['command'][-1])]
     if not built:
@@ -315,7 +403,7 @@ def leg(model, build, out, env, pins):
         if p['test'] not in names:
             diffs.append(f'{p["test"]} (pinned at pins.txt:{p["line"]}, not a test)')
     passed = [r for r in rows if r['got']['outcome'] == 'passes']
-    failed = [r for r in rows if r['got']['outcome'] in ('fails', 'timeout')]
+    failed = [r for r in rows if r['got']['outcome'] in ('fails', 'times-out')]
     unbuilt = [r for r in rows if r['got']['outcome'] == 'not-built']
     minutes = (time.time() - t0) / 60
     line = (f'msp430 {model} {build}: {len(rows)} tests, {len(passed)} passed, '
@@ -331,6 +419,10 @@ def leg(model, build, out, env, pins):
     print(line)
     print(f'--- {model} {build}: {built[0]["name"]}: {attrs}')
     print(f'--- {model} {build}: passed: ' + (', '.join(r['name'] for r in passed) or 'none'))
+    ran = sorted((r for r in rows if r['got']['seconds'] is not None),
+                 key=lambda r: -r['got']['seconds'])
+    print(f'--- {model} {build}: seconds: '
+          + ', '.join(f'{r["name"]} {r["got"]["seconds"]}' for r in ran))
     for r in failed:
         g = r['got']
         print(f'--- {r["name"]}: {g["outcome"]}, exit {g["rc"]}, '
@@ -348,7 +440,10 @@ def leg(model, build, out, env, pins):
         shown('\n'.join(diffs))
     data = {'model': model, 'build': build, 'minutes': round(minutes, 1),
             'tests': len(rows), 'passed': [r['name'] for r in passed],
-            'failed': {r['name']: r['got']['fails'] for r in failed},
+            'failed': {r['name']: described(r['got']['outcome'], r['got']['fails'])
+                       for r in failed},
+            'seconds': {r['name']: r['got']['seconds'] for r in rows
+                        if r['got']['seconds'] is not None},
             'not_built': {r['name']: r['got']['why'] for r in unbuilt},
             'differences': diffs, 'attributes': attrs, 'line': line}
     with open(b + '.json', 'w') as f:
@@ -389,7 +484,6 @@ def main(argv):
         print(__doc__)
         return 2
     model, builds = args[1], args[2:] or list(BUILDS)
-    cortexm.TIMEOUT = TIMEOUT   # cortexm.run_test's limit; the simulator is slower than QEMU
     for v in versions():
         print(v)
     print(f'C library and model: {facts(model)}')
@@ -404,6 +498,10 @@ def main(argv):
         line = probe(model, OUT)
         print(line)
         print(f'::notice title=msp430 {model} probe::{line}')
+        steps, how = file_probe(model, OUT)
+        print(f'--- {model}: file probe ---')
+        shown('\n'.join(steps) or '(no step printed)')
+        print(f'::notice title=msp430 {model} file probe::file probe {how}')
         env = environment(model)
         for build in builds:
             line, diffs, _ = leg(model, build, OUT, env, pins)

@@ -1032,7 +1032,11 @@ For what Canon-C intentionally omits, established C libraries exist:
 > test with TI's GCC, whose `double` has 64 bits, at the small memory
 > model (a 16-bit `size_t`) and the large (a 20-bit one), and runs those
 > that build under the GDB simulator: Tier 1 refuses both `size_t`s, so
-> the tests that build are those below it. Tier 0 means "freestanding plus
+> the tests that build are those below it. Those of `types.h`, `bits.h`,
+> `compare.h`, `contract.h`, `scope.h`, `slice.h`, `ownership.h`,
+> `option.h`, `result.h`, `error.h`, `fold.h` and `parse.h` pass there;
+> each test that does not is pinned with the reason
+> (`tools/msp430/pins.txt`, VERIFY-097). Tier 0 means "freestanding plus
 > stub-capable libc headers": `contract.h` pulls in `<stdio.h>` and
 > `<stdlib.h>` for its default panic handler — swap the handler as
 > described above and stdio is never reached.
@@ -1040,8 +1044,8 @@ For what Canon-C intentionally omits, established C libraries exist:
 > **Tier 1** — `size_t` >= 32 bits, enforced in `limits.h` beside the
 > size literals that need it. Covers `limits.h`, `checked.h`, `ptr.h`,
 > and everything built on them: arenas, pools, collections. (`slice.h`
-> includes only Tier 0 headers and compiles at a 16-bit `size_t`; no test
-> or proof covers it there.) On
+> includes only Tier 0 headers; its test passes at MSP430X's 16- and
+> 20-bit `size_t`s, VERIFY-096.) On
 > a 16-bit-`size_t` target the size literals (`CANON_GB`) would wrap to
 > 0 under well-defined unsigned arithmetic and silently zero every
 > capacity constant; the guard turns that silent breakage into a named

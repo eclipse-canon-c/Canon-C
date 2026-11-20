@@ -211,7 +211,7 @@ compiler reports, never the code it generates.
 |---------------------------|-----------------------------------|
 | right shift of a negative value, and bitwise operators on signed values (J.3.5; 6.5.7p5) | Every shift in the library acts on an unsigned operand (read for this page), and Cppcheck's MISRA rule 10.1 check, which flags a bitwise operator on a signed operand, reports none (`tools/misra/pins.txt`). Cppcheck shows one finding per line, and none of the 57 lines with another finding has a bitwise operator. |
 | how signed integers are represented (J.3.5) | The exact-width types are two's complement by definition (7.18.1.1), and nothing depends on how `int`, `long` or `ptrdiff_t` are represented. |
-| whether plain `char` is signed (J.3.4) | Characters become integers only through `unsigned char`: intern's hash and `str_compare`. Measured: signed on x86-64, unsigned on Arm, RISC-V and PowerPC. |
+| whether plain `char` is signed (J.3.4) | Characters become integers only through `unsigned char`: intern's hash and `str_compare`. Measured: signed on x86-64, unsigned on Arm, RISC-V, PowerPC and MSP430. |
 | the execution character set's values (J.3.4) | Characters are compared for equality only, with `'\0'`, the whitespace characters and `'-'`, all of the basic character set. `str_compare` orders by byte value, as `strcmp` does. |
 | the integer type of an enumeration (J.3.9; 6.7.2.2p4) | `Error` is `unsigned int`, 4 bytes, on x86-64 and RISC-V, and `unsigned short`, 2 bytes, on arm-none-eabi, whose ABI makes enumerations short ("On some targets, -fshort-enums is the default", GCC says). `error_in_range` compares through `int`, and no code reads an enumeration's bytes. |
 | bit-fields (J.3.9) | There are none. |

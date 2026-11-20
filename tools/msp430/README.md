@@ -22,12 +22,16 @@ platform tiers): a test that includes a Tier 1 header is not built, and
 the tests that build are those of the headers below Tier 1. Each model is
 built at the four build types of CMake, Debug (`-O0`), Release (`-O3`),
 RelWithDebInfo (`-O2`) and MinSizeRel (`-Os`), with
-`CANON_LIFETIME_NO_ATOMICS` defined: MSP430 has no 64-bit atomic. Before
-the tests, a probe checks that the simulator carries a program's output
-and its exit status, and prints the model's type sizes as the target has
-them; the script checks that the binaries are MSP430X at the model, from
-their MSPABI attributes, and names newlib's version and whether its printf
-has C99's formats.
+`CANON_LIFETIME_NO_ATOMICS` defined: MSP430 has no 64-bit atomic. A test
+passes when it exits with status 0 within 300 s. Before the tests, a probe
+checks that the simulator carries a program's output and its exit status,
+and prints the model's type sizes as the target has them; a file probe
+writes a line to a `tmpfile()` and reads it back, each step on `stderr`,
+to show how far a file's I/O goes under the simulator, failing nothing.
+The script checks that the binaries are MSP430X at the model, from their
+MSPABI attributes, names newlib's version and whether its printf has C99's
+formats and `long long`'s (2.4.0 there has neither), prints each test's
+seconds, and keeps the output a stopped test had written.
 
 **The toolchain.** TI's MSP430-GCC-OPENSOURCE 9.3.1.2: the Mitto Systems
 GCC 9.3.1.11 with binutils 2.34, newlib 2.4.0 and GDB 9.1, its simulator
@@ -37,19 +41,25 @@ the workflow, which three recipes that fetch the same file pin too.
 
 **The pins**, `pins.txt`: the tests that do not pass, each with the
 models and build types it holds for, what the test does there
-(`not-built`, or `fails N`, N the lines of its output that begin with
-`FAIL`), and why. A test the pins do not name must pass. An outcome other
-than its pin's is a difference; with `ENFORCE` (in the script) a
-difference fails the job, unless the run is `--report-only`.
+(`not-built`; `fails N`, N the lines of its output that begin with
+`FAIL`; or `times-out`, stopped at 60 s rather than 300), and why. A test
+the pins do not name must pass. An outcome other than its pin's is a
+difference; with `ENFORCE` (in the script) a difference fails the job,
+unless the run is `--report-only`.
 
     python3 tools/msp430/msp430.py run MODEL [BUILD...] [--report-only]
     python3 tools/msp430/msp430.py check
 
 `run` builds into `msp430_out/`, with the toolchain's `bin` on the
 `PATH`; `check` is `8 · Records'`. The steps the script shares with
-`tools/cortexm/cortexm.py` (CTest's list of the tests, a test's run, its
-`FAIL` lines) are that script's.
+`tools/cortexm/cortexm.py` (CTest's list of the tests and their `FAIL`
+lines) are that script's.
 
-**Runs.** VERIFY-096's run 1 is report-only: the toolchain had not run
-before it, and its measure is what the pins will hold. The predictions
-and their scores are in `docs/deviations.md`.
+**Runs.** VERIFY-096's run 1 was report-only, the toolchain not run
+before it. Its measure is the pins (VERIFY-097), enforced since: the 42
+tests Tier 1 refuses, `time_test` (newlib declares no `clock_gettime`
+under `-std=c99`), and `diag_test` and `log_test`, which time out, both
+calling `tmpfile()`, their cause what the file probe is for. Three tests
+whose own arithmetic failed at a 16-bit `int` were fixed instead, as the
+author chose. The predictions and their scores are in
+`docs/deviations.md`.

@@ -1,10 +1,68 @@
 # tools/msp430/pins.txt -- the tests that do not pass on MSP430X under the
-# GDB simulator (tools/msp430/msp430.py, VERIFY-096). Each line: the test,
-# the memory models (all, small, large), the build types (all, or a list of
-# Debug, Release, RelWithDebInfo and MinSizeRel), and what the test does
-# there: "not-built", or "fails N", N the lines of its output that begin
-# with FAIL. A test no line names must pass. The lines are measures: none
-# yet. VERIFY-096's run 1 is report-only, the toolchain not run before it;
-# its measure is pinned with the reason of each line.
+# GDB simulator (tools/msp430/msp430.py, VERIFY-096, VERIFY-097). Each line:
+# the test, the memory models (all, small, large), the build types (all, or
+# a list of Debug, Release, RelWithDebInfo and MinSizeRel), and what the
+# test does there: "not-built"; "fails N", N the lines of its output that
+# begin with FAIL; or "times-out", stopped at the script's PINNED_TIMEOUT.
+# A test no line names must pass. The lines are VERIFY-096's run 1, at both
+# models and each build type; the three tests whose own arithmetic failed
+# at a 16-bit int (lifetime_test, random_test, compare_test) were fixed
+# instead, as the author chose (VERIFY-097).
 #
-# TEST              MODELS  BUILDS  OUTCOME
+# TEST                       MODELS  BUILDS  OUTCOME
+
+# Tier 1: limits.h's #error refuses a size_t below 32 bits, 16 bits at the
+# small model and 20 at the large; each of these includes a Tier 1 header.
+any_all_test               all     all     not-built
+arena_test                 all     all     not-built
+array_test                 all     all     not-built
+bitset_test                all     all     not-built
+borrow_test                all     all     not-built
+checked_test               all     all     not-built
+const_correctness_test     all     all     not-built
+deque_test                 all     all     not-built
+dynstring_test             all     all     not-built
+dynvec_test                all     all     not-built
+file_test                  all     all     not-built
+filter_test                all     all     not-built
+find_test                  all     all     not-built
+hashmap_multi_test         all     all     not-built
+hashmap_separate_test      all     all     not-built
+hashmap_test               all     all     not-built
+header_combination_test    all     all     not-built
+impl_defined_test          all     all     not-built
+intern_test                all     all     not-built
+limits_test                all     all     not-built
+map_test                   all     all     not-built
+memory_test                all     all     not-built
+pool_test                  all     all     not-built
+priority_queue_test        all     all     not-built
+ptr_test                   all     all     not-built
+queue_test                 all     all     not-built
+range_test                 all     all     not-built
+region_test                all     all     not-built
+reverse_test               all     all     not-built
+search_test                all     all     not-built
+separate_compilation_test  all     all     not-built
+smallvec_test              all     all     not-built
+sort_test                  all     all     not-built
+stack_test                 all     all     not-built
+str_join_test              all     all     not-built
+str_split_test             all     all     not-built
+str_test                   all     all     not-built
+str_view_test              all     all     not-built
+stringbuf_test             all     all     not-built
+unique_test                all     all     not-built
+vec_fmt_test               all     all     not-built
+vec_test                   all     all     not-built
+
+# util/time.h calls clock_gettime, which newlib declares not under
+# -std=c99 (as Cortex-M's newlib, tools/cortexm/pins.txt).
+time_test                  all     all     not-built
+
+# Stopped with no output at 180 s at both models and each build type
+# (VERIFY-096): both call tmpfile(), and how far a file's I/O goes under
+# the simulator is what the run's file probe shows. Pinned at the author's
+# choice, stopped at 60 s, until its cause is found.
+diag_test                  all     all     times-out
+log_test                   all     all     times-out
