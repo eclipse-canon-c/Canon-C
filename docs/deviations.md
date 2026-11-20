@@ -41114,6 +41114,7 @@ What it shows:
 | **ID**         | VERIFY-096 |
 | **Date**       | 2026-11-20 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-20 — Scored: Z1 to Z4 and Z6 to Z9 MATCH; Z5 MISS, `compare_test` not built at the large model, where its `isize` has 20 bits in 4 bytes. Z9 is VERIFY-090's T3 at last: a Windows `build` Release job drew MSVC 19.52. CLOSED: eight of nine scored ("Scored", below). Run 1's measure, report-only, is below, with what it finds: three tests' own arithmetic at a 16-bit `int`, and two tests that time out. The Status above is the record as committed. |
 | **Baseline**   | ef9b2cf (VERIFY-095's change; its close, a record, is pushed with this): `1` and `3` to `6` #85, `2` #118, `8` #137. |
 | **Scope**      | `tools/msp430/` (new: `msp430.py`, `toolchain.cmake`, `pins.txt`, `README.md`); `.github/workflows/platforms.yml`: a job, `msp430`, and `big-endian-32`'s notice without a title; `.github/workflows/records.yml`: a step, `msp430.py check`; the README's platform tiers; `docs/architectures.md`, `docs/verification.md`, `docs/implementation-defined.md` and the workflow map, on the new job, and the map's row for 8, which named neither MetAcsl's, the smoke tests' nor the Cortex-M check. No library or test file. |
 | **Category**   | The list's item 7a-2, which the author chose on 2026-11-19 to take after 7a-3: a target whose `int` has 16 bits, MSP430X, its tests run. |
@@ -41216,3 +41217,87 @@ Z1 to Z9 scored, Z9 scored or carried, and the record closes. Then
 VERIFY-097: run 1's measure pinned and enforced, each line with its
 reason, and what it finds put to the author, `lifetime_test`'s loop among
 it.
+
+### Scored (2026-11-20)
+
+The push of 67107cb, 1d44814 and f15a810 started seven workflows: `1` and
+`3` to `6` #86, `2` #119 and `8` #138, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| Z1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| Z2 | **MATCH.** Both `msp430` jobs found no cache entry and fetched the package from TI, its SHA-256 as pinned, in 9 s with its unpacking; `msp430 (small)` saved the entry, and `msp430 (large)` was told "Unable to reserve cache with key ..., another job may be creating this cache". `msp430-elf-gcc (Mitto Systems Limited - msp430-gcc 9.3.1.11) 9.3.1`; `msp430-elf-run` on the PATH, "GNU simulator (Mitto Systems Limited - msp430-gcc 9.3.1.11) 9.1". |
+| Z3 | **MATCH.** The probe exited with 3 and printed, word for word, the line predicted for each model. |
+| Z4 | **MATCH.** Both jobs green; each of the eight legs configured and built tests, its binaries "Texas Instruments msp430 microcontroller", `Tag_ISA` MSP430X, `Tag_Code_Model` and `Tag_Data_Model` Small at the small model and Large at the large. |
+| Z5 | **MISS.** At both models the 44 were not built, each for the reason predicted: 42 at Tier 1's `#error`, `lifetime_test` at its loop (GCC: "comparison is always true due to limited range of data type [-Werror=type-limits]"), `time_test` at `clock_gettime`. The 17 were built at the small model, its 64 KB holding each at `-O0`; at the large, 16: `compare_test` was not, "left shift count >= width of type [-Werror=shift-count-overflow]" at its line 278, `(isize)(((usize)1) << (sizeof(isize) * 8 - 1))`, where `isize` has 20 bits in 4 bytes. |
+| Z6 | **MATCH.** `types_test`, `compare_test` and `scope_test` passed at each leg that built them: all eight, but `compare_test`'s four at the large model. |
+| Z7 | **MATCH.** The four notices have no title, and their messages are those predicted. |
+| Z8 | **MATCH.** The 87 jobs that ran at the baseline gave its conclusions and notices, times aside, but for Z7's four; 8 green, its new step passing. |
+| Z9 | **MATCH.** `build (windows-latest, Release, cl)` ran on image 20261116.315.1, MSVC 19.52.37029.0, and built `smallvec_test.c` without C4789; the test passed. VERIFY-090's T3, carried as U3, V3, W6 and Y7, is scored on the case it was written for, and nothing is carried. |
+
+Eight of nine scored MATCH; Z5 MISS: the clang build here has no large
+model, and the one test the 20-bit width refused is the one the
+prediction could not see.
+
+### Run 1's measure (report-only)
+
+Each leg the same at its four build types, in about 7.5 minutes; the job's
+step 30 minutes.
+
+| | small (16-bit `size_t`) | large (20-bit) |
+|---|---|---|
+| passed | 14: `autosar_bool_test`, `autosar_test`, `bits_test`, `compare_test`, `contract_test`, `error_test`, `fold_test`, `option_test`, `ownership_test`, `parse_test`, `result_test`, `scope_test`, `slice_test`, `types_test` | 13: the same, but `compare_test` |
+| failed | `random_test`, 10 `FAIL` lines; `diag_test` and `log_test`, timed out at 180 s, with no output | the same |
+| not built | 44: 42 at Tier 1's `#error`, `lifetime_test`, `time_test` | 45: the same, and `compare_test` |
+
+newlib 2.4.0 there has neither C99's printf formats nor `long long`'s
+(`_WANT_IO_C99_FORMATS` and `_WANT_IO_LONG_LONG` undefined). The memory of
+TI's linker scripts, as printed: small, `RAM 0x00500 +0x0FAC0`; large,
+`FRAM 0x00500 +0x0FAC0, HIFRAM 0x10000 +0xDFFFE`, not the regions of
+newlib's current `msp430xl-sim.ld`, which the run prints rather than
+asserts.
+
+**What it finds.**
+
+- **Three tests' own arithmetic, at a 16-bit `int`.** None is in a header.
+  - `lifetime_test.c:134`: `for (i = 0; i < 100000u; i++)` with an
+    `unsigned i`, never false at 16 bits; GCC refuses it under `-Werror`,
+    and the loop would not end.
+  - `random_test.c:316`: `for (i = 0; i < (int)n; i++)`, `int i`, `u32 n
+    = 100000u`: `(int)n` is -31072 at 16 bits (GCC's conversion, modulo
+    2^16), so the uniformity check draws no number and its ten buckets
+    stay empty: the 10 `FAIL` lines, `buckets[i] > 8000`.
+  - `compare_test.c:278`: `(usize)1 << (sizeof(isize) * 8 - 1)` takes
+    `sizeof` times 8 for a width, which a 20-bit `isize` in 4 bytes is not.
+- **Two time-outs, cause not seen.** `diag_test` and `log_test` print
+  nothing in 180 s, at both models and each build type. Both call
+  `tmpfile()`; under the simulator newlib's `write` goes through TI's CIO
+  channel, and its `open`, `read` and `lseek` through the simulator's
+  system calls, which map a target's descriptors to the host's: a file the
+  test opens may not be one CIO can write to. That is a reading, not a
+  measure: `cortexm.run_test` keeps no output from a test it stops, and the
+  two cost 24 of each job's 30 minutes.
+- **What runs at a 16-bit `int`.** At both models the tests of `bits.h`,
+  `contract.h`, `types.h`, `slice.h`, `scope.h`, `ownership.h`,
+  `option.h`, `result.h`, `error.h`, `fold.h` and `parse.h`, and the
+  AUTOSAR integration's two, pass, at 16- and 20-bit `size_t`s;
+  `compare.h`'s at the small model. Below Tier 1 and not passing:
+  `random.h`'s and `lifetime.h`'s tests, for their own arithmetic;
+  `diag.h`'s and `log.h`'s, timed out; `time.h`'s, not built.
+
+**Closed.** The tests run on MSP430X at both memory models; run 1 measured
+them, report-only, and nothing is pinned yet. What it finds is the
+author's to decide: the three tests' arithmetic fixed or pinned, and how
+the time-outs are seen. The close changes nothing but this record.
+
+What it shows:
+
+- **A 16-bit `int` found test code, not library code.** The headers below
+  Tier 1 built and passed at both models; the three defects are each a
+  test's own loop or width.
+- **A width is not `sizeof` times 8.** The large model's `__int20` is
+  stored in 4 bytes and holds 20 bits; the one test that took the one for
+  the other was the one a clang build, with no large model, could not show.
+- **Print what can be printed.** The linker script's regions, printed
+  rather than asserted, are not the ones the source read here says; a
+  test that is stopped should leave its output too.
