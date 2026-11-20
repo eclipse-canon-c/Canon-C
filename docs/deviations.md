@@ -41424,3 +41424,71 @@ What it shows:
 - **The simulator's cost is in software arithmetic.** `random_test`'s
   100000 draws, each a 64-bit multiply done in software on a 16-bit CPU,
   take two minutes at the small model; the rest of the suite, seconds.
+
+---
+
+## VERIFY-098: Pre-registration — MSP430's Tests Get a `tmpfile()` in Memory, `diag_test` and `log_test` Unpinned
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-098 |
+| **Date**       | 2026-11-20 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | cca86e2 (VERIFY-097's change; its close, a record, is pushed with this): `2` #120, `8` #139. |
+| **Scope**      | `tools/msp430/` alone: `tmpfile.c` (new), linked into each test; `msp430.py` (the object built, the file probe widened, a memory probe); `toolchain.cmake` (`CANON_MSP_LINK`); `pins.txt` (`diag_test` and `log_test` unpinned); `README.md`. No library or test file, and no workflow. |
+| **Category**   | VERIFY-097's finding, that newlib's `tmpfile()` does not return under the simulator, and the step proposed to the author with its run: a `tmpfile()` for the MSP430 build alone. |
+
+### What changes
+
+- **`tmpfile.c`**: a `tmpfile()` that is a stream in memory, newlib's
+  `fmemopen(NULL, 1024, "w+")`, which the tests write, rewind and read
+  back as they would a temporary file, and which `fclose()` frees; NULL
+  when it cannot be made, as `tmpfile()` may return. The script compiles
+  it for the model and each test is linked with it through
+  `-Wl,--wrap=tmpfile`. The proposal was a `tmpfile()` that returns NULL;
+  reading the two tests showed that `log_test` counts a NULL a failure in
+  each of its ten file tests (`EXPECT(false)`), where `diag_test` skips its
+  two, so a NULL would have pinned ten failures where a stream in memory
+  runs the tests. Nothing outside the `msp430` job links it.
+- **The memory probe**, before the tests: the file probe's `tmpfile()`
+  part, linked as the tests are; its steps and end in the log and a
+  notice. It fails nothing.
+- **The file probe** writes and reads back a named file and asks
+  `tmpnam()` for a name before `tmpfile()`, each step printed: where
+  newlib's file I/O stops under the simulator, for a later look.
+- **`pins.txt`**: `diag_test` and `log_test` no longer pinned; the
+  outcome `times-out` stays for a test that needs it.
+
+### Measured here
+
+- **The mechanics**, with the stand-in toolchain (the host's GCC and
+  glibc): each test linked with `tmpfile.c`'s object (`log_test`'s binary
+  defines `__wrap_tmpfile` and calls `fmemopen`); the memory probe's
+  seven steps, exit 0; the file probe's fifteen; the leg "61 tests, 18
+  passed, 0 failed, 43 not built; as pinned".
+- **`tmpfile.c`** compiles with clang's MSP430 target and newlib 4.4's
+  headers, and with the host's GCC, under `-Wall -Wextra -Wpedantic
+  -Werror`; newlib declares `fmemopen` where `__POSIX_VISIBLE >= 200809`,
+  hence the file's own declaration, which matches it.
+- **What the two tests write**: a few short lines each, `%d` and `%s`
+  their only conversions in `log_test`, and `diag.h`'s `%lu` since
+  VERIFY-091: 1 KB holds each test's file several times over.
+- `tools/which_workflows.py`: 2 and 8.
+
+Not measured: newlib 2.4.0's `fmemopen` there, and the two tests past
+their first `tmpfile()` at a 16-bit `int`.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| B1 | **2 and 8 run**, and no other. | another set | H |
+| B2 | **The memory probe** exits with 0 at both models, after "tmpfile: fclose returned 0", "fgets read "canon"" among its steps. | another end | M: newlib 2.4.0's `fmemopen` not run here; glibc's passes the same probe |
+| B3 | **Both `msp430` jobs are green**, each leg "61 tests, 18 passed, 0 failed, 43 not built; as pinned": `diag_test` and `log_test` pass at both models and each build type. | a difference, or a failed job | M: the two tests have not run past their first `tmpfile()` there |
+| B4 | **The file probe does not end with 0** at either model: newlib's own `tmpfile()`, which it calls last, did not return at VERIFY-097. How far its named file and `tmpnam()` go is not predicted: that is what it shows. | an exit with 0 | H |
+| B5 | **Nothing else changes**: 2's other jobs give #120's notices (times, and `embedded`'s slowest header's name, aside), and 8 is green. | another notice, or a failure | H |
+| B6 | **Each `msp430` job's test step under 12 minutes**, the two pinned time-outs gone. | 12 minutes or more | M–H: 17 and 13 at VERIFY-097, 8 of each in time-outs |
+
+### What follows
+
+B1 to B6 scored, and the record closes. Then the list's item 8.
