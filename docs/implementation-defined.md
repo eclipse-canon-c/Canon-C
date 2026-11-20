@@ -31,8 +31,9 @@ Clang and CompCert. CI's Windows jobs named `clang` build with MSVC
 (VERIFY-074), so Clang is not run on Windows. On Cortex-M0+ and Cortex-M4
 it runs under QEMU with newlib, where its five checks of `rename` fail
 through QEMU's semihosting, and is not built with picolibc, which has no
-`rename` (`tools/cortexm/pins.txt`); RV32 and RV64 compile it and do not
-run it; on MSP430X it is not built, since it includes Tier 1 headers,
+`rename` (`tools/cortexm/pins.txt`), nor on bare-metal AArch64, with
+picolibc too (`tools/aarch64/pins.txt`); RV32 and RV64 compile it and do
+not run it; on MSP430X it is not built, since it includes Tier 1 headers,
 which refuse that target's `size_t`.
 
 Clauses are C99's. "GCC says" quotes GCC's manual, "C Implementation-Defined

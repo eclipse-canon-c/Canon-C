@@ -2,7 +2,8 @@ name: "2 · Platforms"
 # Portability beyond the build matrix: musl, Linux AArch64, C11 to C23,
 # big-endian s390x and 32-bit PowerPC under qemu, the embedded compile
 # checks (Cortex-M, RISC-V, AVR), the tests on Cortex-M0+ and Cortex-M4
-# under QEMU, and on MSP430X under the GDB simulator.
+# under QEMU, on MSP430X under the GDB simulator, and on bare-metal
+# AArch64 (Cortex-A78AE, Cortex-R82) under QEMU.
 # Map: .github/workflows/README.md.
 on:
   push:
@@ -470,5 +471,54 @@ jobs:
           path: |
             msp430_out/*.json
             msp430_out/*.build.log
+          if-no-files-found: warn
+          retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # 1k. AArch64, bare metal, under QEMU — Cortex-A78AE and Cortex-R82
+  #     (VERIFY-099)
+  #
+  #    build-arm64 runs the tests on AArch64 Linux, with glibc; this job
+  #    runs them with no operating system: Ubuntu's aarch64-linux-gnu-gcc
+  #    with picolibc's specs in place of glibc, under qemu-system-aarch64's
+  #    virt board, through semihosting, which carries a test's output and
+  #    exit status. QEMU 8.2 models neither core: each is compiled for with
+  #    its -mcpu and run on QEMU's max CPU, which has the instructions of
+  #    both. tools/aarch64/aarch64.py builds each core at the four build
+  #    types, after a probe that QEMU carries a program's output and exit
+  #    status, and holds the outcomes against tools/aarch64/pins.txt,
+  #    enforced from VERIFY-099's run 1: the pins were measured before it
+  #    with the packages this job installs.
+  # -------------------------------------------------------------------------
+  aarch64:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        core: [a78ae, r82]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install QEMU, and Ubuntu's AArch64 GCC and picolibc
+        # Without the packages apt recommends, as the cortex-m job installs
+        # its own, and as it does, from the Actions cache first
+        # (VERIFY-093); the limit fails a stalled mirror in 30 minutes.
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-install
+        with:
+          cache-name: aarch64
+          packages: qemu-system-arm gcc-aarch64-linux-gnu picolibc-aarch64-linux-gnu
+      - name: "The tests on bare-metal AArch64 under QEMU: ${{ matrix.core }}"
+        timeout-minutes: 30
+        env:
+          CORE: ${{ matrix.core }}
+        run: python3 tools/aarch64/aarch64.py run "$CORE"
+      - name: Upload the builds' logs and summaries
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: aarch64-${{ matrix.core }}
+          path: |
+            aarch64_out/*.json
+            aarch64_out/*.build.log
           if-no-files-found: warn
           retention-days: 90

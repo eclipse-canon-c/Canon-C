@@ -922,7 +922,11 @@ For what Canon-C intentionally omits, established C libraries exist:
 > four build types: with Ubuntu's GCC 13.2 and both C libraries, and
 > with the Arm GNU Toolchain's GCC 15.3 and newlib (job `cortex-m`,
 > VERIFY-089); `tools/cortexm/pins.txt` names those that do not pass
-> there, and why. On RISC-V they are compiled, not run.
+> there, and why. On bare-metal AArch64 they are built with Ubuntu's
+> GCC 13.3 and picolibc for Cortex-A78AE and Cortex-R82, and run under
+> QEMU at the four build types (job `aarch64`, VERIFY-099);
+> `tools/aarch64/pins.txt` names those that do not pass. On RISC-V they
+> are compiled, not run.
 >
 > **GCC 13.2 at `-O2` and `-Os`**
 > On Cortex-M, GCC 13.2 (Ubuntu 24.04's `arm-none-eabi-gcc`,
@@ -950,7 +954,9 @@ For what Canon-C intentionally omits, established C libraries exist:
 > counter is then a plain increment, not race-free
 > (`CANON_LIFETIME_ATOMIC_IDS` is 0). Or provide
 > `__atomic_fetch_add_8` yourself, with interrupts masked around it.
-> The `cortex-m` job defines `CANON_LIFETIME_NO_ATOMICS`.
+> The `cortex-m` and `msp430` jobs define `CANON_LIFETIME_NO_ATOMICS`.
+> The `aarch64` job defines nothing: both its cores have Armv8.1's
+> atomics, and GCC compiles the counter to one instruction (`ldadd`).
 >
 > **stdio**
 > stdio enters Canon-C in exactly two ways. The default contract panic
@@ -1034,9 +1040,11 @@ For what Canon-C intentionally omits, established C libraries exist:
 > that build under the GDB simulator: Tier 1 refuses both `size_t`s, so
 > the tests that build are those below it. Those of `types.h`, `bits.h`,
 > `compare.h`, `contract.h`, `scope.h`, `slice.h`, `ownership.h`,
-> `option.h`, `result.h`, `error.h`, `fold.h` and `parse.h` pass there;
-> each test that does not is pinned with the reason
-> (`tools/msp430/pins.txt`, VERIFY-097). Tier 0 means "freestanding plus
+> `option.h`, `result.h`, `error.h`, `fold.h`, `parse.h`, `lifetime.h`,
+> `random.h`, `diag.h` and `log.h`, and the AUTOSAR integration's, pass
+> there: every test that builds (VERIFY-098); each test that does not
+> build is pinned with the reason (`tools/msp430/pins.txt`, VERIFY-097).
+> Tier 0 means "freestanding plus
 > stub-capable libc headers": `contract.h` pulls in `<stdio.h>` and
 > `<stdlib.h>` for its default panic handler — swap the handler as
 > described above and stdio is never reached.

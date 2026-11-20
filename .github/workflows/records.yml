@@ -8,7 +8,8 @@ name: "8 · Records"
 # (VERIFY-070), MetAcsl's units checked against the proof units
 # (VERIFY-086), the smoke tests' pins checked against the units
 # (VERIFY-088), the Cortex-M pins against the tests (VERIFY-089), the
-# MSP430 pins against the tests (VERIFY-096) and the workflow-size guard.
+# MSP430 pins against the tests (VERIFY-096), the bare-metal AArch64 pins
+# against the tests (VERIFY-099) and the workflow-size guard.
 # Map: .github/workflows/README.md.
 on:
   push:
@@ -29,6 +30,7 @@ on:
       - 'tools/smoke/**'
       - 'tools/cortexm/**'
       - 'tools/msp430/**'
+      - 'tools/aarch64/**'
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
@@ -114,6 +116,12 @@ jobs:
         # of CMakeLists.txt, and no two for the same test, model and build
         # type.
         run: python3 tools/msp430/msp430.py check
+      - name: "The bare-metal AArch64 pins name the suite's tests (VERIFY-099)"
+        # tools/aarch64/pins.txt holds the tests that do not pass on
+        # bare-metal AArch64 under QEMU: each line well formed and naming a
+        # test of CMakeLists.txt, and no two for the same test, core and
+        # build type.
+        run: python3 tools/aarch64/aarch64.py check
 
   # -------------------------------------------------------------------------
   # Workflow size guard (VERIFY-047). GitHub runs no workflow file of 500 KB

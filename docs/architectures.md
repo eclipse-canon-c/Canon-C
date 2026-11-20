@@ -32,6 +32,7 @@ points here for them.
 | Cortex-M0+ (Armv6-M, soft float) | bare metal: newlib; picolibc | GCC 13.2 (Ubuntu's `arm-none-eabi`), with newlib and picolibc; GCC 15.3 (the Arm GNU Toolchain 15.3.Rel2), with its newlib | `cortex-m` (`platforms.yml`, `tools/cortexm/`), under QEMU's micro:bit, whose Cortex-M0 runs Armv6-M code, its memory enlarged; at `-O0`, `-O2`, `-O3` and `-Os`; the tests that do not pass pinned with the reason |
 | Cortex-M4 (Armv7E-M, hard float) | bare metal: newlib; picolibc | the same | `cortex-m`, under QEMU's mps2-an386 |
 | MSP430X, 16-bit `int` | bare metal: newlib 2.4 (TI's) | GCC 9.3.1 (TI's MSP430-GCC-OPENSOURCE 9.3.1.2, Mitto Systems' build) | `msp430` (`platforms.yml`, `tools/msp430/`), under the GDB simulator the toolchain ships; the small memory model (16-bit `size_t`) and the large (20-bit); at `-O0`, `-O2`, `-O3` and `-Os`; the tests below Tier 1 only, which refuses both `size_t`s; the tests that do not pass pinned with the reason (VERIFY-097) |
+| AArch64, bare metal: Cortex-A78AE (Armv8.2-A) and Cortex-R82 (Armv8-R) | bare metal: picolibc 1.8.6 | GCC 13.3 (Ubuntu's `aarch64-linux-gnu`, with picolibc's specs) | `aarch64` (`platforms.yml`, `tools/aarch64/`), under QEMU 8.2's virt board; QEMU models neither core, so each is compiled for with its `-mcpu` and run on QEMU's `max` CPU, which has the instructions of both, at EL1 with the MMU off; at `-O0`, `-O2`, `-O3` and `-Os`; the tests that do not pass pinned with the reason (VERIFY-099) |
 
 On Cortex-M, GCC 13.2 compiles one check of `option_test` wrong at `-O2`
 and `-Os`, and GCC 15.3 compiles it right (the README's bare-metal
@@ -64,7 +65,6 @@ measured where the list says so:
 - Cortex-M7, and Armv8-M (Cortex-M33, Cortex-M55).
 - Cortex-R5 and Cortex-R52.
 - 32-bit Arm, big-endian.
-- AArch64, bare metal (Cortex-A78AE, Cortex-R82).
 - TriCore (Infineon AURIX).
 - PowerPC e200, big-endian (NXP MPC5xxx).
 - Renesas RH850, if a usable GCC exists.

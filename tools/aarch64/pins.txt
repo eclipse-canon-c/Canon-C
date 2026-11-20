@@ -1,0 +1,17 @@
+# tools/aarch64/pins.txt -- the tests that do not pass on bare-metal
+# AArch64 under QEMU (tools/aarch64/aarch64.py, VERIFY-099). Each line: the
+# test, the cores (all, a78ae, r82), the build types (all, or a list of
+# Debug, Release, RelWithDebInfo and MinSizeRel), and what the test does
+# there: "not-built"; "fails N", N the lines of its output that begin with
+# FAIL; or "times-out". A test no line names must pass. The lines are
+# measures, taken here with the packages the job installs before its run 1.
+#
+# TEST              CORES  BUILDS  OUTCOME
+
+# util/time.h needs clock_gettime and CLOCK_MONOTONIC, and the test
+# nanosleep: picolibc has neither (the README's Tier 2), as on Cortex-M.
+time_test           all    all     not-built
+# File I/O (Tier 2) through semihosting: picolibc's has no rename, as on
+# Cortex-M (tools/cortexm/pins.txt).
+file_test           all    all     not-built
+impl_defined_test   all    all     not-built
