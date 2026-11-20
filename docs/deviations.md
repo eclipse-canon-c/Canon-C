@@ -41536,6 +41536,7 @@ What it shows:
 | **ID**         | VERIFY-099 |
 | **Date**       | 2026-11-20 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-20 — Scored: C1 to C6 MATCH. CLOSED: six of six scored ("Scored", below). On bare-metal AArch64, at both cores and each build type, 58 of the 61 tests pass, enforced from run 1; the three not built are picolibc's gaps on bare metal. The Status above is the record as committed. |
 | **Baseline**   | f3fca2e (VERIFY-098's change; its close, a record, is pushed with this): `1` and `3` to `6` #87, `2` #121, `8` #140. |
 | **Scope**      | `tools/aarch64/` (new: `aarch64.py`, `toolchain.cmake`, `pins.txt`, `README.md`); `.github/workflows/platforms.yml`: a job, `aarch64`; `.github/workflows/records.yml`: a step, `aarch64.py check`; the README's bare-metal section and platform tiers; `docs/architectures.md`, `docs/verification.md`, `docs/implementation-defined.md` and the workflow map, on the new job. No library or test file. |
 | **Category**   | The list's item 8, its first target, which the author chose on 2026-11-20: bare-metal AArch64 (Cortex-A78AE, Cortex-R82), planned in `docs/architectures.md`. |
@@ -41658,3 +41659,39 @@ C1 to C6 scored, and the record closes. Then the list's item 8, at the
 target the author chooses next; the look at S12 and S12Z, dsPIC and PIC24,
 and PowerPC e200 that the author asked for is put to the author with this
 record's run.
+
+### Scored (2026-11-20)
+
+The push of 3a75f12, 64dacf6 and f2fa4d8 started seven workflows: `1` and
+`3` to `6` #88, `2` #122 and `8` #141, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| C1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| C2 | **MATCH.** Both `aarch64` jobs found no cache entry and fetched the 34 package files (57 MB) from Canonical's archive, the install step 28 s (a78ae) and 18 s (r82); `aarch64 (r82)` saved the entry, and `aarch64 (a78ae)` was told "Unable to reserve cache with key apt-aarch64-Linux-X64-e4dba22a063d0439, another job may be creating this cache". "aarch64-linux-gnu-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0", "QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.18)", "picolibc-aarch64-linux-gnu 1.8.6-2": the revisions measured here. |
+| C3 | **MATCH.** At both cores the probe printed, word for word, the line measured here, and exited with 3. |
+| C4 | **MATCH.** Both jobs green, enforced; each of the eight legs "61 tests, 58 passed, 0 failed, 3 not built (impl_defined_test, file_test, time_test); as pinned", `time_test` at `util/time.h:147`'s `clock_gettime`, `file_test` and `impl_defined_test` at `rename`; the binaries "ELF64, 2's complement, little endian, AArch64; compiled with -mcpu=cortex-a78ae", and with `-mcpu=cortex-r82` at r82. |
+| C5 | **MATCH.** The test steps took 38 s (a78ae) and 25 s (r82), each leg 0.1 or 0.2 minutes; the jobs 75 s and 49 s in all. |
+| C6 | **MATCH.** The 63 jobs of 1 and 3 to 6 gave #87's conclusions and notices, times aside; 2's 28 other jobs #121's, `embedded` but for its slowest header's name (`algo/any_all/any_all.h`, not `util/str/str_split.h`), which C6 set aside; 8 green, its new step "aarch64 check: 3 pins, 61 tests in CMakeLists.txt; 0 problem(s)". |
+
+Six of six scored.
+
+**Closed.** The tests run on bare-metal AArch64, compiled for Cortex-A78AE
+and Cortex-R82 with picolibc, under QEMU, at each build type, enforced
+from the first run: 58 of the 61 pass at each of the eight legs, and the
+three not built are picolibc's gaps on bare metal, the same as on
+Cortex-M. The close changes nothing but this record.
+
+What it shows:
+
+- **Measure where the runner will be.** The first run here read a header
+  the runner would not have, glibc's AArch64 `stdc-predef.h`; hidden in a
+  mount namespace of its own, which changes nothing outside it, it made
+  the measure the runner's, and run 1 gave it word for word.
+- **A probe states what the emulator does not.** The tests run with the
+  MMU off, where a core faults an unaligned access and QEMU 8.2 does not;
+  printed by the probe, that is a stated limit, not a hidden one.
+- **Enforced from run 1, when the measure is the run's.** VERIFY-089's and
+  VERIFY-096's first runs were report-only, their toolchains not run
+  before them; this one was run here with the runner's packages, and its
+  gate held at the first run.
