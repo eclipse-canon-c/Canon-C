@@ -41705,6 +41705,7 @@ What it shows:
 | **ID**         | VERIFY-100 |
 | **Date**       | 2026-11-20 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-20 — Scored: D1 and D2 MATCH. CLOSED: two of two scored ("Scored", below). The rule is in `docs/architectures.md`, with its three entries. The Status above is the record as committed. |
 | **Baseline**   | f2fa4d8 (VERIFY-099's change; its close, a record, is pushed with this): `8` #141. |
 | **Scope**      | `docs/architectures.md`: a section, "Waiting for a compiler", its rule and three entries; the file's opening, its planned e200 line and its SHARC row, which point to it; dsPIC and PIC24 among the planned "Compiled for". `.github/workflows/README.md`: the rule in the guidance for a new platform. Documentation only. |
 | **Category**   | The author's decision of 2026-11-20, after VERIFY-099's look at S12 and S12Z, dsPIC and PIC24, and PowerPC e200: an architecture held back only by its compiler, commercial or behind a vendor's sign-in, is documented as planned, not as unsupported, and the rule holds for those found later. |
@@ -41763,3 +41764,32 @@ What it shows:
 
 D1 and D2 scored, and the record closes. Then the list's item 8, its next
 target as the author chooses, each looked at first against this rule.
+
+### Scored (2026-11-20)
+
+The push of 6b33f64, 374cd54 and a8f42e5 started one workflow, `8` #142,
+green at its first attempt.
+
+| # | scored |
+|---|--------|
+| D1 | **MATCH.** 8 ran, and no other. |
+| D2 | **MATCH.** Both jobs green; "cortexm check: 6 pins, 61 tests in CMakeLists.txt; 0 problem(s)", the same for `msp430` with 43 pins and `aarch64` with 3; record coverage with no problem. |
+
+Two of two scored.
+
+**Closed.** An architecture held back only by its compiler, commercial or
+behind a vendor's sign-in, is planned and documented with what holds it
+back and what would let it in: NXP's S12 family, PowerPC e200 with VLE,
+and SHARC+ addressing bytes, and those found later by the same rule. The
+close changes nothing but this record.
+
+What it shows:
+
+- **A rule names its case, not its instances.** SHARC+ addressing bytes
+  was this case before the rule was written: VERIFY-094's row called it
+  "not tried". Written for the three found now, the rule would have
+  missed it; written for the case, it took it in.
+- **Two kinds of "no".** "Not supported" is a limit of the library, a C
+  implementation it cannot work with; "waiting for a compiler" is a limit
+  of the project's means. Kept apart, the first says what Canon-C is, the
+  second what it has not yet been able to check.
