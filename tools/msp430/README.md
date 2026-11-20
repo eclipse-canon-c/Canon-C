@@ -26,8 +26,14 @@ RelWithDebInfo (`-O2`) and MinSizeRel (`-Os`), with
 passes when it exits with status 0 within 300 s. Before the tests, a probe
 checks that the simulator carries a program's output and its exit status,
 and prints the model's type sizes as the target has them; a file probe
-writes a line to a `tmpfile()` and reads it back, each step on `stderr`,
-to show how far a file's I/O goes under the simulator, failing nothing.
+writes a line to a named file, to `tmpnam()`'s name and to a `tmpfile()`,
+and reads each back, every step on `stderr`, to show how far a file's I/O
+goes under the simulator, failing nothing. There newlib's `tmpfile()` does
+not return (VERIFY-097), so each test is linked, through
+`-Wl,--wrap=tmpfile`, with `tmpfile.c`: a `tmpfile()` that is a stream in
+memory, newlib's `fmemopen()`, which the tests write, rewind and read back
+as they would a file; the memory probe checks it before the tests
+(VERIFY-098). Nothing outside this job links it.
 The script checks that the binaries are MSP430X at the model, from their
 MSPABI attributes, names newlib's version and whether its printf has C99's
 formats and `long long`'s (2.4.0 there has neither), prints each test's
@@ -57,9 +63,9 @@ lines) are that script's.
 
 **Runs.** VERIFY-096's run 1 was report-only, the toolchain not run
 before it. Its measure is the pins (VERIFY-097), enforced since: the 42
-tests Tier 1 refuses, `time_test` (newlib declares no `clock_gettime`
-under `-std=c99`), and `diag_test` and `log_test`, which time out, both
-calling `tmpfile()`, their cause what the file probe is for. Three tests
-whose own arithmetic failed at a 16-bit `int` were fixed instead, as the
-author chose. The predictions and their scores are in
-`docs/deviations.md`.
+tests Tier 1 refuses, and `time_test` (newlib declares no `clock_gettime`
+under `-std=c99`). Three tests whose own arithmetic failed at a 16-bit
+`int` were fixed instead, as the author chose. `diag_test` and
+`log_test`, which timed out inside newlib's `tmpfile()`, VERIFY-097's
+probe found, run with `tmpfile.c`'s since VERIFY-098. The predictions and
+their scores are in `docs/deviations.md`.

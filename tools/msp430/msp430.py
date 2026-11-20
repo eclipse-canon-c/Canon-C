@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 msp430.py -- the test suite on MSP430X under the GDB simulator
-(VERIFY-096, VERIFY-097).
+(VERIFY-096, VERIFY-097, VERIFY-098).
 
 MSP430's int has 16 bits, which no other target that runs the tests has.
 Each test of CMakeLists.txt is built with TI's msp430-elf-gcc (the Mitto
@@ -28,9 +28,13 @@ CMake: Debug (-O0), Release (-O3), RelWithDebInfo (-O2) and MinSizeRel
 atomic. A test passes when it exits with status 0, within TIMEOUT
 seconds. Before the tests, a probe checks that the simulator carries a
 program's output and its exit status, and prints the model's type sizes as
-the target has them; and a file probe writes a line to a tmpfile() and
-reads it back, each step on stderr, to show how far a file's I/O goes
-under the simulator (it fails nothing).
+the target has them. A file probe writes a line to a named file, to
+tmpnam()'s name and to a tmpfile(), and reads each back, every step on
+stderr, to show how far a file's I/O goes under the simulator; it fails
+nothing. There newlib's tmpfile() does not return (VERIFY-097), so each
+test is linked with tmpfile.c, a tmpfile() that is a stream in memory
+(fmemopen), through -Wl,--wrap=tmpfile; the memory probe is the file
+probe's tmpfile() part so linked.
 
 The tests that do not pass are pinned, with the reason, in pins.txt: each
 line a test, the models and build types it holds for, and what the test
@@ -95,7 +99,8 @@ MODELS = {
 # Defined for every test: lifetime.h's debug counter without atomics.
 DEFINES = '-DCANON_LIFETIME_NO_ATOMICS'
 BUILDS = cortexm.BUILDS
-SUPPORT = ('toolchain.cmake', 'pins.txt', 'README.md')
+SUPPORT = ('toolchain.cmake', 'pins.txt', 'README.md', 'tmpfile.c')
+TMPFILE = os.path.join(HERE, 'tmpfile.c')
 PIN = re.compile(r'^(\w+)\s+(all|small|large)\s+(\S+)\s+(not-built|fails|times-out)'
                  r'(?:\s+(\d+))?$')
 PROBE = r'''#include <limits.h>
@@ -115,38 +120,58 @@ int main(void)
 '''
 PROBE_STATUS = 3
 # Each step on stderr, which newlib leaves unbuffered, so that a step that
-# does not end leaves the ones before it.
+# does not end leaves the ones before it. With CANON_PROBE_TMPFILE_ONLY,
+# the tmpfile() part alone: the memory probe.
 FILE_PROBE = r'''#include <stdio.h>
 #include <string.h>
 
 #define STEP(...) (fprintf(stderr, __VA_ARGS__), fputc('\n', stderr))
 
-int main(void)
+/* A line written to f and read back, each step printed: 0 when it comes back. */
+static int round_trip(FILE *f, const char *what)
 {
     char buf[16] = {0};
-    FILE *f;
     int rc;
 
+    rc = fputs("canon\n", f);
+    STEP("file probe: %s: fputs returned %d", what, rc);
+    rc = fflush(f);
+    STEP("file probe: %s: fflush returned %d", what, rc);
+    rewind(f);
+    STEP("file probe: %s: rewound", what);
+    if (fgets(buf, (int)sizeof(buf), f) == NULL) {
+        STEP("file probe: %s: fgets returned NULL", what);
+        (void)fclose(f);
+        return 1;
+    }
+    STEP("file probe: %s: fgets read \"%.*s\"", what, (int)strcspn(buf, "\n"), buf);
+    rc = fclose(f);
+    STEP("file probe: %s: fclose returned %d", what, rc);
+    return (strcmp(buf, "canon\n") == 0) ? 0 : 1;
+}
+
+int main(void)
+{
+    FILE *f;
+    int failed = 0;
+#if !defined(CANON_PROBE_TMPFILE_ONLY)
+    char name[L_tmpnam];
+    const char *got;
+
+    STEP("file probe: fopen(\"canon_probe.txt\", \"w+\")");
+    f = fopen("canon_probe.txt", "w+");
+    STEP("file probe: fopen returned %s", (f != NULL) ? "a stream" : "NULL");
+    failed += (f == NULL) ? 1 : round_trip(f, "fopen");
+    (void)remove("canon_probe.txt");
+    STEP("file probe: tmpnam()");
+    got = tmpnam(name);
+    STEP("file probe: tmpnam() returned %s", (got != NULL) ? got : "NULL");
+#endif
     STEP("file probe: tmpfile()");
     f = tmpfile();
     STEP("file probe: tmpfile() returned %s", (f != NULL) ? "a stream" : "NULL");
-    if (f == NULL) {
-        return 4;
-    }
-    rc = fputs("canon\n", f);
-    STEP("file probe: fputs returned %d", rc);
-    rc = fflush(f);
-    STEP("file probe: fflush returned %d", rc);
-    rewind(f);
-    STEP("file probe: rewound");
-    if (fgets(buf, (int)sizeof(buf), f) == NULL) {
-        STEP("file probe: fgets returned NULL");
-        return 5;
-    }
-    STEP("file probe: fgets read \"%.*s\"", (int)strcspn(buf, "\n"), buf);
-    rc = fclose(f);
-    STEP("file probe: fclose returned %d", rc);
-    return (strcmp(buf, "canon\n") == 0) ? 0 : 6;
+    failed += (f == NULL) ? 1 : round_trip(f, "tmpfile");
+    return failed;
 }
 '''
 FILE_PROBE_LIMIT = 30  # seconds
@@ -265,20 +290,38 @@ def probe(model, out):
     return lines[0]
 
 
-def file_probe(model, out):
+def support(model, out):
+    """tmpfile.c compiled for the model: the object, and the link flags that
+    put it in each test in place of newlib's tmpfile()."""
+    d = os.path.abspath(os.path.join(out, 'support-' + model))
+    os.makedirs(d, exist_ok=True)
+    obj = os.path.join(d, 'tmpfile.o')
+    r = sh([GCC, *MODELS[model]['flags'].split(), '-std=c99', '-O1', '-Wall', '-Wextra',
+            '-Werror', '-c', TMPFILE, '-o', obj])
+    if r.returncode != 0:
+        shown(r.stdout + r.stderr)
+        raise RuntimeError(f'{model}: tools/msp430/tmpfile.c does not compile')
+    return f'-Wl,--wrap=tmpfile {obj}'
+
+
+def file_probe(model, out, link=None):
     """Build and run FILE_PROBE: its steps on stderr, and how it ended.
-    It fails nothing: it shows how far a file's I/O goes here."""
+    With link (support()'s), its tmpfile() part alone, so linked: the memory
+    probe. It fails nothing: it shows how far a file's I/O goes here."""
     d = os.path.abspath(os.path.join(out, 'probe-' + model))
     os.makedirs(d, exist_ok=True)
-    src, elf = os.path.join(d, 'file_probe.c'), os.path.join(d, 'file_probe')
+    name = 'memory_probe' if link else 'file_probe'
+    src, elf = os.path.join(d, name + '.c'), os.path.join(d, name)
     with open(src, 'w', encoding='utf-8') as f:
         f.write(FILE_PROBE)
-    r = sh([GCC, *MODELS[model]['flags'].split(), '-msim', '-std=c99', '-O1', src, '-o', elf])
+    extra = ['-DCANON_PROBE_TMPFILE_ONLY', *link.split()] if link else []
+    r = sh([GCC, *MODELS[model]['flags'].split(), '-msim', '-std=c99', '-O1', src, *extra,
+            '-o', elf])
     if r.returncode != 0:
         shown(r.stdout + r.stderr)
         return [], 'does not build'
     t = {'command': [RUN, elf], 'cwd': d}
-    got = run_test(t, FILE_PROBE_LIMIT)
+    got = run_test(t, FILE_PROBE_LIMIT, keep=40)
     steps = [line for line in got['tail'] if line.startswith('file probe:')]
     last = steps[-1][len('file probe: '):] if steps else 'no step'
     if got['outcome'] == 'times-out':
@@ -286,11 +329,11 @@ def file_probe(model, out):
     return steps, f'exited with {got["rc"]}, after "{last}"'
 
 
-def run_test(t, limit):
+def run_test(t, limit, keep=8):
     """A test under the simulator, stopped at limit seconds: its outcome
-    ("passes", "fails", "times-out"), exit status, FAIL lines, last lines
-    and seconds. A stopped test's output so far is kept: run() hands it
-    over as bytes."""
+    ("passes", "fails", "times-out"), exit status, FAIL lines, last keep
+    lines and seconds. A stopped test's output so far is kept: run() hands
+    it over as bytes."""
     start = time.time()
     try:
         r = subprocess.run(t['command'], cwd=t['cwd'], capture_output=True, text=True,
@@ -307,12 +350,13 @@ def run_test(t, limit):
         outcome = 'passes' if rc == 0 else 'fails'
     return {'outcome': outcome, 'rc': rc,
             'fails': len(fails) if outcome == 'fails' else None, 'fail_lines': fails,
-            'tail': rest[-8:], 'seconds': round(time.time() - start, 1)}
+            'tail': rest[-keep:], 'seconds': round(time.time() - start, 1)}
 
 
-def environment(model):
+def environment(model, link):
     env = dict(os.environ)
     env['CANON_MSP_FLAGS'] = MODELS[model]['flags'] + ' ' + DEFINES
+    env['CANON_MSP_LINK'] = link
     return env
 
 
@@ -502,7 +546,12 @@ def main(argv):
         print(f'--- {model}: file probe ---')
         shown('\n'.join(steps) or '(no step printed)')
         print(f'::notice title=msp430 {model} file probe::file probe {how}')
-        env = environment(model)
+        link = support(model, OUT)
+        steps, how = file_probe(model, OUT, link)
+        print(f'--- {model}: memory probe, the tests\' tmpfile() ---')
+        shown('\n'.join(steps) or '(no step printed)')
+        print(f'::notice title=msp430 {model} memory probe::memory probe {how}')
+        env = environment(model, link)
         for build in builds:
             line, diffs, _ = leg(model, build, OUT, env, pins)
             print(f'::notice title=msp430 {model} {build}::{line}')

@@ -7,7 +7,9 @@
 # A test no line names must pass. The lines are VERIFY-096's run 1, at both
 # models and each build type; the three tests whose own arithmetic failed
 # at a 16-bit int (lifetime_test, random_test, compare_test) were fixed
-# instead, as the author chose (VERIFY-097).
+# instead, as the author chose (VERIFY-097). diag_test and log_test, which
+# timed out inside newlib's tmpfile(), run since VERIFY-098 with the
+# tmpfile() of tools/msp430/tmpfile.c, a stream in memory.
 #
 # TEST                       MODELS  BUILDS  OUTCOME
 
@@ -59,10 +61,3 @@ vec_test                   all     all     not-built
 # util/time.h calls clock_gettime, which newlib declares not under
 # -std=c99 (as Cortex-M's newlib, tools/cortexm/pins.txt).
 time_test                  all     all     not-built
-
-# Stopped with no output at 180 s at both models and each build type
-# (VERIFY-096): both call tmpfile(), and how far a file's I/O goes under
-# the simulator is what the run's file probe shows. Pinned at the author's
-# choice, stopped at 60 s, until its cause is found.
-diag_test                  all     all     times-out
-log_test                   all     all     times-out
