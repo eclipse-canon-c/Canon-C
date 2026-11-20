@@ -41695,3 +41695,71 @@ What it shows:
   VERIFY-096's first runs were report-only, their toolchains not run
   before them; this one was run here with the runner's packages, and its
   gate held at the first run.
+
+---
+
+## VERIFY-100: Pre-registration — Architectures That Wait for a Compiler: a Standing Rule, and S12, PowerPC e200 and SHARC+ under It
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-100 |
+| **Date**       | 2026-11-20 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | f2fa4d8 (VERIFY-099's change; its close, a record, is pushed with this): `8` #141. |
+| **Scope**      | `docs/architectures.md`: a section, "Waiting for a compiler", its rule and three entries; the file's opening, its planned e200 line and its SHARC row, which point to it; dsPIC and PIC24 among the planned "Compiled for". `.github/workflows/README.md`: the rule in the guidance for a new platform. Documentation only. |
+| **Category**   | The author's decision of 2026-11-20, after VERIFY-099's look at S12 and S12Z, dsPIC and PIC24, and PowerPC e200: an architecture held back only by its compiler, commercial or behind a vendor's sign-in, is documented as planned, not as unsupported, and the rule holds for those found later. |
+
+### What changes
+
+- **"Waiting for a compiler"**, a section of `docs/architectures.md`
+  before "Not supported". Its rule: an architecture whose only C compilers
+  are commercial, or free but downloaded behind a vendor's sign-in, which
+  a CI job cannot do, is planned, and listed with its compilers, what
+  holds it back and what would let it in; "Not supported" stays for
+  architectures whose C implementation Canon-C cannot work with. A free
+  compiler that CI downloads itself, its checksum pinned, is usable (TI's
+  for `msp430`, Arm's for `cortex-m`), and a target no emulator runs is
+  compiled only, as AVR is. Three entries:
+  - **NXP S12, S12X and S12Z**: no free C compiler. GCC's 68HC11 and
+    68HC12 port, which covered HCS12, was declared obsolete in GCC 4.6 and
+    removed; S12X and S12Z were never in GCC; GNU binutils assembles S12Z
+    with no compiler behind it. The compilers are NXP's CodeWarrior and
+    Cosmic's, commercial and for Windows.
+  - **PowerPC e200 with VLE**: GCC generates no VLE code; NXP's GCC 4.9.4
+    with its VLE patches is free to use but downloaded behind NXP's
+    sign-in; QEMU has no e200 machine.
+  - **Analog Devices SHARC+ addressing bytes**: CrossCore Embedded Studio,
+    commercial; GCC has no SHARC port. VERIFY-094's row said they were
+    "not tried"; they are this rule's case, found before it.
+- **The planned lists**: e200's line points to the section. dsPIC and
+  PIC24 join the planned "Compiled for": Microchip's XC16, a port of GCC,
+  is free, its optimization limited to `-O0` and `-O1`; `int`, `size_t`
+  and pointers of 16 bits, so Tier 0 only, with `-fno-short-double`,
+  without which `double` has 32 bits; compiled first, as AVR is.
+- **The workflow map**: its guidance for a new platform says that a target
+  with no compiler CI can use gets no job, and goes in the section.
+
+### Measured here
+
+- **The sources**, read for VERIFY-099's look: the XC16 user's guide
+  (DS50002071H, tables 8-1 and 8-2: `int` 16 bits, `double` 32 unless
+  `-fno-short-double`, data pointers 16 bits); GCC 4.6's release notes
+  (the 68HC11 and 68HC12 ports obsolete); NXP's page for Cosmic's S12Z
+  package (a one-year node-locked licence, for Windows); NXP's forum, 2021,
+  of `powerpc-eabivle-gcc` 4.9.4: "The only one which we are providing is
+  part of S32DS Power PC v2.1"; QEMU's patch that removed its e200 CPUs,
+  2025: no machine in QEMU "can be run with one of the e200 ppc CPUs".
+- `tools/record_coverage.py`: no problem.
+- `tools/which_workflows.py`: 8 alone.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| D1 | **8 runs**, and no other. | another set | H |
+| D2 | **8 is green**, its checks as at #141: "cortexm check: 6 pins", "msp430 check: 43 pins" and "aarch64 check: 3 pins", each of 61 tests with 0 problems. | a failure, or another line | H |
+
+### What follows
+
+D1 and D2 scored, and the record closes. Then the list's item 8, its next
+target as the author chooses, each looked at first against this rule.
