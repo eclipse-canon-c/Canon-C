@@ -73,7 +73,7 @@ measured where the list says so:
 - Cortex-M7, and Armv8-M (Cortex-M33, Cortex-M55).
 - Cortex-R5 and Cortex-R52.
 - 32-bit Arm, big-endian.
-- TriCore (Infineon AURIX).
+- TriCore (Infineon AURIX): waiting for a compiler (below).
 - PowerPC e200, big-endian (NXP MPC5xxx): waiting for a compiler (below).
 - Xtensa (ESP32).
 - SPARC LEON3 and LEON4.
@@ -114,7 +114,8 @@ twelve goals the provers leave (`coq.yml`), and Eva runs the 26 programs of
 `tools/eva/` (`eva.yml`), each result pinned.
 
 *Planned:* models for bare-metal AArch64, Cortex-R52, SPARC LEON3, TriCore
-and PowerPC e200, generated from their compilers as the seven are.
+and PowerPC e200, generated from their compilers as the seven are: TriCore's
+and PowerPC e200's once CI has a compiler for them (below).
 
 ## Waiting for a compiler
 
@@ -139,6 +140,7 @@ target compiled only, as AVR is.
 |--------------|-----------------|--------------------|-----------------------------------------------|
 | NXP S12, S12X and S12Z (16-bit, MagniV) | NXP's CodeWarrior and Cosmic's, both commercial and for Windows | no free C compiler: GCC's 68HC11 and 68HC12 port, which covered HCS12, was declared obsolete in GCC 4.6 and removed; S12X and S12Z were never in GCC, and GNU binutils assembles S12Z with no compiler behind it | a licence for one of them, and a Windows runner. A 16-bit `int`; where `size_t` has 16 bits, Tier 0 only, as on AVR |
 | PowerPC e200 with VLE (NXP MPC5xxx) | NXP's GCC 4.9.4 with its VLE patches (`powerpc-eabivle-gcc`, in S32 Design Studio for Power Architecture), free to use | GCC does not generate VLE code (binutils assembles it), and NXP's compiler is downloaded behind its sign-in. QEMU has no e200 machine: nothing would run, it would be compiled only | a copy of NXP's compiler CI can fetch, or a public release. Big-endian 32-bit PowerPC's data model is tested already (`big-endian-32`); e200 would add VLE code, and the machine model planned under "Proved at" |
+| Infineon TriCore (AURIX TC2xx, TC3xx, TC4xx) | HighTec's toolchain and TASKING's VX-toolset, both commercial, each with a free version; a community port of GCC 13.3 with newlib (NoMore201/tricore-gcc-toolchain, downstream of EEESlab's tricore-gcc-toolchain-11.3.0), its releases and sources on GitHub | GCC has no TriCore port upstream. HighTec's free entry toolchain is sent, with a licence file, by e-mail after a form, for a Windows installer; TASKING's free VX-toolset only through a registration, an evaluation licence of three months, node-locked to a server it must reach. The community port is neither a vendor's nor in Ubuntu's archive, and the author chose not to take it (VERIFY-105) | a vendor's compiler CI can fetch, or the author's decision to take the community port, fetched or built with its checksum pinned. Ubuntu's archive has the emulator, `qemu-system-tricore` (QEMU 8.2.2, in `qemu-system-misc`), so the tests could run there as well as compile |
 | Analog Devices SHARC+ addressing bytes (`-char-size-8`: ADSP-SC58x, ADSP-2158x) | Analog Devices' CrossCore Embedded Studio, commercial | no free C compiler: GCC has no SHARC port | a licence for it, and a runner it installs on. Its type sizes are not yet checked; the SHARC+ built for words is not supported (below) |
 
 ## Not supported
@@ -169,4 +171,7 @@ the SHARC compiler's sizes of types before SHARC+ ([its manual, Rev
 "Data Type and Data Type Sizes") and its byte-addressing on SHARC+
 ([CrossCore Embedded Studio 2.9.0's
 manual](https://www.analog.com/media/en/dsp-documentation/software-manuals/cces-sharccompiler-manual.pdf),
-"Using Byte-Addressing").
+"Using Byte-Addressing"); for TriCore, [HighTec's free entry
+toolchain](https://free-entry-toolchain.hightec-rt.com/), [TASKING's free
+VX-toolset](https://tasking.com/node/485) and [the community GCC
+port](https://nomore201.github.io/tricore-gcc-toolchain).
