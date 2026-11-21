@@ -42805,3 +42805,149 @@ What it shows:
 - **Compiled, not run, says how far it goes.** The documents say ARC is
   compiled for and why nothing runs; what a run would need beyond a
   simulator, the 8-byte atomic of `lifetime_test.c`, is in this record.
+
+---
+
+## VERIFY-107: Pre-registration — dsPIC and PIC24's Core, with Microchip's XC-DSC 4.00, Fetched from Microchip: the Platform Tiers at a 16-bit `size_t`, Run 1 Measuring
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-107 |
+| **Date**       | 2026-11-22 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 87f43d2 (VERIFY-106's change; its close, fbe94cd, a record, is pushed with this): `1` and `3` to `6` #91, `2` #126, `8` #149. |
+| **Scope**      | `tools/tier_check.sh`: the AVR check, renamed and widened (a compiler, its target flags, a flag for a 64-bit `double`, the notice's title, report-only); `tools/avr_tier_check.sh`, which now calls it with AVR's defaults; `tools/dspic/` (`probe.sh`, `README.md`); `.github/workflows/platforms.yml`: a job, `dspic`, and the file's opening comment. The README's platform tiers, `docs/architectures.md` (a row, the planned entry), `docs/verification.md` (a sentence, a row), `docs/implementation-defined.md` (`size_t`) and the workflow map. No library or test file. |
+| **Category**   | The list's item 8, its last entry: dsPIC and PIC24, as the author chose on 2026-11-22, Microchip's XC-DSC 4.00 from its archive, and CI measuring first. |
+
+### What is missing
+
+Nothing compiles Canon-C for dsPIC or PIC24. `docs/architectures.md` plans
+them with XC16, "free with its optimization limited (`-O0`, `-O1`)"
+(VERIFY-100). Since then Microchip has made every MPLAB XC compiler's
+optimizations free (8 July 2026), and released XC-DSC 4.00 the same day,
+its compiler for dsPIC33, which needs no key for them and comes as an
+archive as well as an installer. No Ubuntu package compiles for either
+family, and GCC has no port for them upstream.
+
+### The author's choices (2026-11-22)
+
+Asked, with the facts below, whether CI should fetch a Microchip compiler,
+which would be the first proprietary vendor compiler in CI, and accept
+Microchip's licence for the project:
+
+- **XC-DSC 4.00's archive**, over XC16 2.10's installer (run with `sudo`,
+  its levels above `-O1` wanting a key from a Microchip account) and over
+  waiting.
+- **CI measures first.** This workspace cannot reach Microchip's server,
+  and the author's rule keeps a download from running here: run 1 reports
+  what it finds, and a later record pins it and enforces it.
+
+### What changes
+
+- **`tools/tier_check.sh`** is the AVR check, renamed, with its
+  compiler, target flags and notice title in variables whose defaults are
+  AVR's (`avr-gcc`, `-mmcu=atmega328p`, `avr`). `F64_FLAGS`, when set,
+  gives Part 2 and the report a 64-bit `double` by a flag, in the tree as
+  it is, where AVR's avr-gcc 7, which has none, needs the scratch copy
+  with types.h's f64 check removed. `REPORT_ONLY`, when set, prints a
+  failed check and exits 0, "report only" in the notice.
+  `tools/avr_tier_check.sh` calls it unchanged, so the `embedded` job's
+  step and every document that names it stand.
+- **`tools/dspic/probe.sh`** prints what the compiler is: its version;
+  `-mprint-devices`, and whether it lists the two devices; whether a unit
+  compiles with no `-mcpu` and at each device; the type sizes there, from
+  the predefined macros, with and without `-fno-short-double`, the GCC
+  beneath and `__XC_DSC_VERSION__`; and the status and first message of
+  `-O0`, `-O1`, `-O2`, `-O3`, `-Os` and the project's warning flags. A
+  notice, `dspic probe`, sums it up. It enforces nothing.
+- **`dspic`**, a job of `platforms.yml`: Microchip's
+  `xc-dsc-v4.00-full-install-linux64.tar.xz`, fetched from Microchip; its
+  SHA-256 and SHA-1 printed, and one of them required to begin `4fa70007`
+  and end `acef`, the digest Microchip's download page shows abbreviated
+  and does not name, before anything in it runs; the archive unpacked and
+  the `xc-dsc-gcc` nearest its top put on the `PATH`. Then the probe; then
+  `tier_check.sh` at `-mcpu=generic-16dsp` and `-mcpu=generic-16bit`, with
+  `-fno-short-double`, report only, its notices `dspic generic-16dsp` and
+  `dspic generic-16bit`. The job fails only if the fetch, the digest or
+  the archive does. Nothing is installed or cached, and nothing is linked
+  or run on the target.
+- **The documents**: a row of "Compiled for", run 1 reporting only; the
+  planned entry, now for running them, and why XC16 is not used; the
+  README's platform tiers, `docs/verification.md`, the `size_t` entry of
+  `docs/implementation-defined.md`, the workflow map, and
+  `tools/dspic/README.md`.
+
+### Read, at Microchip
+
+- **XC-DSC's page**: version 4.00, 08 Jul 2026, its Linux installer
+  (`b81f5bef... 2712`) and its Linux compressed archive (`4fa70007...
+  acef`), the digests abbreviated, their kind unnamed; "a natural
+  evolution of the MPLAB XC16 compiler"; v4.00 and later "do not require a
+  key to access advanced optimizations"; for PIC24, XC16 "would be the
+  most suitable".
+- **XC16's page**: 2.10, its installers of 18 Apr 2023; "we encourage
+  customers to migrate to the XC-DSC compiler for any new projects
+  involving dsPIC33 DSCs", and "For any new projects using PIC24
+  microcontrollers (MCUs), please use the XC16 compiler".
+- **Microchip's release of 8 July 2026**: the XC Pro compilers "are now
+  available at no cost", with "unlimited installs"; and its licence page:
+  "As of July 8, 2026, all MPLAB® XC Compiler licenses are free of
+  charge", for XC8, XC16, XC-DSC and XC32, a licence file still activated
+  from a Microchip account.
+- **The XC-DSC user's guide** (DS-50003589D): device support is "no
+  longer packaged" with the compiler, but in device family packs; its
+  virtual devices include `generic-16bit`, "a generic core device without
+  DSP instructions (no peripherals of any kind)", and `generic-16dsp`;
+  `-mprint-devices` lists the devices an installation supports.
+- **Microchip's Unified Standard Library reference**: "The default size of
+  the MPLAB XC16 and XC-DSC double type is 32 bits", 64 "with the
+  -fno-short-double option".
+
+### Measured here
+
+- **The AVR check**, `tools/avr_tier_check.sh` calling `tier_check.sh`,
+  with Ubuntu's avr-gcc 7.3.0, under a UTF-8 locale as on the runner: its
+  56 lines are those of `embedded`'s step at #126, line for line, as they
+  were before the change.
+- **The scripts' paths**, with a stand-in for `xc-dsc-gcc` written here
+  (avr-gcc behind it, `-mcpu=generic-*` read as `-mmcu=atmega328p`,
+  `-fno-short-double` dropped): the probe prints each section and its
+  notice and exits 0; `tier_check.sh` with `F64_FLAGS` and `REPORT_ONLY`
+  prints Part 2's failures (the stand-in's `double` stays at 4 bytes),
+  "REPORT ONLY: 4 check(s) failed, not enforced", the notice with "report
+  only", and exits 0, twice in the job's loop under `bash -e`.
+- **The fetch step's script**, its `curl` replaced by a copy of a
+  stand-in archive: with that archive's own digest ends it prints both
+  digests, unpacks, and puts the shallower of two `xc-dsc-gcc` on the
+  `PATH`; with `4fa70007` and `acef` it fails, "FAIL: neither digest is
+  Microchip's 4fa70007... acef", before unpacking.
+- **Microchip's server** from this workspace: refused by its proxy ("403
+  Forbidden ... no rule or network setting allows this host").
+- `shellcheck` 0.9.0, Ubuntu's, installed for this: the three scripts and
+  the fetch step clean. `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| L1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| L2 | **The fetch**: Microchip's server gives the archive to `curl`; its SHA-256 or its SHA-1 begins `4fa70007` and ends `acef`; the archive holds `xc-dsc-gcc`. | a refused or failed download, neither digest matching, or no `xc-dsc-gcc` | M: never fetched; Microchip's figure is abbreviated and its kind unnamed; the archive's layout unread |
+| L3 | **The compiler runs**: its version's first line names 4.00, and a unit compiles at `generic-16dsp` and `generic-16bit`, with no device family pack. | another version, or a device refused | M–L: the virtual devices' needs are not documented |
+| L4 | **The types**, at both devices, as Microchip documents them: `int`, pointers and `size_t` of 2 bytes, `long` 4, `long long` 8, `float` 4, `double` 4, and 8 with `-fno-short-double`, `long double` 8; little-endian. | another size, or a macro missing | M–H: Microchip's guides; read from GCC's predefined macros |
+| L5 | **The levels**: `-O0`, `-O1`, `-O2`, `-O3` and `-Os` each compile the probe's unit, status 0, no message; the project's warning flags too. | a status other than 0, or a message | M: "do not require a key" is Microchip's; `-Wpedantic` needs a GCC of 4.8 or later beneath |
+| L6 | **The tiers, report only**, at each device: Part 1, `types.h`, `bits.h`, `compare.h` and `contract.h` refused by the f64 check and `scope.h` compiling; Part 2, the five Tier 0 headers compiling and the eight Tier 1 headers refused by the Tier 1 `#error`; of the 80 headers, AVR's 29 compiling and AVR's 49 refused by Tier 1; "0 check(s) failed; report only". | a failed check, or another header's outcome | M–L: AVR's outcomes, at another compiler and C library |
+| L7 | **`dspic` is green.** | a failed step | M: if L2 holds |
+| L8 | **Nothing else changes**: `embedded`'s AVR step's 56 lines those of #126; 1 and 3 to 6 give #91's notices, 2's 36 other jobs #126's (times aside); 8 is green, its two jobs as at #149, no notice. | another line, another notice, or a failure | H: the AVR lines measured here |
+
+**Not predicted**: the archive's size, its full digests and which kind
+Microchip's figure is; its layout; the GCC beneath XC-DSC; plain `char`'s
+sign; `-mprint-devices`' count; whether `util/parse.h` and `util/time.h`,
+AVR's two others (avr-libc's `strtoll` and `struct timespec`), compile;
+the times.
+
+### What follows
+
+L1 to L8 scored, and the record closes. The next record pins what run 1
+measured: the archive's full digest, by which it is then cached, as
+`msp430`'s package is; the probe's figures; and the tier check's outcomes,
+enforced from then on. Then item 9, the CompCert matrix.
