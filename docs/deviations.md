@@ -42300,6 +42300,7 @@ What it shows:
 | **ID**         | VERIFY-103 |
 | **Date**       | 2026-11-21 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-21 — Scored: H1 and H2 MATCH. CLOSED: two of two scored ("Scored", below). The README's examples follow its own rules, each built from its text here; "Not supported" is the current design's limit, with issue #14. The Status above is the record as committed. |
 | **Baseline**   | b745271 (VERIFY-102's change; its close, 6980a96, a record, is pushed with this): `8` #145. |
 | **Scope**      | `README.md`: the Usage example, two of the Examples (Cleanup's `goto done`, Error propagation's `TRY`), a line in the Examples' introduction, and a sentence in the platform tiers; `docs/architectures.md`: "Not supported", its introduction and two rows. No code, test, tool or workflow file. |
 | **Category**   | The author's review of the README on 2026-11-21, and the author's decisions in it: Usage to show Option properly, and Result; failures as named Errors, not bare codes, in every example; `get_err` at the callers; issue #14, which the author opened, linked from "Not supported" and the platform tiers. |
@@ -42398,3 +42399,37 @@ H1 and H2 scored, and the record closes. Then RL78, Tier 0, as the author
 chose. For the author: whether a check should build the README's
 examples, so that one which does not compile, or does not do what its
 text says, fails a run; this record's fault was found by reading.
+
+### Scored (2026-11-21)
+
+The push of aa9e67d, 4117bc0 and 8159a42 started one workflow, `8` #146,
+green at its first attempt.
+
+| # | scored |
+|---|--------|
+| H1 | **MATCH.** 8 ran, and no other. |
+| H2 | **MATCH.** 8 green, its two jobs, `record-coverage` and `workflow-size`, as at #145, no notice. |
+
+Two of two scored.
+
+**Closed.** The README's Usage makes its Option and Result as they are
+meant to be made, in a header of the program's own, and its examples
+carry each failure as a named `Error` to one place where it becomes an
+exit status; each was built from the README's text with GCC and Clang at
+`-Werror` and run. "Not supported" says that none of Canon-C compiles on
+those targets by the current design, and issue #14 holds what a subset
+would take. The close changes nothing but this record.
+
+What it shows:
+
+- **An example teaches more than its text.** The old Usage compiled, and
+  exited 0, and taught an include that does nothing and a bare `1`; the
+  author found it by reading, since no workflow builds the README.
+- **A library's idioms have a compiler's edge.** `CANON_OPTION` in a `.c`
+  file is clean under GCC and twelve errors under Clang's
+  `-Wunused-function`: where a user writes the instantiation is part of
+  the API, and the README now says where.
+- **"Not supported" is a statement about a design.** Measured, the
+  semantic layer needs no 8-bit type; the limit is the byte-based layers,
+  and the record of what lifting it would take is an issue, not a
+  sentence that closes the door.
