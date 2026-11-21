@@ -42433,3 +42433,91 @@ What it shows:
   semantic layer needs no 8-bit type; the limit is the byte-based layers,
   and the record of what lifting it would take is an issue, not a
   sentence that closes the door.
+
+---
+
+## VERIFY-104: Pre-registration — Renesas RL78 Not Supported, for Now: GCC 13.3's `double` Has 32 Bits, and No Option Makes It 64
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-104 |
+| **Date**       | 2026-11-21 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 8159a42 (VERIFY-103's change; its close, a75482c, a record, is pushed with this): `8` #146. |
+| **Scope**      | `docs/architectures.md`: a row of "Not supported", Renesas RL78. No code, test, tool or workflow file; no job. |
+| **Category**   | The list's item 8: Renesas through GDB's simulators, its third target, RL78, Tier 0, as the author chose on 2026-11-20; and the author's decision of 2026-11-21 on what its first measure found: not supported, for now, with issue #14. |
+
+### What is missing
+
+The plan was RL78 at Tier 0, as MSP430X is: a 16-bit `size_t`, Tier 1
+refused, the tests below it built and run. `docs/architectures.md` did
+not name RL78.
+
+### What changes
+
+- **`docs/architectures.md`**: RL78 under "Not supported", beside 8051
+  and STM8: GCC 13.3's RL78 `double` has 32 bits and no option changes
+  it, so `types.h` refuses it at its `f64` check; what a scratch copy
+  without that check found; Tier 0 once `f64` is optional, with that work
+  to do (issue #14), as the author chose. No job: CI builds nothing for
+  RL78.
+
+### Measured here
+
+- **The toolchain.** `tools/renesas/build.sh rl78-elf`, as committed,
+  from the four packages VERIFY-101 measured: 13 minutes (798 s) on 2
+  CPUs, 124 MB installed, "rl78-elf-gcc (GCC) 13.3.0", multilibs `.`,
+  `g10`, `g13` and `g14`.
+- **`double`.** `__SIZEOF_DOUBLE__` 4, `__DBL_DIG__` 6, at `-mcpu=g10`,
+  `g13` and the default, `g14`; `long double` 8. `rl78-elf-gcc
+  -m64bit-doubles` gives "error: unrecognized command-line option
+  '-m64bit-doubles'". `rl78.h` has `#define DOUBLE_TYPE_SIZE 32 /*64*/`,
+  and `rl78.opt` no such option, as trunk's has none; GCC's manual (13.3's
+  `invoke.texi`, RL78 Options) still documents `-m64bit-doubles` and
+  `-m32bit-doubles`, which `ChangeLog-2014` (2014-05-28) records as added
+  to `rl78.opt`, `rl78.h` and `t-rl78`.
+- **The refusal.** `bits_test.c`, a Tier 0 test, for RL78:
+  "core/primitives/types.h:144:14: error: size of array
+  'canon_types_assert_f64_is_8_bytes_' is negative".
+- **The other sizes.** `int`, pointers and `size_t` 16 bits (`SIZE_MAX`
+  65535), `long` 32, plain `char` unsigned.
+- **The simulator.** A probe linked with `-msim` under `rl78-elf-run`
+  printed its line and exited with 3. Its output began with a NUL byte:
+  libgloss's `write` opens a simulated UART, whose setup writes 0x8a00 to
+  `SDR00`, and the simulator prints each byte written there. `stderr`
+  comes out on `stdout`: libgloss's `write` sends descriptors 0 to 2 to
+  that UART.
+- **A scratch copy, `f64`'s check removed** (`types.h:144`, the one line),
+  built at Debug by `renesas.py` with an `rl78` variant (`-mcpu=g14`, `-msim`)
+  and the simulator's NUL dropped from its output, report-only: 61 tests,
+  5 passed (`autosar_bool_test`, `autosar_test`, `contract_test`,
+  `lifetime_test`, `ownership_test`), 3 failed (`types_test` its `f64`
+  check, `scope_test` 3, its file not opened, `log_test` stopped at
+  300 s), 53 not built: 42 by Tier 1's `#error`, `compare_test` by a
+  floating constant past a 32-bit `double`, `time_test` by `clock_gettime`,
+  and nine (`bits_test`, `slice_test`, `option_test`, `result_test`,
+  `diag_test`, `error_test`, `fold_test`, `parse_test`, `random_test`) in
+  the link: "relocation truncated to fit: R_RL78_DIR16U" against newlib's
+  `__sread`, `__swrite`, `__sseek` and `__sclose`. The probe alone, with
+  `printf`, has 65554 bytes of code; RL78's function pointers have 16
+  bits. The other build types were stopped; nothing of the scratch copy
+  is committed.
+- `tools/which_workflows.py`: 8 alone.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| I1 | **8 runs**, and no other. | another set | H |
+| I2 | **8 is green**, its two jobs as at #146, no notice. | a failure, or a notice | H |
+
+**Not predicted**: nothing.
+
+### What follows
+
+I1 and I2 scored, and the record closes. Item 8 then has TriCore to
+check against "Waiting for a compiler", ARC compiled only, and
+dsPIC/PIC24, planned. For issue #14, RL78 is a second target without a
+64-bit `double`, one whose compiler and simulator `build.sh` already
+builds; and its 16-bit function pointers are a limit of their own, which
+a Tier 0 on RL78 would meet.
