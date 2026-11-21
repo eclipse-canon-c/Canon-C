@@ -42031,3 +42031,213 @@ What it shows:
   on a library this machine has and the runner has not; run 2's measure,
   every configure told that the system has no readline, was the runner's,
   and run 2 gave it.
+
+---
+
+## VERIFY-102: Pre-registration — The Tests on Renesas RX under GDB's Simulator, with Its FPU, without It, and with Big-Endian Data; MSP430's `tmpfile()` and Corrected crt Files Linked, RX's Debug without `-g`
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-102 |
+| **Date**       | 2026-11-21 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | acdb587 (VERIFY-101's run 2; its close, ba463f0, a record, is pushed with this): `1` and `3` to `6` #89 (3c361c2), `2` #124, `8` #144. |
+| **Scope**      | `tools/renesas/`: `renesas.py` (three RX variants; pins over lists of variants; RX's Debug flags; `tmpfile.c` and the corrected crt files linked; the file probe's `remove` and, at RX, its `tmpfile()`; the multilib and `__FINITE_MATH_ONLY__` in the first lines), `pins.txt` (eight lines for RX), `toolchain.cmake`'s and `README.md`'s text; `build.sh` unchanged. `tools/msp430/tmpfile.c` and `tools/msp430/README.md`: their text, which names RX's link. `.github/workflows/platforms.yml`: `renesas`'s matrix, five variants, each job's target read from `renesas.py target`; `records.yml`: a comment. The README's bare-metal section, `docs/architectures.md` (a row; RX out of the planned list; a note), `docs/verification.md`, `docs/implementation-defined.md` and the workflow map. No library or test file. |
+| **Category**   | The list's item 8: Renesas through GDB's simulators, its second target, RX with big-endian data, as the author chose on 2026-11-20; and the author's four decisions of 2026-11-21 on what its first measure found: the FPU's variant and one without it, the FPU's failures pinned; big-endian data with corrected crt files; RX's Debug at `-O0` without `-g`; MSP430's `tmpfile.c` linked, and the rest pinned. |
+
+### What is missing
+
+No test has run on Renesas RX, nor on big-endian data with no operating
+system: the big-endian runs so far are Linux's, s390x and 32-bit PowerPC
+under qemu-user. `docs/architectures.md` plans "Renesas RX, big-endian",
+to be compiled for. GCC builds for RX from the same four source packages
+as for RH850.
+
+### What changes
+
+- **`tools/renesas/renesas.py`**: three variants for `rx-elf`, each at
+  CMake's four build types, run under `rx-elf-run`: `rx`
+  (`-mcpu=rx600 -m64bit-doubles`: the RX600, its FPU, GCC's default),
+  `rx-nofpu` (the same with `-nofpu`) and `rx-be` (`rx-nofpu` with
+  `-mbig-endian-data`). `rx-be` is `rx-nofpu`, not `rx`, with
+  big-endian data: the two then differ by the data's byte order alone,
+  and keep the checks of NaN and infinity that the FPU's finite math
+  takes away (below); the author's decisions left it open, and this is
+  the script's choice. Each RX test links `-msim`, and
+  `tools/msp430/tmpfile.c` through `-Wl,--wrap=tmpfile`, as the author
+  chose; `rx-be` also `crtbegin.o` and `crtend.o` copied with their
+  `.init_array` and `.fini_array` marked as data, put before GCC's by
+  `-B`, as the author chose. RX's Debug is `-O0` without `-g`, as the
+  author chose: `CMAKE_C_FLAGS_DEBUG` is set to `-O0`, and each Debug
+  leg's `flags.make` checked for it and for no `-g`. Each RX leg's
+  binaries checked: Renesas RX, the variant's byte order, `64-bit
+  doubles` in their ELF flags, compiled with the variant's flags. A pin
+  names a list of variants, or all. The file probe removes its file and
+  prints `remove`'s result; at RX it also writes, rewinds and reads back
+  a `tmpfile()`, built with newlib's and with `tmpfile.c`'s. The first
+  lines name the multilib GCC links and `__FINITE_MATH_ONLY__`. RH850's
+  variants, their flags and their support are as they were.
+- **`tools/renesas/pins.txt`**: eight lines for RX, measured below, each
+  with the reason; RH850's one line as it was.
+- **`renesas`**, in `platforms.yml`: the matrix is `rh850`, `rh850-soft`,
+  `rx`, `rx-nofpu` and `rx-be`; each job, after its checkout, writes its
+  target, from `renesas.py target`, to `TARGET`, which names the cache's
+  path and key and the build, as `v850-elf` did. The key's other parts
+  are as they were, so RH850's entry stays the one VERIFY-101's run 2
+  saved.
+- **The documents** name RX in the job, and RX leaves the planned list.
+  The README's bare-metal section gains a note: GCC's RX `double` and
+  its FPU's finite math.
+
+### Measured here
+
+**The toolchain.** `build.sh rx-elf`, as committed, from the four
+packages VERIFY-101 measured, built in 27 minutes (1606 s) on 2 CPUs,
+486 MB installed: "rx-elf-gcc (GCC) 13.3.0"; `rx-elf-run` has no
+`--version`. GCC builds newlib and libgcc for 32 multilibs. GCC's
+`double` for RX has 32 bits by default, which `types.h` refuses ("size
+of array 'canon_types_assert_f64_is_8_bytes_' is negative"): hence
+`-m64bit-doubles`. `__atomic_fetch_add` of 4 bytes links, of 8 does not
+(`___atomic_fetch_add_8` undefined): hence `CANON_LIFETIME_NO_ATOMICS`.
+
+**The first measure**, at `-mcpu=rx600 -m64bit-doubles`, GCC's FPU
+default, without `tmpfile.c`: at Release, 53 passed; `compare_test` 12
+`FAIL` lines, `diag_test` 3, `impl_defined_test` 9, `log_test` 15,
+`file_test` 3, `parse_test` 6, `random_test` stopped at 300 s;
+`time_test` not built. At Debug (`-O0 -g`), 7 passed and 54 not built.
+With `-mbig-endian-data`, no program ran as GCC links it (big-endian
+data, below). The author's four decisions answered these.
+
+**The run**, with the scripts as committed, at the five variants and
+each build type, once report-only and once enforced, the same each time:
+
+- `rx`, each leg "61 tests, 55 passed, 5 failed (compare_test 12,
+  impl_defined_test 9, file_test 3, parse_test 6, random_test 2), 1 not
+  built (time_test); as pinned" at Debug, and with "random_test
+  times-out" for "random_test 2" at Release, RelWithDebInfo and
+  MinSizeRel: 3.5 minutes in all, three of them `random_test`'s stops.
+- `rx-nofpu`, each leg "61 tests, 58 passed, 2 failed
+  (impl_defined_test 4, file_test 3), 1 not built (time_test); as
+  pinned"; 0.8 minutes in all.
+- `rx-be`, each leg "61 tests, 57 passed, 3 failed (impl_defined_test 4,
+  stringbuf_test 1, file_test 3), 1 not built (time_test); as pinned";
+  0.8 minutes in all.
+- `rh850` and `rh850-soft`, each leg "61 tests, 60 passed, 0 failed, 1
+  not built (time_test); as pinned", as at VERIFY-101.
+- The RX binaries "ELF32, 2's complement, little endian, Renesas RX;
+  flags 0xc9, 64-bit doubles, RX ABI, uses String instructions", "big
+  endian" at `rx-be`; each Debug leg's compiled with "-O0", without
+  `-g`. `random_test`, where it ends, in 1.9 to 5.4 s.
+- **The probes.** At the three RX variants: "renesas probe: int 4, long
+  4, long long 8, pointer 4, size_t 4 (SIZE_MAX 4294967295), double 8,
+  long double 8; aligned: long long 4, double 4, long double 4, pointer
+  4; char unsigned"; exit 3. The file probe, at each: "file probe,
+  newlib's tmpfile: fopen w a stream; fclose 0; fopen r a stream; read
+  "canon"; remove 0; tmpfile a stream; fseek 0; tmpfile read back "";
+  exit 0" and "file probe, tmpfile.c's tmpfile: fopen w a stream; fclose
+  0; fopen r a stream; read "canon"; remove 0; tmpfile a stream; fseek 0;
+  tmpfile read back "canon"; exit 0". At RH850 the probe's line and the
+  file probe's newlib line as at VERIFY-101, and `open.c`'s with "remove
+  0" before its exit.
+- The first lines: "newlib 4.4.0; libraries 64-bit-double;
+  __FINITE_MATH_ONLY__ 1" at `rx`, the same with 0 at `rx-nofpu`, and
+  "64-bit-double/big-endian-data", 0, at `rx-be`; `v850e3v5` and
+  `soft-float/v850e3v5`, 0, at RH850.
+
+**What the measures found**, outside the library:
+
+- **The FPU's finite math.** `rx.cc` sets `flag_finite_math_only` where
+  the FPU is used, "since the FPU instructions do not support NaNs and
+  infinities". `-Q --help=optimizers` gives `-ffinite-math-only` on with
+  the FPU, on still with `-fno-finite-math-only`, off with `-nofpu`, and
+  `-funsafe-math-optimizations` off at all three; GCC's manual says the
+  FPU turns on `-funsafe-math-optimizations`. The failing lines:
+  `compare_test`'s twelve, NaN against a number, in `algo_cmp_f32`,
+  `algo_cmp_f64` and their `_desc` forms; `impl_defined_test`'s 243, 244
+  and 246 to 248; `parse_test`'s six `isinf` and `isnan`; `random_test`'s
+  560 and 561, `v != v` of a NaN. `random_f32_range(&r, -inf, 1)` and
+  `random_f64_range(&r, 0, inf)`, each alone at `-O2`, do not return in
+  10 s; with `-nofpu` both return.
+- **The libraries GCC links.** `-nofpu`, `-mnofpu` and `-mcpu=rx200`
+  each give `-print-multi-directory` `64-bit-double`, never
+  `64-bit-double/no-fpu-libs`. `t-rx` has `MULTILIB_MATCHES = nofpu=mnofpu
+  nofpu=mcpu?rx200 nofpu=mcpu?rx100`, and GCC's manual writes a match
+  `option=synonym`, the option one of `MULTILIB_OPTIONS`; `nofpu` is not
+  one, and `gcc.cc`'s `used_arg` takes the first match of a switch only,
+  so `-mnofpu` becomes `nofpu` and selects nothing. The `64-bit-double`
+  newlib was compiled "-m64bit-doubles -g -O2" (its `DW_AT_producer`),
+  with finite math, and five of its objects, `vfprintf`'s, `strtod`'s,
+  and libm's two of `sqrtf` and one of `isnanf`, hold 7 FPU instructions;
+  `no-fpu-libs`'s, "-m64bit-doubles -mnofpu", none. Its `printf` gives
+  "I.nfinitye+9998", "-I.nfinitye+9998" and "N.aNe+9998" for `%g` of an
+  infinity, its negative and a NaN, and "N.aN0000e+9998" for `%e` of the
+  NaN; `%f` of each stops the program, "Read from unwritten memory at
+  0x30303038"; at `-nofpu` the same. Linked by hand with `no-fpu-libs`'s
+  crt files and libraries, the same program prints "inf -inf nan inf".
+  No test formats an infinity or a NaN; the library's one `%f`,
+  `hashmap_fmt.h`'s load, is finite.
+- **The simulator's system calls.** `rx_syscall` (`sim/rx/syscalls.c`)
+  handles exit, open, close, read, write, getpid (42), gettimeofday and
+  kill, and the heap's top and a cycle count; any other number returns
+  with r1, its first argument, as it was. Measured: after `fseek(f, 0,
+  SEEK_END)`, 0, `ftell` gave 4 for an 11-byte file; `rename` gave 0 and
+  renamed nothing; `remove` gave 0 and left the file. newlib's
+  `tmpfile()` left its file in the host's `/tmp`, `/tmp/t2a.N` (44 from
+  these measures, deleted); `tmpfile.c`'s leaves none. The failing lines:
+  `file_test`'s 112 (`remove`), 169 and 186 (`file_read_all_arena`,
+  which sizes a file with `fseek` and `ftell`); `impl_defined_test`'s
+  289, 290, 299 and 301 (after `rename` and `file_write_all_atomic`).
+- **Big-endian data.** `crtbegin.o`'s `.init_array` and `.fini_array`
+  are "CONTENTS, ALLOC, LOAD, CODE". Linked as GCC links it, at `rx-be`'s
+  flags, the probe stops, "Read from unwritten memory at 0xdc90000c",
+  exit 1, and so does a program printing an initialized `static` int
+  ("... at 0x448c000c"); `nm` types newlib's `__impure_ptr`, in `.data`,
+  `T`. With the copies, `D`, the probe runs, and the program gives "data
+  0x11223344, rodata "canon"".
+- **`%ls`.** newlib's `newlib.h` leaves `_MB_CAPABLE` undefined, and
+  `vfprintf.c` reads `%ls`'s argument as wide only under it; otherwise
+  as `%s`. `snprintf` of `%ls` and `L"ab"` gives 1, "a", with
+  little-endian data and 0, "" with big-endian; of the test's one
+  character, 1 and 0. Hence `stringbuf_test.c:545` at `rx-be`.
+- **The internal error.** At `-O0 -g`, `int f(int a) { return a; }` stops
+  GCC "in dwarf2out_frame_debug_adjust_cfa, at dwarf2cfi.cc:1339", and
+  so does `bits_test.c` at the three RX flag sets; the function compiles
+  at `-O0 -g -fomit-frame-pointer`, and `bits_test.c` at `-O0` and at
+  `-O1 -g` to `-O3 -g`; 57 test files of the suite compile at
+  `-O0 -g -fomit-frame-pointer` (`autosar_test`, the 58th, wants its own
+  include folder), and each test but `time_test` (not built, pinned) at
+  `-O2 -g`, RelWithDebInfo. It looks like GCC's PR target/89828, an RX
+  report of the same assertion with `-fno-omit-frame-pointer` and `-g`:
+  reported in 2019, with patches proposed in 2023.
+- **The refusals**, each made to fire: a pin of a variant the script does
+  not have, of a build type it does not have, and two pins for one leg;
+  a Debug leg's `C_FLAGS` with `-g`, a `flags.make` without the variant's
+  `-nofpu`, a little-endian binary at `rx-be`, a binary of 32-bit doubles
+  (its flags "0xc8, RX ABI, uses String instructions"); a pin that does
+  not hold, exit 1, and 0 with `--report-only`.
+- `renesas.py check`: 9 pins, 61 tests, no problem, under Python 3.11,
+  3.12 and 3.13. `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| G1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| G2 | **The toolchains**: the two RH850 jobs find VERIFY-101's `v850-elf` entry in the cache and skip the build; the three RX jobs find no `rx-elf` entry and build it, each in under 60 minutes, "rx-elf-gcc (GCC) 13.3.0"; one of the three saves the entry. | an RH850 build, a failed RX install or build, another version, or 60 minutes or more | M–H: built here with the script as committed, not on the runner for `rx-elf`; the RH850 entry could be evicted, or the archive's versions move |
+| G3 | **The probes**, word for word: at the three RX variants the probe exits with 3 and prints the line measured here, and the file probe its two lines; at RH850 the probe's line and the file probe's newlib line as at VERIFY-101, and `open.c`'s with "remove 0". | another status, word or line | M–H: the simulator's calls and the libraries as built here |
+| G4 | **The five `renesas` jobs are green**, enforced: each of the twenty legs' lines as measured here, "as pinned", its binaries as measured here. | a difference, or a failed job | M–H: the RX toolchain not yet built on the runner |
+| G5 | **Each `renesas` job's test step under 10 minutes**, `rx`'s the longest. | 10 minutes or more | H: 3.5 minutes here at `rx`, 0.8 at the others |
+| G6 | **Nothing else changes**: 1 and 3 to 6 give #89's notices; 2's 30 other jobs #124's (times, and `embedded`'s slowest header's name, aside), `msp430`'s among them, whose `tmpfile.c` changes in its comment alone; 8 is green. | another notice, or a failure | H |
+
+**Not predicted**: which RX job saves the entry, nor the minutes of each
+build.
+
+### What follows
+
+G1 to G6 scored, and the record closes. Then RL78, Tier 0, with the same
+recipe, as the author chose. For the author, from what this record
+found: whether `rx-nofpu` and `rx-be` should link the `no-fpu-libs`
+libraries GCC builds and never picks; whether `stringbuf_test`'s `%ls`
+check should take an empty conversion; whether the library should refuse
+`__FINITE_MATH_ONLY__`, or say what it does under it; and the reports
+upstream (GCC's `MULTILIB_MATCHES` and its manual, newlib's V850 `_open`).
