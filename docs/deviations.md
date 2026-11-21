@@ -42561,6 +42561,7 @@ What it shows:
 | **ID**         | VERIFY-105 |
 | **Date**       | 2026-11-21 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-21 — Scored: J1 and J2 MATCH. CLOSED: two of two scored ("Scored", below). Infineon TriCore is under "Waiting for a compiler": its vendors' free compilers are had through registrations, and the community GCC port is not taken. The Status above is the record as committed. |
 | **Baseline**   | 90236b9 (VERIFY-104's change; its close, 3daec16, a record, is pushed with this): `8` #147. |
 | **Scope**      | `docs/architectures.md`: TriCore from the planned list to "Waiting for a compiler", a row; the planned machine models say which wait; three sources. No code, test, tool or workflow file; no job. |
 | **Category**   | The list's item 8: TriCore, to be checked against VERIFY-100's rule for compilers; and the author's decision of 2026-11-21 on what the check found: waiting for a compiler. |
@@ -42621,3 +42622,32 @@ J1 and J2 scored, and the record closes. Then ARC, compiled only: GCC
 has an ARC port, which `tools/renesas/build.sh` may build from the same
 source packages. TriCore moves when a vendor's compiler CI can fetch
 appears, or the author takes the community port.
+
+### Scored (2026-11-21)
+
+The push of dec4a6f, 7b00d2e and 5972656 started one workflow, `8` #148,
+green at its first attempt.
+
+| # | scored |
+|---|--------|
+| J1 | **MATCH.** 8 ran, and no other. |
+| J2 | **MATCH.** 8 green, its two jobs, `record-coverage` and `workflow-size`, as at #147, no notice. |
+
+Two of two scored.
+
+**Closed.** Infineon TriCore is under "Waiting for a compiler", with what
+holds it back (no upstream GCC port; HighTec's and TASKING's free
+compilers behind their registrations) and what would let it in (a
+vendor's compiler CI can fetch, or the author's taking of the community
+port), and the emulator Ubuntu already has. The close changes nothing but
+this record.
+
+What it shows:
+
+- **VERIFY-100's rule decides by how a compiler is had.** Two vendors'
+  free compilers, each behind a registration, and a community port that is
+  neither a vendor's nor Ubuntu's: the rule put TriCore in the table, and
+  the author's choice kept the community port out.
+- **A target can wait on one half only.** TriCore's emulator is in
+  Ubuntu's archive already; the row says so, so that a compiler alone
+  would let its tests run, not only compile.
