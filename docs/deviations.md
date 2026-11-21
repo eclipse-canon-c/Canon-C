@@ -41803,6 +41803,7 @@ What it shows:
 | **ID**         | VERIFY-101 |
 | **Date**       | 2026-11-20 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-21 — Run 1 scored: E1 and E6 MATCH, E2 to E5 MISS ("Run 1 scored", below). Both `renesas` jobs stopped in the build, at the simulator's configure: it requires readline, which the runner lacks and this machine has, and `build.sh` had turned GDB's own copy off. Run 2, pre-registered below, builds the simulator with GDB's own readline. The Status above is the record as committed. |
 | **Baseline**   | a8f42e5 (VERIFY-100's change; its close, a record, is pushed with this): `1` and `3` to `6` #88, `2` #122, `8` #142. |
 | **Scope**      | `tools/renesas/` (new: `build.sh`, `renesas.py`, `toolchain.cmake`, `open.c`, `pins.txt`, `README.md`); `test/core/memory_test.c`: two tests' 8-aligned base, and a comment; `.github/workflows/platforms.yml`: a job, `renesas`; `.github/workflows/records.yml`: a step, `renesas.py check`; the README's bare-metal section, `docs/architectures.md` (a row; RH850 out of the planned list; the rule of "Waiting for a compiler" naming a compiler built from Ubuntu's sources usable), `docs/verification.md`, `docs/implementation-defined.md` and the workflow map. No library file. |
 | **Category**   | The list's item 8, its next target, which the author chose on 2026-11-20: Renesas, through GDB's simulators, RH850 first; and the author's two decisions of 2026-11-20 on what its first measure found: newlib's V850 `_open` replaced in the tests' link, and `memory_test` fixed. |
@@ -41928,3 +41929,61 @@ bison.
 
 E1 to E6 scored, and the record closes. Then RX and RL78, with the same
 recipe for their targets, as the author chose.
+
+### Run 1 scored (2026-11-21)
+
+The push of ae8d466, 876362e and 3c361c2 started seven workflows: `1` and
+`3` to `6` #89, `2` #123 and `8` #143. 2 is red, at its two `renesas`
+jobs; the others are green at their first attempt.
+
+| # | scored |
+|---|--------|
+| E1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| E2 | **MISS.** Both `renesas` jobs installed the 13 package files (141 MB) from the archive, the four source packages at the versions measured here, found no toolchain in the cache, and built binutils (50 s at rh850, 63 at rh850-soft), GCC with libgcc (5.6 and 7.9 minutes) and newlib (2.5 and 3.3). Then the simulator's configure stopped: "configure: error: the required "readline" library is missing". GDB 15.1's simulator requires readline: GDB's own copy, if the top level configures it, else the system's. `build.sh` passed `--disable-readline`, so it looked for the system's, which this machine has (`libreadline-dev`) and the runner has not. Nothing was saved to the cache. |
+| E3 | **MISS.** No probe ran: the test step was skipped. |
+| E4 | **MISS.** Both `renesas` jobs are red, at the build. |
+| E5 | **MISS.** The test step did not run. |
+| E6 | **MATCH.** The 63 jobs of 1 and 3 to 6 gave #88's conclusions and notices, times aside, `memory_test` passing in each that runs it; 2's 30 other jobs gave #122's, `embedded` but for its slowest header's name (`semantics/diag.h`, not `algo/any_all/any_all.h`), which E6 set aside; 8 green. |
+
+Two of six.
+
+**What run 1 shows.** VERIFY-099's lesson, measure where the runner will
+be, was applied to the headers there and not to the build's libraries
+here: this machine has `libreadline-dev`, and nothing checked what the
+build found here that the runner would not. The step helper of
+`build.sh` paid for itself: the job's log carries the failed step's last
+lines, which named the cause.
+
+### Run 2: pre-registration (2026-11-21)
+
+**What is decided.** `build.sh` no longer passes `--disable-readline`:
+the top level configures and builds GDB's own readline, from the same
+tarball, and the simulator's configure takes it. Nothing else changes;
+the toolchain's cache key changes with `build.sh`'s hash.
+
+**Measured here**, without the system's readline: the build made with
+`ac_cv_lib_readline_readline=no` in its environment, which tells every
+configure that the system has no readline library. It built in 14
+minutes on 2 CPUs: `readline/` configured and built, the simulator's
+configure not looking for the system's, and `v850-elf-run` linked with
+GDB's `libreadline.a`, needing only libm and libc at run time. With that
+toolchain the eight legs are as at run 1's measure: each "61 tests, 60
+passed, 0 failed, 1 not built (time_test); as pinned", the probes' lines
+word for word.
+
+**The workflows.** `tools/which_workflows.py`: 2 and 8 run. 2 for
+`tools/renesas/build.sh`; 8 for it and for this record.
+
+**Baselines.** 2 #123, 8 #143 (3c361c2).
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| F1 | **2 and 8 run**, and no other. | another set | H |
+| F2 | **The toolchain**: each `renesas` job builds it, the simulator with GDB's own readline, in under 60 minutes, "v850-elf-gcc (GCC) 13.3.0" and "GNU simulator (SIM) 15.1"; one of the two saves the entry. | a failed build, another version, or 60 minutes or more | M–H: built here as the runner has it, but the runner may lack another thing |
+| F3 | **The probes**, word for word, as E3 had them. | another status, word or line | M–H |
+| F4 | **Both `renesas` jobs are green**, enforced, each of the eight legs as E4 had them. | a difference, or a failed job | M–H: not yet run on the runner |
+| F5 | **Each `renesas` job's test step under 5 minutes.** | 5 minutes or more | H |
+| F6 | **Nothing else changes**: 2's 30 other jobs give #123's notices (times, and `embedded`'s slowest header's name, aside); 8 is green. | another notice, or a failure | H |
+
+**What follows.** F1 to F6 scored; if they match, the record closes. Then
+RX and RL78, with the same recipe.
