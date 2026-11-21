@@ -42661,6 +42661,7 @@ What it shows:
 | **ID**         | VERIFY-106 |
 | **Date**       | 2026-11-21 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-22 — Scored: K1 to K5 MATCH. CLOSED: five of five scored ("Scored", below). ARC is compiled for, at ARCv2 EM and HS and ARCompact, with GCC 13.3.0 built on the runner from Ubuntu's source packages and kept in the Actions cache; nothing runs. The Status above is the record as committed. |
 | **Baseline**   | 5972656 (VERIFY-105's change; its close, 827fc18, a record, is pushed with this): `1` and `3` to `6` #90 (b745271), `2` #125 (b745271), `8` #148. |
 | **Scope**      | `tools/embedded_compile_check.sh`: a job's own targets and its notice's title, from two variables, and the compilers' versions read from the targets; without the variables, as it was. `.github/workflows/platforms.yml`: a job, `arc`, and the file's opening comment. `tools/renesas/build.sh` unchanged. The README's bare-metal section, `docs/architectures.md` (a row), `docs/verification.md` (a sentence, a row), `docs/implementation-defined.md` (plain `char`), the workflow map and `tools/renesas/README.md` (a paragraph). No library or test file. |
 | **Category**   | The list's item 8: ARC, compiled only, as the list has it (VERIFY-104's and VERIFY-105's "What follows"). |
@@ -42764,3 +42765,43 @@ and PIC24 with Microchip's XC16, planned. ARC's tests run when CI has a
 simulator for it; a run would link `__atomic_fetch_add_8`, which
 `CANON_LIFETIME_NO_ATOMICS`, as at RX and MSP430, or a library defining
 it would answer.
+
+### Scored (2026-11-22)
+
+The push of 886fe9b, fb979c3 and 87f43d2 started seven workflows: `1` and
+`3` to `6` #91, `2` #126 and `8` #149, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| K1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| K2 | **MATCH.** `arc` found no entry, "Cache not found for input keys: gcc-arc-elf32-20ea3bf39d23bfa1-cff30cc5eb891ea2…", and built `arc-elf32` in 21 minutes: binutils in 1, GCC in 9, newlib in 11, the simulator's step in half a minute, installing none. "arc-elf32-gcc (GCC) 13.3.0". It saved the entry, "Cache saved with key: gcc-arc-elf32-20ea3bf39d23bfa1-cff30cc5eb891ea2…", 63 MB. |
+| K3 | **MATCH.** `arc` green: its compile step printed the version, the headers' line, the nine lines "227 / 227 compiled" and the notice `arc`, word for word, "3 targets x 3 levels, 227 units each (84 headers, with and without CANON_NO_GNU_EXTENSIONS, and 59 tests), 0 failed", in 2 minutes 21 s. |
+| K4 | **MATCH.** `embedded`'s compile step: its 23 lines those of #125, line for line. |
+| K5 | **MATCH.** 1 and 3 to 6 gave #90's notices, and 2's 35 other jobs #125's, times aside, `embedded`'s slowest header the same, `algo/any_all/any_all.h`; 8 green, its two jobs as at #148, no notice. |
+
+Five of five scored. Not predicted, and as it fell: `arc`'s install
+restored the `renesas` jobs' apt entry whole ("Cache hit for:
+apt-renesas-Linux-X64-3e5487e3a8e87af5"), and the five `renesas` jobs
+restored their toolchains and skipped their builds, `build.sh`'s hash
+unmoved.
+
+**Closed.** Canon-C is compiled for ARC, at ARCv2 EM, ARCv2 HS and
+ARCompact ARC700, every header and test at `-O0`, `-Os` and `-O2`, with
+GCC 13.3.0 and newlib 4.4.0 built on the runner by `build.sh`, unchanged,
+from Ubuntu's source packages, and kept in the Actions cache. Nothing
+runs: neither GDB nor Ubuntu's QEMU has an ARC simulator. The close
+changes nothing but this record.
+
+What it shows:
+
+- **One build script, a third target.** `build.sh`, written for RH850 at
+  VERIFY-101 and kept for RX, built ARC's toolchain from the same four
+  packages without a change; its simulator's step, finding no simulator,
+  installed nothing. Its hash, in each toolchain's key, did not move, so
+  RH850's and RX's entries were restored, not rebuilt.
+- **Measured here, then on the runner.** The nine lines the toolchain
+  built here gave were those the runner's gave, word for word, as RX's
+  twenty legs were at VERIFY-102.
+- **Compiled, not run, says how far it goes.** The documents say ARC is
+  compiled for and why nothing runs; what a run would need beyond a
+  simulator, the 8-byte atomic of `lifetime_test.c`, is in this record.
