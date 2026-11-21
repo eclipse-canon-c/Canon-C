@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # VERIFY-046, VERIFY-048: compile Canon-C for bare-metal Arm (newlib and
-# picolibc) and RISC-V RV32 and RV64 (picolibc).
+# picolibc) and RISC-V RV32 and RV64 (picolibc); with a list of its own, for
+# ARC (VERIFY-106).
 #
 # Compile only: nothing is linked or run on the target. Every public header
 # is compiled as its own translation unit, and every test file, under the
@@ -29,7 +30,10 @@
 # (hashmap_test.c, hashmap_multi_test.c, hashmap_separate_test.c).
 #
 # Targets (VERIFY-046; picolibc and RISC-V added by VERIFY-048). Each entry
-# is a compiler and its flags; every one is run at -O0, -Os and -O2.
+# is a compiler and its flags; every one is run at -O0, -Os and -O2. A job
+# may give a list of its own in CANON_COMPILE_TARGETS, one entry a line, and
+# the title of its notice in CANON_COMPILE_TITLE: the `arc` job does
+# (VERIFY-106). Without them, the list below and `embedded`.
 set -u
 OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT
@@ -42,6 +46,10 @@ TARGETS=(
   "riscv64-unknown-elf-gcc --specs=picolibc.specs -march=rv32imac -mabi=ilp32"
   "riscv64-unknown-elf-gcc --specs=picolibc.specs -march=rv64imac -mabi=lp64 -mcmodel=medany"
 )
+if [ -n "${CANON_COMPILE_TARGETS:-}" ]; then
+  mapfile -t TARGETS < <(printf '%s\n' "$CANON_COMPILE_TARGETS" | grep -v '^[[:space:]]*$')
+fi
+TITLE=${CANON_COMPILE_TITLE:-embedded}
 OPTS=(-O0 -Os -O2)
 INC="-I . -I core/primitives -I core -I semantics -I data -I algo -I util -I integrations/autosar -I test/integrations/autosar/stubs"
 WARN="-std=c99 -Wall -Wextra -Wpedantic -Werror"
@@ -80,10 +88,12 @@ hashmap_tu() {
 mapfile -t TESTS < <(find test -name '*_test.c' \
   | grep -vE '^test/concurrency/|^test/util/time_test\.c$' | sort)
 
-if [ "${#HEADERS[@]}" -eq 0 ] || [ "${#TESTS[@]}" -eq 0 ]; then
-  echo "FAIL: empty header or test list"; exit 1
+if [ "${#HEADERS[@]}" -eq 0 ] || [ "${#TESTS[@]}" -eq 0 ] || [ "${#TARGETS[@]}" -eq 0 ]; then
+  echo "FAIL: empty header, test or target list"; exit 1
 fi
-for cc in arm-none-eabi-gcc riscv64-unknown-elf-gcc; do "$cc" --version | head -1; done
+# Each compiler's version once, in the order the targets name them.
+mapfile -t COMPILERS < <(for t in "${TARGETS[@]}"; do echo "${t%% *}"; done | awk '!seen[$0]++')
+for cc in "${COMPILERS[@]}"; do "$cc" --version | head -1; done
 echo "headers: ${#HEADERS[@]} + ${#HASHMAP[@]} hashmap, each twice  tests: ${#TESTS[@]}"
 UNITS=$(( ${#CONFIGS[@]} * (${#HEADERS[@]} + ${#HASHMAP[@]}) + ${#TESTS[@]} ))
 
@@ -115,6 +125,6 @@ for cpu in "${TARGETS[@]}"; do
   done
 done
 SUMMARY="${#TARGETS[@]} targets x ${#OPTS[@]} levels, ${UNITS} units each ($(( ${#HEADERS[@]} + ${#HASHMAP[@]} )) headers, with and without CANON_NO_GNU_EXTENSIONS, and ${#TESTS[@]} tests), ${FAILS} failed"
-[ -n "${GITHUB_ACTIONS:-}" ] && echo "::notice title=embedded::${SUMMARY}"   # VERIFY-050
+[ -n "${GITHUB_ACTIONS:-}" ] && echo "::notice title=${TITLE}::${SUMMARY}"   # VERIFY-050
 if [ "$FAILS" -ne 0 ]; then echo "FAIL: $FAILS compile(s) failed"; exit 1; fi
 echo "OK"

@@ -827,7 +827,9 @@ source packages, each that does not pass pinned with the reason
 Compiled, with nothing run
 (`embedded`): the same two with newlib and picolibc, where enums are short
 and `int32_t` is `long`; RV32 and RV64 with picolibc; and AVR, at a 16-bit
-`size_t`, for the platform tiers.
+`size_t`, for the platform tiers. And (`arc`, VERIFY-106) ARC's ARCv2 EM
+and HS and ARCompact ARC700, with GCC and newlib built from Ubuntu's
+source packages, where plain `char` is unsigned.
 
 ### The other builds, and what each is evidence for
 
@@ -844,6 +846,7 @@ and `int32_t` is `long`; RV32 and RV64 with picolibc; and AVR, at a 16-bit
 | `renesas` | RH850 and RX under GDB's V850 and RX simulators: GCC 13.3 and newlib 4.4 built from Ubuntu's source packages; RH850 under Renesas' RH850 ABI, with the FPU and without; the RX600 with `-m64bit-doubles`, with the FPU (and so finite math), without it, and without it with big-endian data; CMake's four build types, RX's Debug without `-g` | the tests where an 8-byte object is aligned to 4, with plain `char` signed (RH850) and unsigned (RX), on big-endian data with no operating system (RX); each that does not pass pinned with the reason |
 | `c-standards` | C11, C17 and C23 with GCC 14 and Clang, Debug, sanitizers on | the tests at those standards, where the C11 arms are compiled (`_Alignof(max_align_t)`, `_Static_assert`) |
 | `embedded` | Cortex-M, RV32, RV64 and AVR, bare metal | that the headers and tests compile there; nothing runs |
+| `arc` | ARCv2 EM (`em4`), ARCv2 HS (`hs38`) and ARCompact ARC700, bare metal: GCC 13.3 and newlib 4.4 built from Ubuntu's source packages | that the headers and tests compile there; nothing runs, since neither GDB nor QEMU has an ARC simulator |
 | `lifetime-debug`, `lifetime-token-concurrency` | `CANON_LIFETIME_DEBUG`; the atomic levels, with ThreadSanitizer | the lifetime plumbing and the token generation, by tests |
 
 ### Call-order rules (Aorai)

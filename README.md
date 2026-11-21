@@ -931,7 +931,10 @@ For what Canon-C intentionally omits, established C libraries exist:
 > simulators: RH850 with its FPU and without, the RX600 with its FPU,
 > without it, and without it with big-endian data (job `renesas`,
 > VERIFY-101, VERIFY-102); `tools/renesas/pins.txt` names those that do
-> not pass. On RISC-V they are compiled, not run.
+> not pass. On RISC-V they are compiled, not run, and so on ARC
+> (ARCv2 EM and HS, and ARCompact), with GCC 13.3 built from Ubuntu's
+> source packages (job `arc`, VERIFY-106): neither GDB nor QEMU has an
+> ARC simulator.
 >
 > **GCC 13.2 at `-O2` and `-Os`**
 > On Cortex-M, GCC 13.2 (Ubuntu 24.04's `arm-none-eabi-gcc`,

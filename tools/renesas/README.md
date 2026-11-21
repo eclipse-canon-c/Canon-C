@@ -194,3 +194,10 @@ give; the test was fixed, as the author chose. RX is enforced from
 VERIFY-102's run 1, its pins measured before it in the same way, with
 `build.sh` unchanged. The predictions and their scores are in
 `docs/deviations.md`.
+
+**ARC.** The job `arc`, in the same workflow, builds `arc-elf32` with
+`build.sh`, unchanged, and only compiles with it (VERIFY-106): GDB has no
+ARC simulator, so the simulator's step builds none and installs nothing,
+and `tools/embedded_compile_check.sh` compiles the headers and the tests,
+as it does for RISC-V. Its toolchain has an entry of its own in the
+Actions cache.
