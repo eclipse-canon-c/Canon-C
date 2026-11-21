@@ -41803,7 +41803,7 @@ What it shows:
 | **ID**         | VERIFY-101 |
 | **Date**       | 2026-11-20 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-21 — Run 1 scored: E1 and E6 MATCH, E2 to E5 MISS ("Run 1 scored", below). Both `renesas` jobs stopped in the build, at the simulator's configure: it requires readline, which the runner lacks and this machine has, and `build.sh` had turned GDB's own copy off. Run 2, pre-registered below, builds the simulator with GDB's own readline. The Status above is the record as committed. |
+| **Status update** | 2026-11-21 — Run 1 scored: E1 and E6 MATCH, E2 to E5 MISS ("Run 1 scored", below). Both `renesas` jobs stopped in the build, at the simulator's configure: it requires readline, which the runner lacks and this machine has, and `build.sh` had turned GDB's own copy off. Run 2, pre-registered below, builds the simulator with GDB's own readline. Run 2 scored: F1 to F6 MATCH. CLOSED: the tests run on Renesas RH850 under GDB's simulator, with its FPU and without, enforced, 60 of 61 at each leg; eight of twelve predictions over the two runs ("Run 2 scored", below). The Status above is the record as committed. |
 | **Baseline**   | a8f42e5 (VERIFY-100's change; its close, a record, is pushed with this): `1` and `3` to `6` #88, `2` #122, `8` #142. |
 | **Scope**      | `tools/renesas/` (new: `build.sh`, `renesas.py`, `toolchain.cmake`, `open.c`, `pins.txt`, `README.md`); `test/core/memory_test.c`: two tests' 8-aligned base, and a comment; `.github/workflows/platforms.yml`: a job, `renesas`; `.github/workflows/records.yml`: a step, `renesas.py check`; the README's bare-metal section, `docs/architectures.md` (a row; RH850 out of the planned list; the rule of "Waiting for a compiler" naming a compiler built from Ubuntu's sources usable), `docs/verification.md`, `docs/implementation-defined.md` and the workflow map. No library file. |
 | **Category**   | The list's item 8, its next target, which the author chose on 2026-11-20: Renesas, through GDB's simulators, RH850 first; and the author's two decisions of 2026-11-20 on what its first measure found: newlib's V850 `_open` replaced in the tests' link, and `memory_test` fixed. |
@@ -41987,3 +41987,47 @@ word for word.
 
 **What follows.** F1 to F6 scored; if they match, the record closes. Then
 RX and RL78, with the same recipe.
+
+### Run 2 scored (2026-11-21)
+
+The push of 195cbeb and acdb587 started two workflows, `2` #124 and `8`
+#144, green at their first attempt.
+
+| # | scored |
+|---|--------|
+| F1 | **MATCH.** 2 and 8 ran, and no other. |
+| F2 | **MATCH.** Both `renesas` jobs took the 13 package files from the cache, the four source packages at run 1's versions, found no toolchain under the new key, and built it, the simulator with GDB's own readline: in 12.5 minutes at rh850 and 10.9 at rh850-soft; "v850-elf-gcc (GCC) 13.3.0", "GNU simulator (SIM) 15.1". `renesas (rh850-soft)` saved the entry, and `renesas (rh850)` was told "Unable to reserve cache with key renesas-v850-elf-20ea3bf39d23bfa1-cff30cc5eb891ea2…, another job may be creating this cache". |
+| F3 | **MATCH.** At both variants the probe's line, word for word, and the file probe's two: newlib's `_open` "fopen w NULL; exit 1" at rh850 and "fopen w a stream; fclose 0; fopen r NULL; exit 2" at rh850-soft, `open.c`'s "fopen w a stream; fclose 0; fopen r a stream; read "canon"; exit 0" at both. |
+| F4 | **MATCH.** Both jobs green, enforced: each of the eight legs "61 tests, 60 passed, 0 failed, 1 not built (time_test); as pinned", the binaries "ELF32, 2's complement, little endian, Renesas V850 (using RH850 ABI)", their notes "8-byte objects aligned 4-byte", and the FPU "FPU-3.0" at rh850 and "not set" at rh850-soft. |
+| F5 | **MATCH.** The test steps took 32 s (rh850) and 33 s (rh850-soft). |
+| F6 | **MATCH.** 2's 30 other jobs gave #123's conclusions and notices, `embedded` but for its slowest header's name (`algo/any_all/any_all.h`, not `semantics/diag.h`), which F6 set aside; 8 green. |
+
+Six of six; eight of twelve over the two runs.
+
+**Closed.** The tests run on Renesas RH850 under GDB's V850 simulator,
+with its FPU and without, at each build type, enforced: 60 of the 61 pass
+at each of the eight legs, and `time_test` is not built. The toolchain is
+built from Ubuntu's source packages and nothing else, and kept in the
+Actions cache. The first measure found two faults outside the library,
+and both were fixed where the tests meet them, as the author chose:
+newlib's V850 `_open`, whose flags were the path's address, replaced in
+the tests' link; and `memory_test`, which took an 8-byte object's
+alignment for 8. The close changes nothing but this record.
+
+What it shows:
+
+- **A toolchain without a download.** Built from the release tarballs
+  that Ubuntu's archive signs, it needs nothing fetched from elsewhere;
+  cached by the packages' versions and the script's hash, it is built
+  once, in about 12 minutes on the runner.
+- **The C library is under test too.** newlib's V850 `_open`, defined
+  and called with types that are not compatible, opened no file as asked;
+  no test that opens a file could pass through it, and the file probe
+  shows it at every run.
+- **An ABI may align 8-byte objects to 4.** C allows it, and the RH850
+  ABI does it: a test that takes a `u64` array's alignment for 8 assumes
+  more than C gives.
+- **Measure where the runner will be, for the build too.** Run 1 failed
+  on a library this machine has and the runner has not; run 2's measure,
+  every configure told that the system has no readline, was the runner's,
+  and run 2 gave it.
