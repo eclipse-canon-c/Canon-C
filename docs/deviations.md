@@ -42041,6 +42041,7 @@ What it shows:
 | **ID**         | VERIFY-102 |
 | **Date**       | 2026-11-21 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-21 — Scored: G1 to G6 MATCH. CLOSED: six of six scored ("Scored", below). On Renesas RX under GDB's simulator, at each build type and enforced from run 1, 55 of the 61 tests pass with the FPU, 58 without it, 57 with big-endian data; each that does not is pinned with the reason. The Status above is the record as committed. |
 | **Baseline**   | acdb587 (VERIFY-101's run 2; its close, ba463f0, a record, is pushed with this): `1` and `3` to `6` #89 (3c361c2), `2` #124, `8` #144. |
 | **Scope**      | `tools/renesas/`: `renesas.py` (three RX variants; pins over lists of variants; RX's Debug flags; `tmpfile.c` and the corrected crt files linked; the file probe's `remove` and, at RX, its `tmpfile()`; the multilib and `__FINITE_MATH_ONLY__` in the first lines), `pins.txt` (eight lines for RX), `toolchain.cmake`'s and `README.md`'s text; `build.sh` unchanged. `tools/msp430/tmpfile.c` and `tools/msp430/README.md`: their text, which names RX's link. `.github/workflows/platforms.yml`: `renesas`'s matrix, five variants, each job's target read from `renesas.py target`; `records.yml`: a comment. The README's bare-metal section, `docs/architectures.md` (a row; RX out of the planned list; a note), `docs/verification.md`, `docs/implementation-defined.md` and the workflow map. No library or test file. |
 | **Category**   | The list's item 8: Renesas through GDB's simulators, its second target, RX with big-endian data, as the author chose on 2026-11-20; and the author's four decisions of 2026-11-21 on what its first measure found: the FPU's variant and one without it, the FPU's failures pinned; big-endian data with corrected crt files; RX's Debug at `-O0` without `-g`; MSP430's `tmpfile.c` linked, and the rest pinned. |
@@ -42241,3 +42242,51 @@ libraries GCC builds and never picks; whether `stringbuf_test`'s `%ls`
 check should take an empty conversion; whether the library should refuse
 `__FINITE_MATH_ONLY__`, or say what it does under it; and the reports
 upstream (GCC's `MULTILIB_MATCHES` and its manual, newlib's V850 `_open`).
+
+### Scored (2026-11-21)
+
+The push of d50b3e5, 0de485b and b745271 started seven workflows: `1` and
+`3` to `6` #90, `2` #125 and `8` #145, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| G1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| G2 | **MATCH.** The two RH850 jobs restored VERIFY-101's entry, "renesas-v850-elf-20ea3bf39d23bfa1-cff30cc5eb891ea2…", and skipped the build. The three RX jobs found no `rx-elf` entry and built it, in 17.5 minutes (rx-nofpu), 22.5 (rx) and 23.0 (rx-be): "rx-elf-gcc (GCC) 13.3.0", "rx-elf-run: no --version". `renesas (rx-nofpu)` saved the entry; `renesas (rx)` and `renesas (rx-be)` were told "Unable to reserve cache with key renesas-rx-elf-20ea3bf39d23bfa1-cff30cc5eb891ea2…, another job may be creating this cache". |
+| G3 | **MATCH.** At the three RX variants the probe's line, word for word, exit 3, and the file probe's two lines, newlib's `tmpfile()` reading back "" and `tmpfile.c`'s "canon"; at RH850 the probe's line and newlib's `_open` line as at VERIFY-101, and `open.c`'s with "remove 0". The first lines as measured here: "libraries 64-bit-double; __FINITE_MATH_ONLY__ 1" at rx, 0 at rx-nofpu, "64-bit-double/big-endian-data", 0, at rx-be. |
+| G4 | **MATCH.** The five jobs green, enforced: each of the twenty legs' lines as measured here, "as pinned", and each leg's binary line, word for word: "ELF32, 2's complement, little endian, Renesas RX; flags 0xc9, 64-bit doubles, RX ABI, uses String instructions", "big endian" at rx-be, each Debug leg's "-O0 without -g"; RH850's as at VERIFY-101. |
+| G5 | **MATCH.** The test steps took 3.5 minutes (rx, three tests stopped at 60 s), 42 s (rx-be), 41 s (rh850-soft), 26 s (rx-nofpu) and 23 s (rh850). |
+| G6 | **MATCH.** The 63 jobs of 1 and 3 to 6 gave #89's conclusions and notices, times aside; 2's 30 other jobs #124's, `msp430` among them, and `embedded` with its slowest header's name the same this time; 8 green, its two jobs as at #144. |
+
+Six of six scored.
+
+**Closed.** The tests run on Renesas RX under GDB's RX simulator, at the
+RX600 with its FPU, without it, and without it with big-endian data, at
+each build type, enforced from the first run: 55, 58 and 57 of the 61
+pass, and each that does not is pinned with the reason. The toolchain is
+built from Ubuntu's source packages by `build.sh` as VERIFY-101 left it,
+and kept in the Actions cache beside RH850's. Three faults outside the
+library were worked around where the tests meet them, as the author
+chose: the simulator's missing `lseek`, by MSP430's `tmpfile()`; GCC's
+crt arrays marked as code, by copies marked as data; GCC's internal error
+at `-O0 -g`, by a Debug without `-g`. The close changes nothing but this
+record.
+
+What it shows:
+
+- **A compiler's defaults are part of what is tested.** GCC's RX FPU
+  turns on finite math, which no command-line flag undoes, and the
+  library's checks of NaN and infinity are then compiled away: `rx`
+  tests what a user of GCC's default gets, `rx-nofpu` what the library
+  does under IEEE.
+- **A simulator can say yes and do nothing.** GDB's RX simulator returns
+  a call it does not carry with its first argument, which newlib takes for
+  success: `remove`, `rename` and `fseek` report 0 and change nothing. The
+  file probe shows it at every run.
+- **Big-endian without an operating system is its own target.** No
+  big-endian run before this one was on bare metal; this one found GCC's
+  RX crt files storing data as code, which only big-endian data shows, and
+  newlib's `%ls` reading a wide string as bytes.
+- **Measured here, then on the runner.** The RX toolchain had never been
+  built on the runner; built here with the same script, from the same
+  packages, its twenty legs gave on the runner what they gave here, word
+  for word.
