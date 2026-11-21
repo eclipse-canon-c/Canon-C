@@ -66,6 +66,7 @@ its default for the RX600, so that NaN and infinity are assumed away, and
 | RISC-V 32 (RV32IMAC), bare metal | picolibc | GCC (`riscv64-unknown-elf`) | the same | `embedded` |
 | RISC-V 64 (RV64IMAC), bare metal | picolibc | GCC (`riscv64-unknown-elf`) | the same | `embedded` |
 | AVR (ATmega328P), 16-bit `size_t` | avr-libc | avr-gcc 7 | Tier 0 only (the README's platform tiers): the refusal of a 32-bit `double`, and with that check removed, Tier 0 compiled and Tier 1 refused | `embedded` (`tools/avr_tier_check.sh`) |
+| dsPIC33 and PIC24's core (XC-DSC's virtual devices `generic-16dsp` and `generic-16bit`), 16-bit `size_t` | Microchip's | Microchip's XC-DSC 4.00, fetched from Microchip, its digest checked against the one Microchip's page shows | Tier 0 only, as on AVR: the refusal of XC-DSC's own 32-bit `double`, and with `-fno-short-double`, Tier 0 compiled and Tier 1 refused. VERIFY-107's run 1 measures and reports only; enforced once pinned | `dspic` (`platforms.yml`, `tools/tier_check.sh`, `tools/dspic/`) |
 | ARC: ARCv2 EM (`-mcpu=em4`), ARCv2 HS (`-mcpu=hs38`), ARCompact ARC700 (`-mcpu=arc700`) | newlib 4.4 | GCC 13.3.0 (`arc-elf32`), built from Ubuntu's source packages (`tools/renesas/build.sh`) | the same as Cortex-M's; nothing runs, since neither GDB nor QEMU has an ARC simulator (VERIFY-106) | `arc` (`platforms.yml`, `tools/embedded_compile_check.sh`) |
 
 *Planned*, each compiled as the Cortex-M entries are, with code size
@@ -85,12 +86,11 @@ measured where the list says so:
   today.
 - TI C29x (C2000's newer core), if its compiler's type sizes give 8-bit
   bytes; not yet checked.
-- dsPIC and PIC24, with Microchip's XC16, a port of GCC, free with its
-  optimization limited (`-O0`, `-O1`): `int`, `size_t` and pointers of
-  16 bits, so Tier 0 only, with `-fno-short-double`, without which
-  `double` has 32 bits and `types.h` refuses it. Compiled first, as AVR
-  is; run later, if Microchip's simulator (MPLAB X's, through its
-  command-line debugger) runs in CI. QEMU has no model of them.
+- dsPIC and PIC24, run: compiled for with XC-DSC (above, VERIFY-107);
+  run if Microchip's simulator (MPLAB X's, through its command-line
+  debugger) runs in CI. QEMU has no model of them. XC16, Microchip's
+  compiler for PIC24's devices, is not used: an installer, and its
+  optimizations above `-O1` want a key from a Microchip account.
 
 ## Proved at
 

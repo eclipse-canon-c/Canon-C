@@ -5,7 +5,9 @@ name: "2 · Platforms"
 # under QEMU, on MSP430X under the GDB simulator, on bare-metal AArch64
 # (Cortex-A78AE, Cortex-R82) under QEMU, and on Renesas RH850 and RX
 # under GDB's simulators, with toolchains built from Ubuntu's source
-# packages, as is ARC's, for which the headers and tests are compiled.
+# packages, as is ARC's, for which the headers and tests are compiled;
+# and the platform tiers for dsPIC and PIC24's core, with Microchip's
+# XC-DSC, fetched from Microchip.
 # Map: .github/workflows/README.md.
 on:
   push:
@@ -667,3 +669,74 @@ jobs:
         run: |
           export PATH="$HOME/gcc-toolchain/$TARGET/bin:$PATH"
           tools/embedded_compile_check.sh
+
+  # -------------------------------------------------------------------------
+  # 1n. dsPIC and PIC24's core, with Microchip's XC-DSC (VERIFY-107)
+  #
+  #    XC-DSC 4.00 (8 July 2026), Microchip's compiler for dsPIC33, every
+  #    optimization level without a key: its archive for Linux, fetched from
+  #    Microchip, its digest checked against the one Microchip's download
+  #    page shows, abbreviated to its first eight digits and last four,
+  #    before anything in it runs. At XC-DSC's virtual devices generic-16dsp
+  #    (dsPIC's core) and generic-16bit (the core without the DSP
+  #    instructions, PIC24's), tools/dspic/probe.sh prints what the compiler
+  #    is: its version and devices, its type sizes, its optimization levels;
+  #    and tools/tier_check.sh checks the README's platform tiers there, as
+  #    at AVR, int, size_t and pointers having 16 bits. Run 1 measures: the
+  #    probe is printed, the tier check reports only, and the job fails only
+  #    if the fetch, the digest or the archive does. A later record pins
+  #    what it measures, and enforces it. Using XC-DSC accepts Microchip's
+  #    licence for it, as the author chose (VERIFY-107).
+  # -------------------------------------------------------------------------
+  dspic:
+    runs-on: ubuntu-24.04
+    env:
+      XC_DSC_URL: https://ww1.microchip.com/downloads/aemDocuments/documents/DEV/ProductDocuments/SoftwareTools/xc-dsc-v4.00-full-install-linux64.tar.xz
+      # Microchip's download page shows the archive's digest abbreviated,
+      # "4fa70007... acef", and does not name its kind: SHA-256 or SHA-1
+      # matching both ends will do until run 1 prints the full one to pin.
+      XC_DSC_SUM_HEAD: 4fa70007
+      XC_DSC_SUM_TAIL: acef
+    steps:
+      - uses: actions/checkout@v6
+      - name: Fetch Microchip's XC-DSC 4.00, its digest checked against Microchip's page
+        timeout-minutes: 20
+        run: |
+          pkg="$RUNNER_TEMP/xc-dsc.tar.xz"
+          curl -fsSL --retry 3 -o "$pkg" "$XC_DSC_URL"
+          echo "size $(stat -c %s "$pkg") bytes"
+          sha256=$(sha256sum "$pkg" | cut -d' ' -f1)
+          sha1=$(sha1sum "$pkg" | cut -d' ' -f1)
+          echo "sha256 $sha256"
+          echo "sha1   $sha1"
+          ok=
+          for s in "$sha256" "$sha1"; do
+            case "$s" in "$XC_DSC_SUM_HEAD"*"$XC_DSC_SUM_TAIL") ok=$s ;; esac
+          done
+          if [ -z "$ok" ]; then
+            echo "FAIL: neither digest is Microchip's $XC_DSC_SUM_HEAD... $XC_DSC_SUM_TAIL"; exit 1
+          fi
+          echo "Microchip's $XC_DSC_SUM_HEAD... $XC_DSC_SUM_TAIL: $ok"
+          dir="$RUNNER_TEMP/xc-dsc"
+          mkdir -p "$dir"
+          tar -xJf "$pkg" -C "$dir"
+          # The driver nearest the archive's top, if it holds more than one.
+          cc=$(find "$dir" -name xc-dsc-gcc \( -type f -o -type l \) | awk -F/ '{ print NF "\t" $0 }' | sort -n | head -1 | cut -f2-)
+          if [ -z "$cc" ]; then
+            echo "FAIL: no xc-dsc-gcc in the archive; its top:"; find "$dir" -maxdepth 3 | head -40; exit 1
+          fi
+          echo "xc-dsc-gcc at ${cc#"$dir/"}"
+          dirname "$cc" >> "$GITHUB_PATH"
+      - name: What XC-DSC is (measured, not enforced)
+        timeout-minutes: 10
+        run: tools/dspic/probe.sh
+      - name: The platform tiers at a 16-bit size_t, at generic-16dsp and generic-16bit (report only)
+        timeout-minutes: 20
+        env:
+          CC: xc-dsc-gcc
+          F64_FLAGS: -fno-short-double
+          REPORT_ONLY: 1
+        run: |
+          for cpu in generic-16dsp generic-16bit; do
+            TARGET_FLAGS="-mcpu=$cpu" TITLE="dspic $cpu" tools/tier_check.sh
+          done

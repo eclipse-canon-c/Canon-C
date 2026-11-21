@@ -61,8 +61,9 @@ optional (7.18.1.1). **Canon-C** uses `u8` to `i64` throughout. **Checked**:
 **C**: `SIZE_MAX` is at least 65535 (7.18.3). **Canon-C**'s size constants
 and capacity limits need 32 bits. **Checked**: `core/primitives/limits.h`
 refuses a smaller `size_t` (`#error`, Tier 1), and `2 · Platforms` checks
-the refusal with AVR's 16-bit `size_t` (`tools/avr_tier_check.sh`). Tier 0's
-headers stay usable there. On MSP430X (`msp430`, VERIFY-096) the tests are
+the refusal with AVR's 16-bit `size_t` (`tools/avr_tier_check.sh`), and
+since VERIFY-107 with dsPIC's, reporting only at its run 1 (`dspic`,
+`tools/tier_check.sh`). Tier 0's headers stay usable there. On MSP430X (`msp430`, VERIFY-096) the tests are
 built at a 16-bit `size_t` and at a 20-bit one, and those below Tier 1 run.
 
 ### 3. Pointers as flat byte addresses
