@@ -88,12 +88,16 @@ step configure.log "$newlib_src/configure" --target="$target" --prefix="$prefix"
 step make.log make -j"$jobs" MAKEINFO=true
 step install.log make install MAKEINFO=true
 
+# The simulator's configure requires readline: GDB's own copy, in the same
+# tarball, which the top level configures and builds for it unless
+# --disable-readline is given; the runner has no system readline to link
+# (VERIFY-101's run 1).
 echo "== GDB's simulator"
 mkdir -p "$work/build-sim" && cd "$work/build-sim"
 step configure.log "$gdb_src/configure" --target="$target" --prefix="$prefix" \
   --disable-gdb --disable-gdbserver --disable-binutils --disable-ld \
   --disable-gas --disable-gprof --disable-gprofng --disable-nls \
-  --disable-werror --disable-readline --disable-libdecnumber \
+  --disable-werror --disable-libdecnumber \
   MAKEINFO=true
 step make.log make -j"$jobs" all-sim MAKEINFO=true
 step install.log make install-strip-sim MAKEINFO=true
