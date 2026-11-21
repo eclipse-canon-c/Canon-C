@@ -42551,3 +42551,73 @@ What it shows:
   The sources said a 32-bit `double`; the built compiler, the probe under
   the simulator and the scratch copy said what that costs, and what more
   stands behind it.
+
+---
+
+## VERIFY-105: Pre-registration — Infineon TriCore Waits for a Compiler: the Vendors' Free Compilers Behind Their Registrations, a Community GCC Not Taken
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-105 |
+| **Date**       | 2026-11-21 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 90236b9 (VERIFY-104's change; its close, 3daec16, a record, is pushed with this): `8` #147. |
+| **Scope**      | `docs/architectures.md`: TriCore from the planned list to "Waiting for a compiler", a row; the planned machine models say which wait; three sources. No code, test, tool or workflow file; no job. |
+| **Category**   | The list's item 8: TriCore, to be checked against VERIFY-100's rule for compilers; and the author's decision of 2026-11-21 on what the check found: waiting for a compiler. |
+
+### What is missing
+
+`docs/architectures.md` planned TriCore (Infineon AURIX) "compiled as the
+Cortex-M entries are", without naming a compiler CI could use. VERIFY-100's
+rule: a compiler is usable when CI can download it itself, its checksum
+pinned, or build it from sources in Ubuntu's archive; one only to be had
+behind a vendor's sign-in puts its architecture under "Waiting for a
+compiler".
+
+### What changes
+
+- **`docs/architectures.md`**: TriCore's planned entry says it waits for
+  a compiler; a row in that table, with its compilers, what holds it
+  back, and what would let it in; the planned machine models say that
+  TriCore's and PowerPC e200's wait for a compiler too; the sources name
+  the three pages below.
+
+### Measured here
+
+Nothing was downloaded or run: the author's rule forbids running a
+third-party download here, and the check is of how each compiler is had.
+
+- **GCC** has no TriCore port upstream, nor Ubuntu a TriCore compiler
+  (`apt-cache search tricore`: nothing).
+- **HighTec's free entry toolchain** (free-entry-toolchain.hightec-rt.com):
+  a form, then "an e-mail, which contains your license file and the
+  download link"; its installation is `Setup.exe`, the licence under
+  `C:\HighTec\licenses`.
+- **TASKING's free VX-toolset** (tasking.com/node/485): "exclusively
+  available through this registration", a licence of three months,
+  server-based and node-locked, needing "unrestricted Internet access",
+  "for evaluation purposes only and not for commercial use".
+- **A community port of GCC**, NoMore201/tricore-gcc-toolchain: GCC 13.3,
+  binutils 2.40 and newlib, for TriCore 1.3 to 1.8, "a downstream of"
+  EEESlab/tricore-gcc-toolchain-11.3.0, its prebuilt toolchain in GitHub's
+  releases and its sources buildable. Neither a vendor's nor in Ubuntu's
+  archive; the author chose not to take it, so TriCore waits.
+- **The emulator** is in Ubuntu's archive: `qemu-system-misc` 8.2.2
+  provides `qemu-system-tricore` (`apt-cache show`).
+- `tools/which_workflows.py`: 8 alone.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| J1 | **8 runs**, and no other. | another set | H |
+| J2 | **8 is green**, its two jobs as at #147, no notice. | a failure, or a notice | H |
+
+**Not predicted**: nothing.
+
+### What follows
+
+J1 and J2 scored, and the record closes. Then ARC, compiled only: GCC
+has an ARC port, which `tools/renesas/build.sh` may build from the same
+source packages. TriCore moves when a vendor's compiler CI can fetch
+appears, or the author takes the community port.
