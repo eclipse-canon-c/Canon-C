@@ -1,12 +1,13 @@
 # tools/renesas/pins.txt -- the tests that do not pass on the Renesas
-# variants under GDB's simulator (tools/renesas/renesas.py, VERIFY-101).
-# Each line: the test, the variants (all, rh850, rh850-soft), the build
-# types (all, or a list of Debug, Release, RelWithDebInfo and MinSizeRel),
-# and what the test does there: "not-built"; "fails N", N the lines of its
-# output that begin with FAIL; or "times-out". A test no line names must
-# pass. The lines are measures, taken with the toolchain build.sh builds,
-# before VERIFY-101's run 1: at both variants and each build type, with
-# tools/renesas/open.c linked into each test.
+# variants under GDB's simulators (tools/renesas/renesas.py, VERIFY-101,
+# VERIFY-102). Each line: the test, the variants (all, or a list of
+# rh850, rh850-soft, rx, rx-nofpu and rx-be), the build types (all, or a
+# list of Debug, Release, RelWithDebInfo and MinSizeRel), and what the
+# test does there: "not-built"; "fails N", N the lines of its output that
+# begin with FAIL; or "times-out". A test no line names must pass. The
+# lines are measures, taken with the toolchains build.sh builds, at each
+# variant and build type, with the support each variant links: the RH850
+# lines before VERIFY-101's run 1, the RX lines before VERIFY-102's.
 #
 # TEST              VARIANTS  BUILDS  OUTCOME
 
@@ -14,3 +15,43 @@
 # declares only where _POSIX_TIMERS is defined, which it is not here (as
 # on Cortex-M and MSP430).
 time_test           all       all     not-built
+
+# rx, the RX600's FPU: GCC's RX port compiles with -ffinite-math-only
+# wherever it uses the FPU, its default for the RX600 ("the FPU
+# instructions do not support NaNs and infinities", rx.cc), and a
+# -fno-finite-math-only does not undo it. The checks of NaN and infinity,
+# the library's and the tests' own, are folded away: algo_cmp_f32 and
+# algo_cmp_f64 order a NaN as a number (compare_test; impl_defined_test,
+# its five NaN lines, 243 to 248); the tests' isinf and isnan are 0
+# (parse_test); random_f32_range and random_f64_range take an infinite
+# bound for a finite one and loop (random_test, stopped; at -O0 it ends,
+# its two NaN checks failed, 560 and 561). At rx-nofpu, all of them pass.
+compare_test        rx        all     fails 12
+parse_test          rx        all     fails 6
+impl_defined_test   rx        all     fails 9
+random_test         rx        Debug   fails 2
+random_test         rx        Release,RelWithDebInfo,MinSizeRel  times-out
+
+# All three RX variants: GDB's RX simulator carries eight system calls,
+# exit, open, close, read, write, getpid, gettimeofday and kill. Any
+# other, lseek, link and unlink among them, returns with its first
+# argument where its result would be, which newlib takes for success:
+# remove() and rename() return 0 and do nothing, and fseek() returns 0
+# and does not move. So file_test's remove (its line 112), and
+# file_read_all_arena, which sizes a file with fseek and ftell (169,
+# 186); and impl_defined_test's two renames (289, 290, 299 and 301; with
+# rx's five NaN lines, its nine). diag_test and log_test, whose
+# tmpfile() is written, rewound and read back, pass with
+# tools/msp430/tmpfile.c's, which each RX test links.
+file_test           rx,rx-nofpu,rx-be  all  fails 3
+impl_defined_test   rx-nofpu,rx-be     all  fails 4
+
+# rx-be: newlib built without multibyte support (_MB_CAPABLE undefined,
+# its default) reads the wide string of %ls as a string of char. With
+# big-endian data the first byte of a wide character below 2^24 is 0, so
+# stringbuf_append_fmt's "%ls" of a one-character wide string succeeds
+# and appends nothing, where the test takes a success to have appended a
+# byte at least (stringbuf_test.c:545). With little-endian data the
+# first byte is the character's low byte, one byte appended, and the
+# test passes.
+stringbuf_test      rx-be     all     fails 1

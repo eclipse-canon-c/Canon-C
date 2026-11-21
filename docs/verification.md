@@ -818,10 +818,12 @@ pinned with the reason (`tools/msp430/pins.txt`, VERIFY-097). Run under
 QEMU on bare-metal AArch64 (`aarch64`, VERIFY-099): the tests with
 picolibc, compiled for Cortex-A78AE and Cortex-R82 and run on QEMU's
 `max` CPU, each that does not pass pinned with the reason
-(`tools/aarch64/pins.txt`). Run under GDB's V850 simulator (`renesas`,
-VERIFY-101): the tests on Renesas RH850, with GCC and newlib built from
-Ubuntu's source packages, with the FPU and without, each that does not
-pass pinned with the reason (`tools/renesas/pins.txt`).
+(`tools/aarch64/pins.txt`). Run under GDB's V850 and RX simulators
+(`renesas`, VERIFY-101, VERIFY-102): the tests on Renesas RH850, with
+the FPU and without, and on the RX600, with the FPU, without it, and
+without it with big-endian data, with GCC and newlib built from Ubuntu's
+source packages, each that does not pass pinned with the reason
+(`tools/renesas/pins.txt`).
 Compiled, with nothing run
 (`embedded`): the same two with newlib and picolibc, where enums are short
 and `int32_t` is `long`; RV32 and RV64 with picolibc; and AVR, at a 16-bit
@@ -839,7 +841,7 @@ and `int32_t` is `long`; RV32 and RV64 with picolibc; and AVR, at a 16-bit
 | `cortex-m` | Cortex-M0+ and Cortex-M4 under QEMU: Ubuntu's GCC 13.2 with newlib and picolibc, the Arm GNU Toolchain's GCC 15.3 with newlib; CMake's four build types | the tests on those cores; each that does not pass pinned with the reason |
 | `msp430` | MSP430X under the GDB simulator: TI's GCC 9.3.1 with its newlib; the small and large memory models; CMake's four build types | the tests below Tier 1 at a 16-bit `int`, and 16- and 20-bit `size_t`s; each that does not pass pinned with the reason |
 | `aarch64` | bare-metal AArch64 under QEMU: Ubuntu's GCC 13.3 with picolibc, compiled for Cortex-A78AE and Cortex-R82 and run on QEMU's `max` CPU (QEMU models neither core); CMake's four build types | the tests with no operating system, of the code GCC generates for each core; each that does not pass pinned with the reason |
-| `renesas` | RH850 under GDB's V850 simulator: GCC 13.3 and newlib 4.4 built from Ubuntu's source packages, Renesas' RH850 ABI, with the FPU and without; CMake's four build types | the tests where an 8-byte object is aligned to 4 and plain `char` is signed; each that does not pass pinned with the reason |
+| `renesas` | RH850 and RX under GDB's V850 and RX simulators: GCC 13.3 and newlib 4.4 built from Ubuntu's source packages; RH850 under Renesas' RH850 ABI, with the FPU and without; the RX600 with `-m64bit-doubles`, with the FPU (and so finite math), without it, and without it with big-endian data; CMake's four build types, RX's Debug without `-g` | the tests where an 8-byte object is aligned to 4, with plain `char` signed (RH850) and unsigned (RX), on big-endian data with no operating system (RX); each that does not pass pinned with the reason |
 | `c-standards` | C11, C17 and C23 with GCC 14 and Clang, Debug, sanitizers on | the tests at those standards, where the C11 arms are compiled (`_Alignof(max_align_t)`, `_Static_assert`) |
 | `embedded` | Cortex-M, RV32, RV64 and AVR, bare metal | that the headers and tests compile there; nothing runs |
 | `lifetime-debug`, `lifetime-token-concurrency` | `CANON_LIFETIME_DEBUG`; the atomic levels, with ThreadSanitizer | the lifetime plumbing and the token generation, by tests |

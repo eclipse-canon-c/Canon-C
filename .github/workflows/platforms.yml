@@ -3,8 +3,9 @@ name: "2 · Platforms"
 # big-endian s390x and 32-bit PowerPC under qemu, the embedded compile
 # checks (Cortex-M, RISC-V, AVR), the tests on Cortex-M0+ and Cortex-M4
 # under QEMU, on MSP430X under the GDB simulator, on bare-metal AArch64
-# (Cortex-A78AE, Cortex-R82) under QEMU, and on Renesas RH850 under GDB's
-# simulator, with a toolchain built from Ubuntu's source packages.
+# (Cortex-A78AE, Cortex-R82) under QEMU, and on Renesas RH850 and RX
+# under GDB's simulators, with toolchains built from Ubuntu's source
+# packages.
 # Map: .github/workflows/README.md.
 on:
   push:
@@ -525,33 +526,42 @@ jobs:
           retention-days: 90
 
   # -------------------------------------------------------------------------
-  # 1l. Renesas RH850 under GDB's simulator (VERIFY-101)
+  # 1l. Renesas RH850 and RX under GDB's simulators (VERIFY-101, VERIFY-102)
   #
-  #    No package ships a compiler for it, but Ubuntu ships the sources of
-  #    one: tools/renesas/build.sh builds binutils 2.42, GCC 13.3.0 (C),
-  #    newlib 4.4.0 and GDB 15.1's simulator for v850-elf from the release
-  #    tarballs of Ubuntu's binutils-source, gcc-13-source, newlib-source
-  #    and gdb-source, each package checked against Ubuntu's signed index
-  #    as apt-install checks them. The toolchain is kept in the Actions
-  #    cache, its key the packages' versions and build.sh's hash; a leg
-  #    that misses it builds it. tools/renesas/renesas.py builds each test
-  #    for RH850's V850E3V5, with its FPU and without, at the four build
-  #    types, linked with tools/renesas/open.c's _open, which newlib's V850
-  #    port gets wrong, runs it under v850-elf-run after a probe that the
-  #    simulator carries a program's output and exit status, and holds the
-  #    outcomes against tools/renesas/pins.txt, enforced from VERIFY-101's
-  #    run 1: the pins were measured before it with the same toolchain.
+  #    No package ships a compiler for them, but Ubuntu ships the sources
+  #    of one: tools/renesas/build.sh builds binutils 2.42, GCC 13.3.0 (C),
+  #    newlib 4.4.0 and GDB 15.1's simulator for the variant's target,
+  #    v850-elf or rx-elf, from the release tarballs of Ubuntu's
+  #    binutils-source, gcc-13-source, newlib-source and gdb-source, each
+  #    package checked against Ubuntu's signed index as apt-install checks
+  #    them. Each target's toolchain is kept in the Actions cache, its key
+  #    the target, the packages' versions and build.sh's hash; a leg that
+  #    misses it builds it. tools/renesas/renesas.py builds each test for
+  #    the variant at the four build types: RH850's V850E3V5 with its FPU
+  #    and without, linked with tools/renesas/open.c's _open, which
+  #    newlib's V850 port gets wrong; the RX600 with its FPU (GCC's
+  #    default, finite math), without it, and without it with big-endian
+  #    data, linked with tools/msp430/tmpfile.c's tmpfile(), and the last
+  #    with crt files whose arrays are data. It runs each test under the
+  #    target's simulator after a probe that the simulator carries a
+  #    program's output and exit status, and holds the outcomes against
+  #    tools/renesas/pins.txt, enforced from each record's run 1: the pins
+  #    were measured before it with the same toolchain.
   # -------------------------------------------------------------------------
   renesas:
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        variant: [rh850, rh850-soft]
-    env:
-      TARGET: v850-elf
+        variant: [rh850, rh850-soft, rx, rx-nofpu, rx-be]
     steps:
       - uses: actions/checkout@v6
+      - name: The variant's target
+        env:
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          target=$(python3 tools/renesas/renesas.py target "$VARIANT")
+          echo "TARGET=$target" >> "$GITHUB_ENV"
       - name: Install Ubuntu's sources of binutils, GCC, newlib and GDB, and GCC's libraries
         # Without the packages apt recommends, from the Actions cache first
         # (VERIFY-093); the limit fails a stalled mirror in 30 minutes.
@@ -579,7 +589,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/renesas-build"
           cd "$RUNNER_TEMP/renesas-build"
           sh "$GITHUB_WORKSPACE/tools/renesas/build.sh" "$TARGET" "$HOME/renesas-toolchain/$TARGET"
-      - name: "The tests on Renesas RH850 under GDB's simulator: ${{ matrix.variant }}"
+      - name: "The tests on Renesas cores under GDB's simulators: ${{ matrix.variant }}"
         timeout-minutes: 60
         env:
           VARIANT: ${{ matrix.variant }}

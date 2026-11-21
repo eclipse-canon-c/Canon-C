@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 renesas.py -- the test suite on Renesas cores under GDB's simulators, with
-GCC and newlib built from Ubuntu's source packages (VERIFY-101).
+GCC and newlib built from Ubuntu's source packages (VERIFY-101, VERIFY-102).
 
 tools/renesas/build.sh builds the toolchain of a target from the release
 tarballs of Ubuntu's binutils-source, gcc-13-source, newlib-source and
@@ -11,17 +11,33 @@ and newlib and run under the simulator, which carries its output and its
 exit status through newlib's system calls. The variants:
 
     rh850       v850-elf, -mv850e3v5: RH850's V850E3V5 instruction set,
-                Renesas' RH850 ABI (GCC's default), its FPU.
+                Renesas' RH850 ABI (GCC's default), its FPU; linked with
+                open.c's _open.
     rh850-soft  the same with -msoft-float: no FPU, float and double in
                 libgcc's software.
+    rx          rx-elf, -mcpu=rx600 -m64bit-doubles: the RX600, double of
+                64 bits (GCC's default is 32), little-endian data, and the
+                FPU, GCC's default, with which GCC's RX port turns on
+                -ffinite-math-only; linked with -msim, libgloss's system
+                calls for the simulator, and tmpfile.c's tmpfile().
+    rx-nofpu    the same with -nofpu: the tests compiled without the FPU,
+                and so without finite math. GCC links the libraries of the
+                FPU all the same (facts(), below).
+    rx-be       rx-nofpu with -mbig-endian-data: data big-endian, the
+                instructions as ever; linked also with crtbegin.o and
+                crtend.o whose .init_array and .fini_array are marked as
+                data (crt_fixed, below).
 
 Each is built at the four build types of CMake: Debug (-O0), Release
 (-O3), RelWithDebInfo (-O2) and MinSizeRel (-Os), with
-CANON_LIFETIME_NO_ATOMICS defined: the V850 has no 64-bit atomic, and its
-libgcc no __atomic_fetch_add_8. A test passes when it exits with status 0,
-within TIMEOUT seconds. Before the tests, a probe checks that the
-simulator carries a program's output and its exit status, and prints the
-type sizes and alignments as the target has them.
+CANON_LIFETIME_NO_ATOMICS defined: neither GCC port has a 64-bit atomic,
+and their libgcc no __atomic_fetch_add_8 (the V850's has none at all). At
+RX, Debug's flags are -O0 without -g: GCC 13.3's RX port stops with an
+internal compiler error on most tests at -O0 -g (VERIFY-102). A test
+passes when it exits with status 0, within TIMEOUT seconds. Before the
+tests, a probe checks that the simulator carries a program's output and
+its exit status, and prints the type sizes and alignments as the target
+has them.
 
 The tests that do not pass are pinned, with the reason, in pins.txt: each
 line a test, the variants and build types it holds for, and what the test
@@ -35,14 +51,17 @@ fails.
 
     python3 tools/renesas/renesas.py run VARIANT [BUILD...] [--report-only]
     python3 tools/renesas/renesas.py check
+    python3 tools/renesas/renesas.py target VARIANT
 
 "run" needs the variant's toolchain on the PATH (build.sh's PREFIX/bin),
 and writes its builds and summaries to renesas_out/. The steps it shares
 with tools/msp430/msp430.py (a test's run, its output kept when it is
-stopped, why a test is not built) and tools/cortexm/cortexm.py (CTest's
-list, FAIL lines) are those scripts'. "check" is 8 · Records': each pin
-well formed, naming a test of CMakeLists.txt, no two pins for the same
-test and leg, and the support files there.
+stopped, why a test is not built, and tmpfile.c) and
+tools/cortexm/cortexm.py (CTest's list, FAIL lines) are those scripts'.
+"check" is 8 · Records': each pin well formed, naming a test of
+CMakeLists.txt, no two pins for the same test and leg, and the support
+files there. "target" prints the toolchain's target of a variant, for the
+workflow.
 """
 import json
 import os
@@ -67,15 +86,33 @@ TIMEOUT = 300         # seconds a test, under the simulator
 PINNED_TIMEOUT = 60   # seconds a test pinned to time out
 SHOWN = 6             # differences named in a notice
 
+# Each variant: its toolchain's target, its flags, what it links besides
+# (link), what its binaries say (machine and data from the ELF header, an
+# e_flags word and the RH850 ABI's FPU note where it has them), its
+# support: open.c's _open (open_c), tmpfile.c's tmpfile() (tmpfile_c), the
+# corrected crt files (crt_fixed); and the flags of CMake's Debug, where
+# the variant sets them (debug).
+V850 = {'target': 'v850-elf', 'link': [], 'machine': 'V850', 'data': 'little endian',
+        'e_flags': None, 'open_c': True, 'tmpfile_c': False, 'crt_fixed': False,
+        'debug': None}
+RX = {'target': 'rx-elf', 'link': ['-msim'], 'machine': 'Renesas RX', 'fpu': None,
+      'e_flags': '64-bit doubles', 'open_c': False, 'tmpfile_c': True, 'debug': '-O0'}
 VARIANTS = {
-    'rh850': {'target': 'v850-elf', 'flags': '-mv850e3v5', 'fpu': 'FPU-3.0'},
-    'rh850-soft': {'target': 'v850-elf', 'flags': '-mv850e3v5 -msoft-float', 'fpu': 'not set'},
+    'rh850': {**V850, 'flags': '-mv850e3v5', 'fpu': 'FPU-3.0'},
+    'rh850-soft': {**V850, 'flags': '-mv850e3v5 -msoft-float', 'fpu': 'not set'},
+    'rx': {**RX, 'flags': '-mcpu=rx600 -m64bit-doubles', 'data': 'little endian',
+           'crt_fixed': False},
+    'rx-nofpu': {**RX, 'flags': '-mcpu=rx600 -m64bit-doubles -nofpu',
+                 'data': 'little endian', 'crt_fixed': False},
+    'rx-be': {**RX, 'flags': '-mcpu=rx600 -m64bit-doubles -nofpu -mbig-endian-data',
+              'data': 'big endian', 'crt_fixed': True},
 }
 DEFINES = '-DCANON_LIFETIME_NO_ATOMICS'
 BUILDS = cortexm.BUILDS
 SUPPORT = ('build.sh', 'toolchain.cmake', 'open.c', 'pins.txt', 'README.md')
-PIN = re.compile(r'^(\w+)\s+(all|' + '|'.join(re.escape(v) for v in VARIANTS) +
-                 r')\s+(\S+)\s+(not-built|fails|times-out)(?:\s+(\d+))?$')
+CRT_ARRAYS = ('.init_array', '.fini_array')
+WRAP_TMPFILE = '-Wl,--wrap=tmpfile'
+PIN = re.compile(r'^(\w+)\s+(\S+)\s+(\S+)\s+(not-built|fails|times-out)(?:\s+(\d+))?$')
 PROBE = r'''#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -98,6 +135,8 @@ int main(void)
 }
 '''
 PROBE_STATUS = 3
+# The tmpfile() part, compiled where the variant links tmpfile.c: what
+# newlib's tmpfile() and tmpfile.c's do, written, rewound and read back.
 FILE_PROBE = r'''#include <stdio.h>
 #include <string.h>
 
@@ -117,7 +156,21 @@ int main(void)
     (void)fgets(buf, (int)sizeof buf, f);
     (void)fclose(f);
     fprintf(stderr, "file probe: read \"%s\"\n", buf);
-    (void)remove("renesas-file-probe.txt");
+    fprintf(stderr, "file probe: remove %d\n", remove("renesas-file-probe.txt"));
+#ifdef CANON_PROBE_TMPFILE
+    {
+        char back[16] = {0};
+        FILE *t = tmpfile();
+        fprintf(stderr, "file probe: tmpfile %s\n", t ? "a stream" : "NULL");
+        if (t != NULL) {
+            fputs("canon", t);
+            fprintf(stderr, "file probe: fseek %d\n", fseek(t, 0L, SEEK_SET));
+            (void)fgets(back, (int)sizeof back, t);
+            (void)fclose(t);
+            fprintf(stderr, "file probe: tmpfile read back \"%s\"\n", back);
+        }
+    }
+#endif
     return strcmp(buf, "canon") == 0 ? 0 : 3;
 }
 '''
@@ -132,7 +185,7 @@ def tool(variant, name):
 
 
 def read_pins():
-    """[{line, test, variant, builds, outcome, fails}], and the problems."""
+    """[{line, test, variants, builds, outcome, fails}], and the problems."""
     pins, problems = [], []
     with open(PINS, encoding='utf-8') as f:
         for n, line in enumerate(f, 1):
@@ -143,7 +196,11 @@ def read_pins():
             if not m:
                 problems.append(f'pins.txt:{n}: not "TEST VARIANTS BUILDS OUTCOME [FAILS]"')
                 continue
-            test, variant, builds, outcome, fails = m.groups()
+            test, variants, builds, outcome, fails = m.groups()
+            variants = tuple(VARIANTS) if variants == 'all' else tuple(variants.split(','))
+            if any(v not in VARIANTS for v in variants):
+                problems.append(f'pins.txt:{n}: variants "all" or of {", ".join(VARIANTS)}')
+                continue
             builds = BUILDS if builds == 'all' else tuple(builds.split(','))
             if any(b not in BUILDS for b in builds):
                 problems.append(f'pins.txt:{n}: build types "all" or of {", ".join(BUILDS)}')
@@ -152,14 +209,14 @@ def read_pins():
                 problems.append(f'pins.txt:{n}: "fails" takes a count of FAIL lines, '
                                 f'"not-built" and "times-out" none')
                 continue
-            pins.append({'line': n, 'test': test, 'variant': variant, 'builds': builds,
+            pins.append({'line': n, 'test': test, 'variants': variants, 'builds': builds,
                          'outcome': outcome,
                          'fails': int(fails) if fails is not None else None})
     return pins, problems
 
 
 def matching(pins, test, variant, build):
-    return [p for p in pins if p['test'] == test and p['variant'] in ('all', variant)
+    return [p for p in pins if p['test'] == test and variant in p['variants']
             and build in p['builds']]
 
 
@@ -173,6 +230,9 @@ def versions(variant):
     for name in ('gcc', 'run'):
         r = sh([tool(variant, name), '--version'])
         text = (r.stdout or r.stderr).strip()
+        if r.returncode != 0 and text:
+            # RX's simulator has no --version: GDB's, as build.sh built it
+            text = f'{tool(variant, name)}: no --version'
         out.append(text.splitlines()[0] if text else f'{tool(variant, name)}: not found')
     r = sh(['sh', '-c', 'command -v ' + tool(variant, 'gcc')])
     out.append(tool(variant, 'gcc') + ': ' + (r.stdout.strip() or 'not on the PATH'))
@@ -180,26 +240,35 @@ def versions(variant):
 
 
 def facts(variant):
-    """newlib's version and the compiler's macros of the variant."""
-    r = sh([tool(variant, 'gcc'), *VARIANTS[variant]['flags'].split(), '-E', '-dM', '-x', 'c',
-            '-'], input='#include <stdio.h>\n')
+    """newlib's version; the folder of the multilib GCC links for the
+    variant's flags, its newlib and libgcc; whether it compiles with finite
+    math; and the compiler's macros of the target. At RX, GCC 13.3 links no
+    folder of no-fpu-libs, whatever the flags: t-rx's MULTILIB_MATCHES maps
+    -mnofpu, and -mcpu=rx200 and rx100, to "nofpu", which is no multilib
+    option, so -nofpu links the libraries built for the FPU."""
+    flags = VARIANTS[variant]['flags'].split()
+    r = sh([tool(variant, 'gcc'), *flags, '-E', '-dM', '-x', 'c', '-'],
+           input='#include <stdio.h>\n')
     macros = dict(re.findall(r'^#define (\w+)(?: (.*))?$', r.stdout, re.M))
     version = macros.get('_NEWLIB_VERSION', '?').strip('"')
-    keys = [k for k in sorted(macros) if re.match(r'__(v850|V850|RH850)\w*__$', k)]
-    return f'newlib {version}; ' + ', '.join(keys)
+    keys = [k for k in sorted(macros) if re.match(r'__(v850|V850|RH850|RX)\w*__$', k)]
+    multi = sh([tool(variant, 'gcc'), *flags, '-print-multi-directory']).stdout.strip()
+    return (f'newlib {version}; libraries {multi or "?"}; __FINITE_MATH_ONLY__ '
+            f'{macros.get("__FINITE_MATH_ONLY__", "?")}; ' + ', '.join(keys))
 
 
-def probe(variant, out):
+def probe(variant, out, link):
     """Build and run a program that prints the target's sizes and alignments
-    and exits with PROBE_STATUS: the simulator must carry both, or no
-    test's result means anything. Returns its line of output."""
+    and exits with PROBE_STATUS, linked as the tests are: the simulator must
+    carry both, or no test's result means anything. Returns its line of
+    output."""
     d = os.path.abspath(os.path.join(out, 'probe-' + variant))
     os.makedirs(d, exist_ok=True)
     src, elf = os.path.join(d, 'probe.c'), os.path.join(d, 'probe')
     with open(src, 'w', encoding='utf-8') as f:
         f.write(PROBE)
     r = sh([tool(variant, 'gcc'), *VARIANTS[variant]['flags'].split(), '-std=c99', '-O1', src,
-            '-o', elf])
+            *link, '-o', elf])
     if r.returncode != 0:
         shown(r.stdout + r.stderr)
         raise RuntimeError(f'{variant}: the probe does not build')
@@ -213,34 +282,90 @@ def probe(variant, out):
     return lines[0]
 
 
-def support(variant, out):
-    """open.c compiled for the variant: the object each test is linked with."""
-    d = os.path.abspath(os.path.join(out, 'support-' + variant))
-    os.makedirs(d, exist_ok=True)
-    obj = os.path.join(d, 'open.o')
+def compiled(variant, src, d):
+    """A support file compiled for the variant, its warnings errors: the
+    object."""
+    obj = os.path.join(d, os.path.splitext(os.path.basename(src))[0] + '.o')
     r = sh([tool(variant, 'gcc'), *VARIANTS[variant]['flags'].split(), '-std=c99', '-O2',
-            '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-c', os.path.join(HERE, 'open.c'),
-            '-o', obj])
+            '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-c', src, '-o', obj])
     if r.returncode != 0:
         shown(r.stdout + r.stderr)
-        raise RuntimeError(f'{variant}: tools/renesas/open.c does not compile')
+        raise RuntimeError(f'{variant}: {rel(src)} does not compile')
     return obj
 
 
-def file_probe(variant, out, obj):
-    """A program that writes a file and reads it back, its steps on stderr,
-    linked with newlib's _open and with open.c's: what each does under the
-    simulator. It fails nothing. Returns one line per link."""
+def support(variant, out):
+    """What each test of the variant is linked with besides its own objects:
+    the variant's link flags; open.c's object (open_c); tmpfile.c's, with
+    -Wl,--wrap=tmpfile, which puts its tmpfile() in place of newlib's
+    (tmpfile_c); and the folder of the corrected crt files (crt_fixed).
+    Returns the arguments of the link."""
+    v = VARIANTS[variant]
+    d = os.path.abspath(os.path.join(out, 'support-' + variant))
+    os.makedirs(d, exist_ok=True)
+    link = list(v['link'])
+    if v['open_c']:
+        link.append(compiled(variant, os.path.join(HERE, 'open.c'), d))
+    if v['tmpfile_c']:
+        link += [WRAP_TMPFILE, compiled(variant, msp430.TMPFILE, d)]
+    if v['crt_fixed']:
+        link.append('-B' + crt_fixed(variant, d) + os.sep)
+    return link
+
+
+def crt_fixed(variant, d):
+    """GCC's RX port declares .init_array and .fini_array executable
+    ("awx", rx.h's INIT_ARRAY_SECTION_ASM_OP), so crtbegin.o and crtend.o
+    carry them as code; the simulator's linker script puts them into .data,
+    which so becomes code; and binutils stores the code of a big-endian RX
+    executable with its 32-bit words swapped, data and all, which the
+    simulator loads as the file holds it. Copies of the two files whose
+    arrays are marked as data, in a folder that -B puts before GCC's, under
+    the variant's multilib folder: returns the folder."""
+    flags = VARIANTS[variant]['flags'].split()
+    multi = sh([tool(variant, 'gcc'), *flags, '-print-multi-directory']).stdout.strip()
+    folder = os.path.join(d, 'crt')
+    os.makedirs(os.path.join(folder, multi), exist_ok=True)
+    for name in ('crtbegin.o', 'crtend.o'):
+        src = sh([tool(variant, 'gcc'), *flags, '-print-file-name=' + name]).stdout.strip()
+        args = []
+        for sec in CRT_ARRAYS:
+            args += ['--set-section-flags', sec + '=alloc,load,contents,data']
+        r = sh([tool(variant, 'objcopy'), *args, src, os.path.join(folder, multi, name)])
+        if r.returncode != 0 or not os.path.isabs(src):
+            shown(r.stdout + r.stderr)
+            raise RuntimeError(f'{variant}: {name} cannot be copied with its arrays as data')
+    return folder
+
+
+def file_probe(variant, out, link):
+    """A program that writes a file, reads it back and removes it, its steps
+    on stderr, and, where tmpfile.c is linked, does the same with a
+    tmpfile(); linked as the tests are, and, for the support the variant
+    links in place of newlib's (open.c's _open, tmpfile.c's tmpfile()),
+    also without it: what each does under the simulator. It fails nothing.
+    Returns one line per link."""
+    v = VARIANTS[variant]
     d = os.path.abspath(os.path.join(out, 'file-probe-' + variant))
     os.makedirs(d, exist_ok=True)
     src = os.path.join(d, 'file_probe.c')
     with open(src, 'w', encoding='utf-8') as f:
         f.write(FILE_PROBE)
+    defines = ['-DCANON_PROBE_TMPFILE'] if v['tmpfile_c'] else []
+    if v['open_c']:
+        links = [("newlib's _open", [a for a in link if not a.endswith(os.sep + 'open.o')]),
+                 ("open.c's _open", link)]
+    elif v['tmpfile_c']:
+        links = [("newlib's tmpfile", [a for a in link if a != WRAP_TMPFILE
+                                       and not a.endswith(os.sep + 'tmpfile.o')]),
+                 ("tmpfile.c's tmpfile", link)]
+    else:
+        links = [("as the tests link", link)]
     lines = []
-    for label, extra in (("newlib's _open", []), ("open.c's _open", [obj])):
-        elf = os.path.join(d, 'file_probe' + ('_open_c' if extra else ''))
-        r = sh([tool(variant, 'gcc'), *VARIANTS[variant]['flags'].split(), '-std=c99', '-O1',
-                src, *extra, '-o', elf])
+    for i, (label, extra) in enumerate(links, 1):
+        elf = os.path.join(d, f'file_probe_{i}')
+        r = sh([tool(variant, 'gcc'), *v['flags'].split(), '-std=c99', '-O1', *defines, src,
+                *extra, '-o', elf])
         if r.returncode != 0:
             shown(r.stdout + r.stderr)
             lines.append(f'file probe, {label}: does not build')
@@ -254,11 +379,11 @@ def file_probe(variant, out, obj):
     return lines
 
 
-def environment(variant, obj):
+def environment(variant, link):
     env = dict(os.environ)
     env['CANON_RS_TARGET'] = VARIANTS[variant]['target']
     env['CANON_RS_FLAGS'] = (VARIANTS[variant]['flags'] + ' ' + DEFINES).strip()
-    env['CANON_RS_LINK'] = obj
+    env['CANON_RS_LINK'] = ' '.join(link)
     env['CANON_RS_RUN'] = tool(variant, 'run')
     return env
 
@@ -266,9 +391,14 @@ def environment(variant, obj):
 def configure_and_build(variant, build, out, env):
     b = os.path.abspath(os.path.join(out, f'{variant}-{build}'))
     shutil.rmtree(b, ignore_errors=True)
-    r = sh(['cmake', '-S', ROOT, '-B', b, '-G', 'Unix Makefiles',
+    args = ['cmake', '-S', ROOT, '-B', b, '-G', 'Unix Makefiles',
             '-DCMAKE_TOOLCHAIN_FILE=' + os.path.join(HERE, 'toolchain.cmake'),
-            '-DCMAKE_BUILD_TYPE=' + build], env=env)
+            '-DCMAKE_BUILD_TYPE=' + build]
+    if VARIANTS[variant]['debug'] is not None:
+        # In the cache before CMake's own Debug flags, -g, which it then
+        # does not set.
+        args.append('-DCMAKE_C_FLAGS_DEBUG=' + VARIANTS[variant]['debug'])
+    r = sh(args, env=env)
     if r.returncode != 0:
         shown('\n'.join((r.stdout + r.stderr).splitlines()[-30:]))
         raise RuntimeError(f'{variant} {build}: CMake does not configure')
@@ -279,30 +409,46 @@ def configure_and_build(variant, build, out, env):
     return b
 
 
-def attributes(b, name, binary, variant):
-    """The binary's machine and flags, the notes the RH850 ABI's binaries
-    carry (the alignment of 8-byte objects, the FPU the code needs), whether
-    its test was compiled with the variant's flags (CMake's flags.make), and
+def attributes(b, name, binary, variant, build):
+    """The binary's class, byte order, machine and flags; the notes the RH850
+    ABI's binaries carry (the alignment of 8-byte objects, the FPU the code
+    needs); whether its test was compiled with the variant's flags, and at
+    Debug with the variant's Debug flags and no -g (CMake's flags.make); and
     their problems."""
+    v = VARIANTS[variant]
     r = sh([tool(variant, 'readelf'), '-h', binary])
     head = dict(re.findall(r'^\s*(Class|Data|Machine|Flags):\s*(.*?)\s*$', r.stdout, re.M))
     notes = dict(re.findall(r'^\s*(Alignment of 8-byte objects|Type of FPU support needed):'
                             r'\s*(.*?)\s*$', sh([tool(variant, 'readelf'), '-n', binary]).stdout,
                             re.M))
     problems = []
-    if head.get('Class') != 'ELF32' or 'V850' not in head.get('Machine', '').upper():
-        problems.append(f'it is {head.get("Class")}, {head.get("Machine")}')
-    if notes.get('Type of FPU support needed') != VARIANTS[variant]['fpu']:
+    if head.get('Class') != 'ELF32' or v['machine'].upper() not in head.get('Machine', '').upper() \
+            or v['data'] not in head.get('Data', ''):
+        problems.append(f'it is {head.get("Class")}, {head.get("Data")}, {head.get("Machine")}')
+    if v['fpu'] is not None and notes.get('Type of FPU support needed') != v['fpu']:
         problems.append(f'its FPU note is "{notes.get("Type of FPU support needed")}", not '
-                        f'"{VARIANTS[variant]["fpu"]}"')
+                        f'"{v["fpu"]}"')
+    if v['e_flags'] is not None and v['e_flags'] not in head.get('Flags', ''):
+        problems.append(f'its flags are "{head.get("Flags")}", without "{v["e_flags"]}"')
     flags = os.path.join(b, 'CMakeFiles', name + '.dir', 'flags.make')
     text = open(flags, encoding='utf-8').read() if os.path.exists(flags) else ''
-    if VARIANTS[variant]['flags'] not in text:
-        problems.append(f'its flags.make has no {VARIANTS[variant]["flags"]}')
-    return (f'{head.get("Class")}, {head.get("Data")}, {head.get("Machine")}; notes: '
-            f'8-byte objects aligned {notes.get("Alignment of 8-byte objects")}, FPU '
-            f'{notes.get("Type of FPU support needed")}; compiled with '
-            f'{VARIANTS[variant]["flags"]}'), problems
+    if v['flags'] not in text:
+        problems.append(f'its flags.make has no {v["flags"]}')
+    debug = v['debug'] is not None and build == 'Debug'
+    if debug:
+        m = re.search(r'^C_FLAGS = (.*)$', text, re.M)
+        words = m.group(1).split() if m else []
+        if '-g' in words or any(w not in words for w in v['debug'].split()):
+            problems.append(f'its C_FLAGS are "{m.group(1) if m else ""}", not with '
+                            f'{v["debug"]} and without -g')
+    what = f'{head.get("Class")}, {head.get("Data")}, {head.get("Machine")}; '
+    if v['fpu'] is not None:
+        what += (f'notes: 8-byte objects aligned {notes.get("Alignment of 8-byte objects")}, '
+                 f'FPU {notes.get("Type of FPU support needed")}; ')
+    else:
+        what += f'flags {head.get("Flags")}; '
+    what += f'compiled with {v["flags"]}'
+    return what + (f', and {v["debug"]} without -g' if debug else ''), problems
 
 
 def leg(variant, build, out, env, pins):
@@ -324,7 +470,8 @@ def leg(variant, build, out, env, pins):
     built = [t for t in tests if os.path.exists(t['command'][-1])]
     if not built:
         raise RuntimeError(f'{variant} {build}: no test built')
-    attrs, attr_problems = attributes(b, built[0]['name'], built[0]['command'][-1], variant)
+    attrs, attr_problems = attributes(b, built[0]['name'], built[0]['command'][-1], variant,
+                                      build)
     if attr_problems:
         raise RuntimeError(f'{variant} {build}: {built[0]["name"]} is not the variant\'s: '
                            + '; '.join(attr_problems))
@@ -403,6 +550,8 @@ def check():
     for f in SUPPORT:
         if not os.path.exists(os.path.join(HERE, f)):
             problems.append(f'tools/renesas/{f}: no such file')
+    if not os.path.exists(msp430.TMPFILE):
+        problems.append(f'{rel(msp430.TMPFILE)}: no such file')
     for p in problems:
         print('  ' + p)
     print(f'renesas check: {len(pins)} pins, {len(tests)} tests in CMakeLists.txt; '
@@ -413,6 +562,9 @@ def check():
 def main(argv):
     if argv[:1] == ['check'] and len(argv) == 1:
         return check()
+    if argv[:1] == ['target'] and len(argv) == 2 and argv[1] in VARIANTS:
+        print(VARIANTS[argv[1]]['target'])
+        return 0
     report_only = '--report-only' in argv
     args = [a for a in argv if a != '--report-only']
     if len(args) < 2 or args[0] != 'run' or args[1] not in VARIANTS \
@@ -423,23 +575,25 @@ def main(argv):
     for v in versions(variant):
         print(v)
     print(f'C library and target: {facts(variant)}')
-    print(f'Variant: {variant}; flags: {VARIANTS[variant]["flags"]} {DEFINES}'.rstrip())
+    debug = VARIANTS[variant]['debug']
+    print(f'Variant: {variant}; flags: {VARIANTS[variant]["flags"]} {DEFINES}'.rstrip()
+          + (f'; Debug: {debug}, without -g' if debug is not None else ''))
     pins, problems = read_pins()
     os.makedirs(OUT, exist_ok=True)
     all_diffs = list(problems)
     try:
-        for name in ('gcc', 'run', 'readelf'):
+        for name in ('gcc', 'run', 'readelf', 'objcopy'):
             if not shutil.which(tool(variant, name)):
                 raise RuntimeError(f'{tool(variant, name)} must be on the PATH: '
                                    f'tools/renesas/build.sh builds it')
-        line = probe(variant, OUT)
+        link = support(variant, OUT)
+        line = probe(variant, OUT, link)
         print(line)
         print(f'::notice title=renesas {variant} probe::{line}')
-        obj = support(variant, OUT)
-        for line in file_probe(variant, OUT, obj):
+        for line in file_probe(variant, OUT, link):
             print(line)
             print(f'::notice title=renesas {variant} file probe::{line}')
-        env = environment(variant, obj)
+        env = environment(variant, link)
         for build in builds:
             line, diffs, _ = leg(variant, build, OUT, env, pins)
             print(f'::notice title=renesas {variant} {build}::{line}')

@@ -926,11 +926,12 @@ For what Canon-C intentionally omits, established C libraries exist:
 > GCC 13.3 and picolibc for Cortex-A78AE and Cortex-R82, and run under
 > QEMU at the four build types (job `aarch64`, VERIFY-099);
 > `tools/aarch64/pins.txt` names those that do not pass. On Renesas
-> RH850 they are built with GCC 13.3 and newlib 4.4, themselves built
-> from Ubuntu's source packages, and run under GDB's V850 simulator, with
-> the FPU and without (job `renesas`, VERIFY-101);
-> `tools/renesas/pins.txt` names those that do not pass. On RISC-V they
-> are compiled, not run.
+> RH850 and RX they are built with GCC 13.3 and newlib 4.4, themselves
+> built from Ubuntu's source packages, and run under GDB's V850 and RX
+> simulators: RH850 with its FPU and without, the RX600 with its FPU,
+> without it, and without it with big-endian data (job `renesas`,
+> VERIFY-101, VERIFY-102); `tools/renesas/pins.txt` names those that do
+> not pass. On RISC-V they are compiled, not run.
 >
 > **GCC 13.2 at `-O2` and `-Os`**
 > On Cortex-M, GCC 13.2 (Ubuntu 24.04's `arm-none-eabi-gcc`,
@@ -943,6 +944,22 @@ For what Canon-C intentionally omits, established C libraries exist:
 > between are not measured. Ubuntu's `riscv64-unknown-elf-gcc` 13.2
 > folds the same short program wrong. With GCC 13.2 for these targets,
 > build with `-fno-ipa-sra`, or use a newer GCC.
+>
+> **GCC on Renesas RX: `double` and the FPU**
+> GCC's `double` for RX has 32 bits unless `-m64bit-doubles` is given,
+> and `types.h` refuses a 32-bit `double`. Where GCC uses the RX FPU,
+> its default for the RX600, it compiles with `-ffinite-math-only`, and
+> `-fno-finite-math-only` does not undo it (GCC 13.3, job `renesas`,
+> VERIFY-102): every NaN and infinity is assumed away, in Canon-C's code
+> as in yours. `algo_cmp_f32` and `algo_cmp_f64` then order a NaN as a
+> number, and `random_f32_range` and `random_f64_range`, given an
+> infinite bound, do not return at `-O2`. Where a NaN or an infinity can
+> occur, build with `-nofpu`, with which those checks pass; `double` is
+> computed in software either way, since the FPU has single precision
+> only. The newlib GCC 13.3 links for RX, whatever the flags, is the one
+> built for the FPU, with finite math: its `printf` formats an infinity
+> or a NaN wrongly, and with `%f` writes past its buffer
+> (`tools/renesas/README.md`). Canon-C formats neither.
 >
 > **`CANON_LIFETIME_DEBUG` without 64-bit atomics**
 > The debug mode's token counter is a 64-bit atomic (`lifetime.h`'s
@@ -960,7 +977,7 @@ For what Canon-C intentionally omits, established C libraries exist:
 > `__atomic_fetch_add_8` yourself, with interrupts masked around it.
 > The `cortex-m`, `msp430` and `renesas` jobs define
 > `CANON_LIFETIME_NO_ATOMICS`; GCC's V850 port, `renesas`'s, has no
-> atomic at all.
+> atomic at all, and its RX port has a 4-byte one only.
 > The `aarch64` job defines nothing: both its cores have Armv8.1's
 > atomics, and GCC compiles the counter to one instruction (`ldadd`).
 >

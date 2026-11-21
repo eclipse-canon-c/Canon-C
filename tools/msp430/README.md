@@ -33,7 +33,8 @@ not return (VERIFY-097), so each test is linked, through
 `-Wl,--wrap=tmpfile`, with `tmpfile.c`: a `tmpfile()` that is a stream in
 memory, newlib's `fmemopen()`, which the tests write, rewind and read back
 as they would a file; the memory probe checks it before the tests
-(VERIFY-098). Nothing outside this job links it.
+(VERIFY-098). Outside this job, only the `renesas` job's RX variants link
+it, where GDB's RX simulator has no `lseek` (VERIFY-102).
 The script checks that the binaries are MSP430X at the model, from their
 MSPABI attributes, names newlib's version and whether its printf has C99's
 formats and `long long`'s (2.4.0 there has neither), prints each test's

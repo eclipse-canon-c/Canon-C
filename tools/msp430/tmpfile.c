@@ -4,7 +4,9 @@
  * -Wl,--wrap=tmpfile and this file: the tests' tmpfile() is a stream in
  * memory, newlib's fmemopen(), which they write, rewind and read back as a
  * temporary file, and which fclose() frees. NULL when it cannot be made,
- * as tmpfile() may return. Nothing outside the MSP430 job links it. */
+ * as tmpfile() may return. The renesas job's RX variants link it too
+ * (tools/renesas/renesas.py, VERIFY-102): GDB's RX simulator has no lseek,
+ * so a file's stream does not rewind there. Nothing else links it. */
 #include <stddef.h>
 #include <stdio.h>
 

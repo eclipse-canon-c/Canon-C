@@ -35,7 +35,11 @@ through QEMU's semihosting, and is not built with picolibc, which has no
 picolibc too (`tools/aarch64/pins.txt`); on Renesas RH850 it runs under
 GDB's V850 simulator and passes, `rename` among its checks, each test
 linked there with the `_open` that newlib's V850 port gets wrong
-(`tools/renesas/open.c`); RV32 and RV64 compile it and do not run it; on MSP430X it is not built, since it includes Tier 1 headers,
+(`tools/renesas/open.c`); on Renesas RX it runs under GDB's RX
+simulator, which carries no `link` or `unlink`, of which newlib makes
+`rename`: there `rename` returns 0 and does nothing, and the four checks
+of what it leaves fail, and with the FPU, under the finite math GCC then
+compiles with, its five checks of NaN (`tools/renesas/pins.txt`); RV32 and RV64 compile it and do not run it; on MSP430X it is not built, since it includes Tier 1 headers,
 which refuse that target's `size_t`.
 
 Clauses are C99's. "GCC says" quotes GCC's manual, "C Implementation-Defined
@@ -214,7 +218,7 @@ compiler reports, never the code it generates.
 |---------------------------|-----------------------------------|
 | right shift of a negative value, and bitwise operators on signed values (J.3.5; 6.5.7p5) | Every shift in the library acts on an unsigned operand (read for this page), and Cppcheck's MISRA rule 10.1 check, which flags a bitwise operator on a signed operand, reports none (`tools/misra/pins.txt`). Cppcheck shows one finding per line, and none of the 57 lines with another finding has a bitwise operator. |
 | how signed integers are represented (J.3.5) | The exact-width types are two's complement by definition (7.18.1.1), and nothing depends on how `int`, `long` or `ptrdiff_t` are represented. |
-| whether plain `char` is signed (J.3.4) | Characters become integers only through `unsigned char`: intern's hash and `str_compare`. Measured: signed on x86-64 and the V850 (RH850), unsigned on Arm, RISC-V, PowerPC and MSP430. |
+| whether plain `char` is signed (J.3.4) | Characters become integers only through `unsigned char`: intern's hash and `str_compare`. Measured: signed on x86-64 and the V850 (RH850), unsigned on Arm, RISC-V, PowerPC, MSP430 and RX. |
 | the execution character set's values (J.3.4) | Characters are compared for equality only, with `'\0'`, the whitespace characters and `'-'`, all of the basic character set. `str_compare` orders by byte value, as `strcmp` does. |
 | the integer type of an enumeration (J.3.9; 6.7.2.2p4) | `Error` is `unsigned int`, 4 bytes, on x86-64 and RISC-V, and `unsigned short`, 2 bytes, on arm-none-eabi, whose ABI makes enumerations short ("On some targets, -fshort-enums is the default", GCC says). `error_in_range` compares through `int`, and no code reads an enumeration's bytes. |
 | bit-fields (J.3.9) | There are none. |

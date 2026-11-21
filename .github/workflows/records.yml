@@ -126,9 +126,10 @@ jobs:
         run: python3 tools/aarch64/aarch64.py check
       - name: "The Renesas pins name the suite's tests (VERIFY-101)"
         # tools/renesas/pins.txt holds the tests that do not pass on the
-        # Renesas variants under GDB's simulator: each line well formed and
-        # naming a test of CMakeLists.txt, and no two for the same test,
-        # variant and build type.
+        # Renesas variants, RH850 and RX (VERIFY-102), under GDB's
+        # simulators: each line well formed and naming a test of
+        # CMakeLists.txt, and no two for the same test, variant and build
+        # type.
         run: python3 tools/renesas/renesas.py check
 
   # -------------------------------------------------------------------------
