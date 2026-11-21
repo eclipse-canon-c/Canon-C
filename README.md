@@ -1095,7 +1095,12 @@ For what Canon-C intentionally omits, established C libraries exist:
 > Full 16-bit support for the Tier 1 layers is deliberately deferred —
 > it would require width-conditional constants, a 16-bit verification
 > run, and per-width coverage re-derivation. It will be revisited if and
-> when a concrete user with a concrete 16-bit target materializes.
+> when a concrete user with a concrete 16-bit target materializes. The
+> same holds below Tier 0, for targets with no 8-bit bytes or no 64-bit
+> `double`, where none of Canon-C compiles today:
+> [issue #14](https://github.com/eclipse-canon-c/Canon-C/issues/14)
+> records what a subset tier for each would take
+> (`docs/architectures.md`, "Not supported").
 
 ---
 
@@ -1128,7 +1133,9 @@ Canon-C is not about writing less code. It is about writing code that stays
 readable, explicit, and safe as the codebase grows. The `...` below represents
 real programs — the conventions you see in each snippet are the same ones
 you will find everywhere in a Canon-C codebase, whether it is 300 lines or
-30,000.
+30,000. The snippets assume their Option and Result types are defined once,
+in a header of your own, as in **Usage** below: `CANON_RESULT(int, Error)`
+gives `result_int_Error`.
 
 ---
 
@@ -1289,29 +1296,35 @@ int load_calibration(const char* path) {
 #define CANON_CONTRACT_IMPL
 #include "core/ownership.h"
 #include "core/primitives/contract.h"
+#include "my_types.h"   /* CANON_RESULT(usize, Error), as in Usage */
 
-int load_calibration(borrowed(const char*) path) {
+#define CALIBRATION_BYTES 4096u
+
+result_usize_Error load_calibration(borrowed(const char*) path) {
     require_msg(path != NULL, "load_calibration: path is NULL");
 
-    int   rc  = 0;
+    result_usize_Error r;
     FILE* f   = NULL;
     void* buf = NULL;
+    usize n;
 
-    f = fopen(path, "r");
-    if (!f) { rc = ERR_OPEN; goto done; }
+    f = fopen(path, "rb");
+    if (!f) { r = result_usize_Error_err(ERR_IO_FAILED); goto done; }
 
-    buf = malloc(4096);
-    if (!buf) { rc = ERR_ALLOC; goto done; }
+    buf = malloc(CALIBRATION_BYTES);
+    if (!buf) { r = result_usize_Error_err(ERR_OUT_OF_MEMORY); goto done; }
 
-    if (fread(buf, 1, 4096, f) != 4096) { rc = ERR_IO;  goto done; }
-    if (!verify_crc(buf))                { rc = ERR_CRC; goto done; }
+    n = fread(buf, 1, CALIBRATION_BYTES, f);
+    if (n != CALIBRATION_BYTES) { r = result_usize_Error_err(ERR_IO_FAILED);      goto done; }
+    if (!verify_crc(buf))       { r = result_usize_Error_err(ERR_INVALID_FORMAT); goto done; }
 
     apply(buf);
+    r = result_usize_Error_ok(n);
 
 done:
     if (buf) free(buf);
     if (f)   fclose(f);
-    return rc;
+    return r;
 }
 ```
 
@@ -1319,6 +1332,9 @@ One cleanup block, listed in reverse acquisition order, reached by
 every exit path through a single `goto done`. Adding a new error path
 later means adding one line — the `goto done` automatically routes
 through the existing cleanup. Nothing to remember, nothing to forget.
+The Result is set where each outcome is known, each failure with its
+own `Error` from `semantics/error.h`; `done:` only tears down, and
+returns what was set.
 
 **`DEFER` and `goto cleanup;` are complementary, not alternatives.**
 `DEFER` is Canon-C's contribution, supplied by `core/scope.h` — a
@@ -1335,7 +1351,8 @@ such as a scratch arena checkpoint.
 
 **Contracts versus error propagation — two tools, two categories of
 failure.** Notice that the example above uses `require_msg(path != NULL, ...)`
-at the top *and* `if (!f) { rc = ERR_OPEN; goto done; }` further down.
+at the top *and* `if (!f) { r = result_usize_Error_err(ERR_IO_FAILED); goto done; }`
+further down.
 These are not redundant — they check different categories of failure.
 `require_msg` (from `core/primitives/contract.h`) is for **programmer
 errors**: NULL pointers where NULL is forbidden, preconditions the
@@ -1346,8 +1363,8 @@ panics to stop before damage spreads. Runtime failures are different:
 responding, a checksum not matching. These are **not bugs** — they are
 real conditions a correct program must handle. For those, propagate
 the failure to the caller as a value — most Canon-C functions do this
-with `Result<T, Error>` in the return type (shown in the next example),
-pairing it with `goto cleanup;` inside the function body when resources
+with `Result<T, Error>` in the return type (as this example does, and the
+next one carries across calls), pairing it with `goto cleanup;` inside the function body when resources
 need to be released before the Result leaves. `Result` is how the
 failure *leaves* the function; `goto cleanup;` is how the function
 *tears down* its state before the Result leaves. The two roles are
@@ -1401,15 +1418,15 @@ result_int_Error parse_and_validate(
 
     TRY(int, Error, validate(&vec));
 
-    return sum(&vec);
+    return result_int_Error_ok(sum(&vec));
 }
 
 /* ... caller, 1000 lines away ... */
 
 result_int_Error r = parse_and_validate(&arena, inputs, count);
-if (!result_int_Error_is_ok(r)) {
-    Error e = result_int_Error_unwrap_err(r);
-    printf("Failed: %s\n", error_message(e));
+Error e;
+if (result_int_Error_get_err(r, &e)) {
+    fprintf(stderr, "Failed: %s\n", error_message(e));
 }
 ```
 
@@ -1592,11 +1609,64 @@ Canon-C is **header-only**: there is no library to build or link. To use it:
    program does not link (`core/primitives/contract.h`).
 3. **Compile as C99 or later.**
 
+`option.h` and `result.h` define no types by themselves: `CANON_OPTION(T)`
+and `CANON_RESULT(T, E)` create them, once per type, at file scope. Put
+those lines in a header of your own, not in a `.c` file: Clang's
+`-Wunused-function` reports each generated function a `.c` file does not
+call, and does not for functions that come from a header.
+
+```c
+/* my_types.h: the Option and Result types this program uses */
+#ifndef MY_TYPES_H
+#define MY_TYPES_H
+#include "semantics/error.h"
+#include "semantics/option/option.h"
+#include "semantics/result/result.h"
+
+CANON_OPTION(int)          /* option_int: an int, or none */
+CANON_RESULT(int, Error)   /* result_int_Error: an int, or an Error */
+
+#endif
+```
+
 ```c
 /* main.c */
 #define CANON_CONTRACT_IMPL
+#include <stdio.h>
+#include <stdlib.h>
 #include "core/arena.h"
-#include "semantics/option/option.h"
+#include "core/ownership.h"
+#include "my_types.h"
+
+/* The first even value, or none: absence is a value, not -1. */
+static option_int first_even(borrowed(const int*) xs, usize n)
+{
+    require_msg(xs != NULL, "first_even: xs is NULL");
+    for (usize i = 0; i < n; i++) {
+        if (xs[i] % 2 == 0) {
+            return option_int_some(xs[i]);
+        }
+    }
+    return option_int_none();
+}
+
+/* Each failure has its own Error, not a shared 1. */
+static result_int_Error run(borrowed(Arena*) arena)
+{
+    require_msg(arena != NULL, "run: arena is NULL");
+
+    int *xs = arena_alloc(arena, 3u * sizeof(int));
+    if (xs == NULL) {
+        return result_int_Error_err(ERR_OUT_OF_MEMORY);
+    }
+    xs[0] = 3; xs[1] = 8; xs[2] = 5;
+
+    option_int even = first_even(xs, 3u);
+    if (option_int_is_none(even)) {
+        return result_int_Error_err(ERR_NOT_FOUND);
+    }
+    return result_int_Error_ok(option_int_unwrap(even));
+}
 
 static u64 backing[32];
 
@@ -1605,13 +1675,24 @@ int main(void)
     Arena arena;
     arena_init(&arena, backing, sizeof backing);
 
-    u8 *bytes = arena_alloc(&arena, 16u);
-    return bytes != NULL ? 0 : 1;
+    result_int_Error r = run(&arena);
+    Error e;
+    if (result_int_Error_get_err(r, &e)) {
+        fprintf(stderr, "failed: %s\n", error_message(e));
+        return EXIT_FAILURE;
+    }
+    printf("first even: %d\n", result_int_Error_unwrap(r));
+    return EXIT_SUCCESS;
 }
 ```
 
+`borrowed()` comes from `core/ownership.h`, which `core/arena.h` does not
+include. `main` is the one place where a failure becomes an exit status,
+`EXIT_SUCCESS` or `EXIT_FAILURE`; `get_err` copies the Error out and says
+whether there was one, so no `unwrap_err` can meet a success.
+
 ```sh
-cc -std=c99 -I path/to/Canon-C main.c
+cc -std=c99 -I path/to/Canon-C -I . main.c
 ```
 
 With CMake: `target_include_directories(your_target PRIVATE path/to/Canon-C)`.

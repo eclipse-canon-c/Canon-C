@@ -143,11 +143,21 @@ target compiled only, as AVR is.
 
 ## Not supported
 
+None of Canon-C compiles on these: every header includes
+`core/primitives/types.h`, which refuses them. A target where only part of
+the library works is listed with its tier in the tables above. This is the
+current design's limit, not a final one:
+[issue #14](https://github.com/eclipse-canon-c/Canon-C/issues/14) records
+what a subset for each kind of target would take (no 8-bit bytes, no
+64-bit `double`, a 16-bit `size_t`), and it is revisited, as the README's
+platform tiers say, "if and when a concrete user with a concrete 16-bit
+target materializes".
+
 | architecture | why |
 |--------------|-----|
-| TI C28x (C2000's classic core) and other processors with 16-bit bytes | the smallest addressable unit is 16 bits, so `uint8_t` cannot exist, and the C standard does not allow it to; Canon-C's `u8`, its byte views and its byte counts assume 8-bit bytes. Supporting them would mean redesigning the library's foundations. |
-| 8051 and STM8, for now | SDCC, their free compiler, has no 64-bit `double`; planned above, Tier 0 once `f64` is optional |
-| Analog Devices SHARC before SHARC+ (ADSP-2106x to ADSP-2148x), and SHARC+ built with `-char-size-32` | word-addressed: `char` has 32 bits, as `short`, `int` and `long` do, each of `sizeof` 1, so `uint8_t` cannot exist, as on the C28x. SHARC+ processors that address bytes (ADSP-SC58x and ADSP-2158x among them) do so by default, with `-char-size-8`, their `char` 8 bits: this row does not exclude them; they wait for a compiler (above). |
+| TI C28x (C2000's classic core) and other processors with 16-bit bytes | the smallest addressable unit is 16 bits, so `uint8_t` cannot exist, and the C standard does not allow it to; Canon-C's `u8`, its byte views and its byte counts assume 8-bit bytes. Not supported by the current design: the semantic layer (contracts, scope, ownership, Error, Option, Result, Diag) compiles without `u8` and `i8`, the byte-based layers (arena, slice, memory, the 8-bit helpers) do not, so a subset is possible (issue #14). |
+| 8051 and STM8, for now | SDCC, their free compiler, has no 64-bit `double`; planned above, Tier 0 once `f64` is optional (issue #14) |
+| Analog Devices SHARC before SHARC+ (ADSP-2106x to ADSP-2148x), and SHARC+ built with `-char-size-32` | word-addressed: `char` has 32 bits, as `short`, `int` and `long` do, each of `sizeof` 1, so `uint8_t` cannot exist, as on the C28x, nor `uint16_t`, so a subset would lose `u16` and `i16` too (issue #14). SHARC+ processors that address bytes (ADSP-SC58x and ADSP-2158x among them) do so by default, with `-char-size-8`, their `char` 8 bits: this row does not exclude them; they wait for a compiler (above). |
 
 Sources for the compilers named here: [SDCC's
 `double`](https://sourceforge.net/p/sdcc/feature-requests/351), [byte
