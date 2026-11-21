@@ -42443,6 +42443,7 @@ What it shows:
 | **ID**         | VERIFY-104 |
 | **Date**       | 2026-11-21 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-21 — Scored: I1 and I2 MATCH. CLOSED: two of two scored ("Scored", below). Renesas RL78 is under "Not supported", for now: GCC 13.3's `double` has 32 bits there, and no option makes it 64. The Status above is the record as committed. |
 | **Baseline**   | 8159a42 (VERIFY-103's change; its close, a75482c, a record, is pushed with this): `8` #146. |
 | **Scope**      | `docs/architectures.md`: a row of "Not supported", Renesas RL78. No code, test, tool or workflow file; no job. |
 | **Category**   | The list's item 8: Renesas through GDB's simulators, its third target, RL78, Tier 0, as the author chose on 2026-11-20; and the author's decision of 2026-11-21 on what its first measure found: not supported, for now, with issue #14. |
@@ -42521,3 +42522,32 @@ dsPIC/PIC24, planned. For issue #14, RL78 is a second target without a
 64-bit `double`, one whose compiler and simulator `build.sh` already
 builds; and its 16-bit function pointers are a limit of their own, which
 a Tier 0 on RL78 would meet.
+
+### Scored (2026-11-21)
+
+The push of a5f678d, 24018e2 and 90236b9 started one workflow, `8` #147,
+green at its first attempt.
+
+| # | scored |
+|---|--------|
+| I1 | **MATCH.** 8 ran, and no other. |
+| I2 | **MATCH.** 8 green, its two jobs, `record-coverage` and `workflow-size`, as at #146, no notice. |
+
+Two of two scored.
+
+**Closed.** Renesas RL78 is under "Not supported", for now, beside 8051
+and STM8: GCC 13.3's RL78 `double` has 32 bits, the `-m64bit-doubles`
+its manual documents is not an option of the port, and `types.h` refuses
+RL78 at its `f64` check. What else a Tier 0 there would meet, measured in
+a scratch copy, is in the row and in issue #14's scope. The close changes
+nothing but this record.
+
+What it shows:
+
+- **A manual is a claim like any other.** GCC's manual documents an RL78
+  option that the port no longer has; the compiler built from the same
+  release said "unrecognized", and the record went by the compiler.
+- **Building the toolchain answered what reading could only suggest.**
+  The sources said a 32-bit `double`; the built compiler, the probe under
+  the simulator and the scratch copy said what that costs, and what more
+  stands behind it.
