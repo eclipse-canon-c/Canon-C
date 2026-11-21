@@ -42290,3 +42290,111 @@ What it shows:
   built on the runner; built here with the same script, from the same
   packages, its twenty legs gave on the runner what they gave here, word
   for word.
+
+---
+
+## VERIFY-103: Pre-registration — The README's Examples Follow Its Own Rules: Option and Result Made as They Are Meant to Be, Failures as Named Errors; "Not Supported" Stated as the Current Design's Limit (Issue #14)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-103 |
+| **Date**       | 2026-11-21 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | b745271 (VERIFY-102's change; its close, 6980a96, a record, is pushed with this): `8` #145. |
+| **Scope**      | `README.md`: the Usage example, two of the Examples (Cleanup's `goto done`, Error propagation's `TRY`), a line in the Examples' introduction, and a sentence in the platform tiers; `docs/architectures.md`: "Not supported", its introduction and two rows. No code, test, tool or workflow file. |
+| **Category**   | The author's review of the README on 2026-11-21, and the author's decisions in it: Usage to show Option properly, and Result; failures as named Errors, not bare codes, in every example; `get_err` at the callers; issue #14, which the author opened, linked from "Not supported" and the platform tiers. |
+
+### What is missing
+
+The README says that preconditions are visible at every function
+boundary and that failures are values, not sentinel returns; its
+examples did not all follow it.
+
+- **Usage** included `semantics/option/option.h` and used nothing from
+  it: `option.h` defines no type until `CANON_OPTION(T)` is written, and
+  the example did not write it. Its `main` returned `bytes != NULL ? 0 :
+  1`.
+- **Cleanup's `goto done`** returned `int rc`, 0 for success, and
+  `ERR_OPEN`, `ERR_ALLOC`, `ERR_IO` and `ERR_CRC`, none of which
+  `semantics/error.h` defines; the paragraph after it says that runtime
+  failures leave a function through `Result`.
+- **Error propagation's `TRY`** ended a function returning
+  `result_int_Error` with `return sum(&vec);`, an `int`, which does not
+  compile.
+- **"Not supported"** in `docs/architectures.md` did not say that none of
+  Canon-C compiles there, and said of 16-bit-byte targets that supporting
+  them "would mean redesigning the library's foundations", where a subset
+  is possible.
+
+No workflow builds the README's examples.
+
+### What changes
+
+- **Usage**: a header of the program's own, `my_types.h`, writes
+  `CANON_OPTION(int)` and `CANON_RESULT(int, Error)`; `main.c` has
+  `first_even`, returning an `option_int`, and `run`, returning a
+  `result_int_Error` with `ERR_OUT_OF_MEMORY` or `ERR_NOT_FOUND`, each with
+  `require_msg` and `borrowed()`; `main` takes the Error out with
+  `get_err`, prints `error_message`, and returns `EXIT_FAILURE` or
+  `EXIT_SUCCESS`. The text says that `option.h` and `result.h` make no
+  type by themselves, why the instantiation goes in a header (Clang's
+  `-Wunused-function`), and that `borrowed()` comes from
+  `core/ownership.h`; the compile line gains `-I .`.
+- **Cleanup's `goto done`**: `result_usize_Error`, the Result set where
+  each outcome is known (`ERR_IO_FAILED`, `ERR_OUT_OF_MEMORY`,
+  `ERR_INVALID_FORMAT`, and `ok` with the bytes read), `done:` only
+  tearing down; `CALIBRATION_BYTES` for the size; `fopen` with `"rb"`. The
+  two paragraphs after it name the new line.
+- **Error propagation's `TRY`**: `return result_int_Error_ok(sum(&vec));`,
+  and the caller with `get_err` and `fprintf(stderr, ...)`.
+- **The Examples' introduction**: the snippets' types are made once in a
+  header, as in Usage.
+- **"Not supported"**: none of Canon-C compiles on these, since every
+  header includes `types.h`; the current design's limit, not a final one,
+  with issue #14 and the README's "concrete user" rule; the C28x row says
+  what of the library compiles without `u8` and `i8`, the SHARC row that a
+  32-bit `char` loses `uint16_t` too, the 8051 and STM8 row links the
+  issue. **The platform tiers** gain a sentence: the same deferral below
+  Tier 0, with the issue.
+
+### Measured here
+
+- Each new example, cut from `README.md` as committed, built with GCC
+  13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04.1) and Clang 18.1.3 at `-std=c99
+  -Wall -Wextra -Wpedantic -Werror`, and run. Usage prints "first even:
+  8" and exits 0; with its buffer cut to one `u64`, "failed: Out of
+  memory" and exits 1. The `goto done` example, with stand-ins for
+  `verify_crc` and `apply`, gives "I/O operation failed" for a missing and
+  a short file, "Invalid format" for a bad check, "ok, 4096 bytes" for a
+  good one, at `-O0` and `-O2`, with no warning of a variable used before
+  it is set. The `TRY` example, with stand-ins for `collect`, `validate`
+  and `sum`, gives "sum 6", and "Failed: Invalid argument" for no input.
+  No stand-in reaches the README.
+- `CANON_OPTION(int)` written in the `.c` file: GCC compiles it, Clang 18
+  gives twelve "unused function" errors at `-Werror`; written in a header,
+  none.
+- With the old Usage example: it compiles and exits 0, `option.h`
+  included and unused.
+- For "Not supported": a copy of the tree with `u8` and `i8` removed from
+  `types.h`, each header compiled alone with GCC: `contract.h`,
+  `scope.h`, `ownership.h`, `bits.h`, `limits.h`, `error.h`, `option.h`,
+  `result.h` and `diag.h` with no error; `compare.h` 8, `slice.h` 7,
+  `checked.h` 15, `arena.h` 44 (issue #14 holds the table).
+- `tools/which_workflows.py`: 8 alone.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| H1 | **8 runs**, and no other. | another set | H |
+| H2 | **8 is green**, its two jobs as at #145, no notice. | a failure, or a notice | H |
+
+**Not predicted**: nothing; no workflow reads the README's examples, so
+their builds above are this record's only test of them.
+
+### What follows
+
+H1 and H2 scored, and the record closes. Then RL78, Tier 0, as the author
+chose. For the author: whether a check should build the README's
+examples, so that one which does not compile, or does not do what its
+text says, fails a run; this record's fault was found by reading.
