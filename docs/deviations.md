@@ -42651,3 +42651,116 @@ What it shows:
 - **A target can wait on one half only.** TriCore's emulator is in
   Ubuntu's archive already; the row says so, so that a compiler alone
   would let its tests run, not only compile.
+
+---
+
+## VERIFY-106: Pre-registration — ARC Compiled For: ARCv2 EM and HS and ARCompact, with GCC and newlib Built from Ubuntu's Source Packages; Nothing Runs, for Want of a Simulator
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-106 |
+| **Date**       | 2026-11-21 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 5972656 (VERIFY-105's change; its close, 827fc18, a record, is pushed with this): `1` and `3` to `6` #90 (b745271), `2` #125 (b745271), `8` #148. |
+| **Scope**      | `tools/embedded_compile_check.sh`: a job's own targets and its notice's title, from two variables, and the compilers' versions read from the targets; without the variables, as it was. `.github/workflows/platforms.yml`: a job, `arc`, and the file's opening comment. `tools/renesas/build.sh` unchanged. The README's bare-metal section, `docs/architectures.md` (a row), `docs/verification.md` (a sentence, a row), `docs/implementation-defined.md` (plain `char`), the workflow map and `tools/renesas/README.md` (a paragraph). No library or test file. |
+| **Category**   | The list's item 8: ARC, compiled only, as the list has it (VERIFY-104's and VERIFY-105's "What follows"). |
+
+### What is missing
+
+Nothing compiles Canon-C for ARC, Synopsys' DesignWare cores, and
+`docs/architectures.md` does not name it. No Ubuntu package ships a
+compiler for ARC; GCC has a port, `arc-elf32`, in the release tarball of
+Ubuntu's `gcc-13-source` from which `tools/renesas/build.sh` builds
+RH850's and RX's.
+
+### What changes
+
+- **`tools/embedded_compile_check.sh`**: a job may give targets of its
+  own in `CANON_COMPILE_TARGETS`, a compiler and its flags a line, blank
+  lines skipped, and its notice's title in `CANON_COMPILE_TITLE`; without
+  them, the six targets and `embedded`, as before. The versions printed
+  are those of the compilers the targets name, each once, in the targets'
+  order: for the six, `arm-none-eabi-gcc` and `riscv64-unknown-elf-gcc`,
+  as before. An empty list of targets fails it, as an empty list of
+  headers or tests does.
+- **`arc`**, a job of `platforms.yml`: Ubuntu's four source packages and
+  GCC's libraries, by `apt-install`, from the `renesas` jobs' entry, the
+  list being theirs; `arc-elf32` built by `build.sh`, unchanged, and kept
+  in the Actions cache in an entry of its own, its key `gcc-`, the
+  target, the packages' versions and `build.sh`'s hash; then
+  `embedded_compile_check.sh`, titled `arc`, for `arc-elf32-gcc
+  -mcpu=em4` (ARCv2 EM), `-mcpu=hs38` (ARCv2 HS) and `-mcpu=arc700`
+  (ARCompact), at `-O0`, `-Os` and `-O2`: every header, as is and with
+  `CANON_NO_GNU_EXTENSIONS`, and every test, as for Cortex-M and RISC-V.
+  Nothing is linked or run. The three are the script's choice: a core of
+  each family, each its own multilib, none with an FPU.
+- **The documents** name ARC: a row of "Compiled for", the README's
+  bare-metal section, `docs/verification.md`, plain `char` in
+  `docs/implementation-defined.md`, the workflow map; and
+  `tools/renesas/README.md`, that `build.sh` builds ARC's toolchain too.
+
+### Measured here
+
+- **The toolchain.** `build.sh arc-elf32`, as committed, from the four
+  packages VERIFY-101 measured: 30 minutes (1772 s) on 2 CPUs, 270 MB
+  installed, "arc-elf32-gcc (GCC) 13.3.0", newlib and libgcc for 27
+  multilibs (the default and 26 cores). The simulator's step finds none to
+  build: GDB's configure says "This configuration is not supported in the
+  following subdirectories: sim libdecnumber gdb gdbserver", and its
+  install "Nothing to be done for 'install-strip-sim'"; GDB 15.1's `sim/`
+  has no `arc`, and there is no `arc-elf32-run`.
+- **QEMU.** Ubuntu's `qemu-system-misc` (1:8.2.2+ds-0ubuntu1.18)
+  provides emulators from Alpha's to Xtensa's, RX's and TriCore's among
+  them, and none for ARC; the other `qemu-system-*` packages are Arm's,
+  MIPS's, PowerPC's, s390x's, SPARC's and x86's (`apt-cache`).
+- **The cores.** GCC's default `-mcpu` is `hs38_linux`, an HS38 with a
+  double-precision FPU. At `em4`, `hs38` and `arc700`, each its own
+  multilib: `int`, `long`, pointers and `size_t` of 32 bits, `long long`,
+  `double` and `long double` of 64; `long long`, `double`, `long double`
+  and `max_align_t` aligned to 4; little-endian; plain `char` unsigned
+  (`__CHAR_UNSIGNED__`); `int32_t` `long`, as with `arm-none-eabi`;
+  enumerations of 4 bytes; no FPU. `-ffinite-math-only` is off at each,
+  and at `hs38_linux` with its FPU: unlike RX's, ARC's FPU does not turn
+  it on. Atomics: a 4-byte `__atomic_fetch_add` is `llock` and `scond` at
+  `hs38`, and a call at `em4` and `arc700`; an 8-byte one a call at each.
+  `lifetime_test.c`'s object, under `CANON_LIFETIME_DEBUG`, leaves
+  `__atomic_fetch_add_8` undefined at the three, and no library of the
+  toolchain defines it. Nothing is linked here, so the check does not meet
+  it.
+- **The compile**, with the script as committed and the job's three
+  targets, `GITHUB_ACTIONS` set, twice, the same each time: "arc-elf32-gcc
+  (GCC) 13.3.0", "headers: 79 + 5 hashmap, each twice  tests: 59", each
+  of the nine lines "227 / 227 compiled", "::notice title=arc::3 targets
+  x 3 levels, 227 units each (84 headers, with and without
+  CANON_NO_GNU_EXTENSIONS, and 59 tests), 0 failed", "OK"; 149 and 151 s.
+- **Without the two variables**, the script's output, its 23 lines, is
+  that of `embedded`'s compile step at #125, word for word: the two
+  versions, the headers' line, the 18 targets' lines, the notice "6
+  targets x 3 levels, 227 units each (84 headers, with and without
+  CANON_NO_GNU_EXTENSIONS, and 59 tests), 0 failed" and "OK"; 275 s.
+- **The refusals**, each made to fire: a list of blank lines alone,
+  "FAIL: empty header, test or target list", exit 1; a compiler not on
+  the `PATH`, "command not found", "0 / 227 compiled" at each level, "681
+  failed", exit 1.
+- `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| K1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| K2 | **The toolchain**: `arc` finds no entry for `arc-elf32` and builds it, in under 60 minutes, "arc-elf32-gcc (GCC) 13.3.0", and saves the entry `gcc-arc-elf32-20ea3bf39d23bfa1-cff30cc5eb891ea2…`, the packages' versions as at VERIFY-102's run. | a failed install or build, another version, 60 minutes or more, or another key | M–H: built here with the script as committed, never on the runner for `arc-elf32`; the archive's versions could move |
+| K3 | **`arc` is green**: its compile step prints the version, the nine lines "227 / 227 compiled" and the notice, word for word, "3 targets x 3 levels, 227 units each (84 headers, with and without CANON_NO_GNU_EXTENSIONS, and 59 tests), 0 failed", in under 10 minutes. | a failed compile, another word, or 10 minutes or more | M–H: the toolchain as built here, not yet on the runner |
+| K4 | **`embedded`'s compile step as at #125**, word for word: its 23 lines. | a difference | H: measured here, line for line |
+| K5 | **Nothing else changes**: 1 and 3 to 6 give #90's notices; 2's 35 other jobs #125's (times, and `embedded`'s slowest header's name, aside); 8 is green, its two jobs as at #148, no notice. | another notice, or a failure | H |
+
+**Not predicted**: whether `arc`'s install restores the `renesas` jobs'
+entry whole, nor the build's minutes.
+
+### What follows
+
+K1 to K5 scored, and the record closes. Then item 8's last entry, dsPIC
+and PIC24 with Microchip's XC16, planned. ARC's tests run when CI has a
+simulator for it; a run would link `__atomic_fetch_add_8`, which
+`CANON_LIFETIME_NO_ATOMICS`, as at RX and MSP430, or a library defining
+it would answer.
