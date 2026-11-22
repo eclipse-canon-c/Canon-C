@@ -43139,6 +43139,7 @@ What it shows:
 | **ID**         | VERIFY-109 |
 | **Date**       | 2026-11-22 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-22 — Scored: N1 to N3 MATCH. CLOSED: three of three scored ("Scored", below). `17 · README examples` builds Usage and runs it, and compiles each example as shown; four examples gained the includes they used. The Status above is the record as committed. |
 | **Baseline**   | 15e8467 (VERIFY-108's change; its close, 3a52ebc, a record, is pushed with this): `1` and `3` to `6` #93, `2` #128, `8` #151. `17` is new. |
 | **Scope**      | `.github/workflows/readme.yml`, new, `17 · README examples`; `tools/readme/`, new: `examples.py`, `my_types.h` and seven scaffolds. `README.md`: four examples gain the includes they use, and the Examples' introduction a sentence. The workflow map and `docs/verification.md` (a row). No library or test file. |
 | **Category**   | The first of the three the author agreed to on 2026-11-22: CI builds the README's examples (VERIFY-103's "What follows"). |
@@ -43224,3 +43225,34 @@ compiling, or a Usage that stops doing what its text says, fails nothing.
 
 N1 to N3 scored, and the record closes. Then the second of the three:
 `__FINITE_MATH_ONLY__` refused by an `#error`, with a macro to opt out.
+
+### Scored (2026-11-22)
+
+The push of 33d865f, 22f5862 and f11cddd started eight workflows: `1` and
+`3` to `6` #94, `2` #129, `8` #152 and `17` #1, each green at its first
+attempt.
+
+| # | scored |
+|---|--------|
+| N1 | **MATCH.** 1 to 6, 8 and 17 ran, and no other. |
+| N2 | **MATCH.** 17 green, in 10 s: "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0" and "Ubuntu clang version 18.1.3 (1ubuntu1)", the versions measured here; Usage "built, ran: 'first even: 8', exit 0" with each; the seven blocks "4 of 4 compiled" each; the notice `readme`, word for word, "Usage built with gcc and clang and run, "first even: 8" and exit 0: 2 of 2; 7 examples compiled in their scaffolds with gcc and clang at -O0 and -O2: 28 of 28; 0 failed". |
+| N3 | **MATCH.** The 102 jobs of 1 to 6 and 8 gave #93's, #128's and #151's notices, times aside; 8 green, its two jobs as at #151, no notice. |
+
+Three of three scored.
+
+**Closed.** The README's examples are built on each change to the README,
+to the library's folders or to `tools/readme/`: Usage as shown, built with
+GCC and Clang and run, and each example's code compiled as shown, with
+what it includes. Built so for the first time, four examples did not
+include what they used, and now do. The close changes nothing but this
+record.
+
+What it shows:
+
+- **What a reader copies is what is checked.** The four examples read
+  well and did not compile; the code around them in the README hid it,
+  and nothing compiled them. Their scaffolds give only what the README
+  says the reader supplies.
+- **A check must run when its input changes.** Put in 1, as planned, it
+  would never have run for a README-only change, since 1 ignores
+  Markdown.
