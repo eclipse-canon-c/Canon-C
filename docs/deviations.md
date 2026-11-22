@@ -43274,6 +43274,7 @@ What it shows:
 | **ID**         | VERIFY-110 |
 | **Date**       | 2026-11-22 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-22 — Scored: P1 to P4 MATCH, P5 MISS. CLOSED: five scored, one miss ("Scored", below): `13` and `16` choose their units from the push, and ran 3 of their last runs' 27. Finite math is refused by `compare.h` and `random.h`, `CANON_ALLOW_FINITE_MATH` to build anyway. The Status above is the record as committed. |
 | **Baseline**   | f11cddd (VERIFY-109's change; its close, b5e27b6, a record, is pushed with this): `1` and `3` to `6` #94, `2` #129, `8` #152, `17` #1; `7` #35, `9` #39, `13` #17, `14` #27, `15` #6 and `16` #3 at a7b4d87, `11` #14 at ba0ebd2, each its last run, none of whose files has changed since. |
 | **Scope**      | `core/primitives/compare.h` and `util/random.h`: an `#error` each, and its comment. `tools/renesas/renesas.py`: a variant's own defines, `rx`'s `-DCANON_ALLOW_FINITE_MATH`; `pins.txt`'s and `README.md`'s comments. `tools/finite_math_check.py`, new, and the job `finite-math` of `2 · Platforms`. `tools/tier_check.sh`: no `-I util`. `docs/implementation-defined.md` (section 7), the README's RX note, `docs/architectures.md` (the RX note; the dsPIC row's `util/time.h`), `docs/verification.md` (a row), the workflow map, `tools/dspic/README.md`; a correction in VERIFY-107's close. |
 | **Category**   | The second of the three the author agreed to on 2026-11-22: finite math refused by an `#error`, with a macro to opt out (VERIFY-102's decision for the author). |
@@ -43394,3 +43395,45 @@ built without it, checked. Then AArch32, as the author asked on
 2026-11-22: 32-bit Arm Linux (`arm-linux-gnueabihf`) under qemu-user
 first, then Cortex-R5 and Cortex-R52 on bare metal. Then item 9, the
 CompCert matrix.
+
+### Scored (2026-11-22)
+
+The push of f29b1e9, 88d5ea8 and fd36206 started fifteen workflows: `1`
+and `3` to `6` #95, `2` #130, `7` #36, `8` #153, `9` #40, `11` #15, `13`
+#18, `14` #28, `15` #7, `16` #4 and `17` #2, each green at its first
+attempt; the last, `6`, in 88 minutes, as #94 took.
+
+| # | scored |
+|---|--------|
+| P1 | **MATCH.** 1 to 9, 11 and 13 to 17 ran, and no other. |
+| P2 | **MATCH.** `finite-math` green, in 15 s: "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0", "Ubuntu clang version 18.1.3 (1ubuntu1)"; each of the two headers "refused, by its #error" under each of the three flags, and compiling with the macro and without finite math; `finite-math gcc` and `finite-math clang`, each word for word, "80 headers under -ffinite-math-only: 56 compile, 24 refused by the finite-math #error; with CANON_ALLOW_FINITE_MATH: 80 compile; 0 check(s) failed". |
+| P3 | **MATCH.** `renesas (rx)`'s four legs "as pinned", #129's outcomes: "61 tests, 55 passed, 5 failed (compare_test 12, impl_defined_test 9, file_test 3, parse_test 6, random_test times-out), 1 not built (time_test)", "random_test 2" at Debug; the other four Renesas jobs' notices #129's. |
+| P4 | **MATCH.** `dspic`: the archive from the cache, "xc-dsc.tar.xz: OK"; "as pinned (tools/dspic/probe.pinned, 21 lines)"; at both devices "Tier 0 compiles: core/primitives/compare.h", XC-DSC's finite math being off, and "0 check(s) failed". |
+| P5 | **MISS.** Every job green, and of the jobs both runs had, every notice the last run's, times aside. But not every job of the last runs ran, and not every notice is theirs. `13` and `16` run the units the push can affect, which they find from its files: 3 of 27 here (`frama-c-priority-queue`, `frama-c-compare-order`, `frama-c-compare`), against #17's and #3's 27, so 96 of 13's jobs and 24 of 16's did not run, and their "Which units the push can affect" and 13's "agreement total" name 3 units; `9`'s order probe, which runs when `compare.h` changes, ran its nine legs, each "not run; tools/probes/verify-084/steps names no part", where #39 skipped it. Within `13`, `frama-c-priority-queue` found a second goal over CVC5's 30 s, "Slow (over 30 s), left out of the comparison: 2" for 1, its counts and "Against its pins: 0 difference(s)" as at #17. #39's `pointer-probe (frama-c-lifetime)` had its one notice twice among GitHub's annotations, its log once; once here. |
+
+Four of five, one miss. Not predicted, and as it fell: at dsPIC, without
+`-I util`, `util/time.h` compiles: "80 headers: 31 compile, 49 refused by
+Tier 1, 0 other" at both devices. Microchip's library declares `struct
+timespec`, and VERIFY-107's cause for its failure was the check's, as its
+correction says.
+
+**Closed.** Finite math is refused where the library relies on what it
+takes away: `compare.h` and `random.h`, and the 22 headers that include
+them, stop with an `#error` naming `CANON_ALLOW_FINITE_MATH`, at GCC and
+Clang under `-ffinite-math-only`, `-ffast-math` and `-Ofast`, and at GCC's
+RX port with its FPU, whose `rx` variant defines the macro and tests as
+before. The other 56 headers, and every compiler without finite math, are
+unaffected. The close changes nothing but this record.
+
+What it shows:
+
+- **A baseline must be read for how its workflow chooses its jobs.** `13`
+  and `16` take their units from the push's files; their last run, of
+  another push, ran other units. P5 named their notices as a whole and
+  missed for it, every outcome they share being the same.
+- **The include path can be the cause.** `util/time.h` failed at dsPIC
+  because the check's `-I util` made `<time.h>` itself; without it, it
+  compiles. A failure is the target's only once the check is ruled out.
+- **A refusal at the property's origin is narrow.** 24 of 80 headers
+  refuse finite math, not all of them; a user of the rest, under
+  `-ffast-math`, is not stopped for comparators he does not include.
