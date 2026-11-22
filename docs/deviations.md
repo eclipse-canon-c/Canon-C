@@ -42815,6 +42815,7 @@ What it shows:
 | **ID**         | VERIFY-107 |
 | **Date**       | 2026-11-22 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-22 — Scored: L1 to L8 MATCH. CLOSED: eight of eight scored ("Scored", below). dsPIC's and PIC24's core are checked against the platform tiers with Microchip's XC-DSC 4.00, fetched from Microchip, its digest Microchip's SHA-256; run 1 measured, and reported only. The Status above is the record as committed. |
 | **Baseline**   | 87f43d2 (VERIFY-106's change; its close, fbe94cd, a record, is pushed with this): `1` and `3` to `6` #91, `2` #126, `8` #149. |
 | **Scope**      | `tools/tier_check.sh`: the AVR check, renamed and widened (a compiler, its target flags, a flag for a 64-bit `double`, the notice's title, report-only); `tools/avr_tier_check.sh`, which now calls it with AVR's defaults; `tools/dspic/` (`probe.sh`, `README.md`); `.github/workflows/platforms.yml`: a job, `dspic`, and the file's opening comment. The README's platform tiers, `docs/architectures.md` (a row, the planned entry), `docs/verification.md` (a sentence, a row), `docs/implementation-defined.md` (`size_t`) and the workflow map. No library or test file. |
 | **Category**   | The list's item 8, its last entry: dsPIC and PIC24, as the author chose on 2026-11-22, Microchip's XC-DSC 4.00 from its archive, and CI measuring first. |
@@ -42951,3 +42952,55 @@ L1 to L8 scored, and the record closes. The next record pins what run 1
 measured: the archive's full digest, by which it is then cached, as
 `msp430`'s package is; the probe's figures; and the tier check's outcomes,
 enforced from then on. Then item 9, the CompCert matrix.
+
+### Scored (2026-11-22)
+
+The push of c6ed121, a4e01cd and a420848 started seven workflows: `1` and
+`3` to `6` #92, `2` #127 and `8` #150, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| L1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| L2 | **MATCH.** Microchip's server gave `curl` the archive, 83,178,084 bytes, in 2 s. Microchip's figure is its SHA-256, "sha256 4fa70007bf28e246c39ec280270f510a8e003993671297c412ccf8e57c8eacef" (its SHA-1 2d2c644d4fdd235b11de138d47b10f2ef6e7681c); "xc-dsc-gcc at xc-dsc-v4.00/bin/xc-dsc-gcc". |
+| L3 | **MATCH.** "elf-gcc (Microchip Technology) 8.3.1 (XC-DSC, Microchip v4.00.00) Build date: Jun 24 2026"; at `-mcpu=generic-16dsp` and `-mcpu=generic-16bit` a unit compiles, "status 0, no message", with no device family pack. |
+| L4 | **MATCH.** At both devices: "char signed, short 2, int 2, long 4, long long 8, pointer 2, size_t 2, float 4, double 4 (8 with -fno-short-double), long double 8, little-endian". |
+| L5 | **MATCH.** `-O0`, `-O1`, `-O2`, `-O3` and `-Os`, and "-std=c99 -Wall -Wextra -Wpedantic -Werror": each "status 0, no message". |
+| L6 | **MATCH.** At both devices, Part 1: `types.h`, `bits.h`, `compare.h` and `contract.h` "refused, by the f64 check", `scope.h` compiling; Part 2: the five Tier 0 headers compiling, the eight Tier 1 headers "refused, by its #error". Of the 80 headers, the 29 that compile at AVR compile, and `util/parse.h` with them; AVR's 49 are refused by Tier 1. "80 headers: 30 compile, 49 refused by Tier 1, 1 other; 0 check(s) failed; report only". |
+| L7 | **MATCH.** `dspic` green, in 15 s. |
+| L8 | **MATCH.** `embedded`'s AVR step's 56 lines are those of #126, line for line. 1 and 3 to 6 gave #91's notices, and 2's 36 other jobs #126's, times aside; 8 green, its two jobs as at #149, no notice. |
+
+Eight of eight scored. Not predicted, and as it fell: the archive's
+digest is a SHA-256, which Microchip's page abbreviates; the GCC beneath
+XC-DSC is 8.3.1, `__XC_DSC_VERSION__` 40000, and among Microchip's macros
+are `__XC_DSC_MUSL__`, `__HAS_DSP__` (at `generic-16dsp` only),
+`__GENERIC_16DSP__` or `__GENERIC_16BIT__`, and XC16's and C30's own;
+plain `char` is signed; `-mprint-devices` exits 255, two lines, naming
+neither device; with no `-mcpu` a unit compiles, with "warning: Could not
+open resource file: .../bin/bin/../c30_device.info", the default device's
+support being in a pack; `util/parse.h` compiles, where avr-libc lacks
+`strtoll`, and `util/time.h` does not, "storage size of 'ts' isn't
+known", Microchip's library having no `struct timespec`, as avr-libc has
+none. The probe's notice cut the version's line at 80 characters, within
+its date.
+
+**Closed.** Canon-C's platform tiers are checked for dsPIC's core and
+PIC24's, at XC-DSC's virtual devices, with Microchip's XC-DSC 4.00,
+fetched from Microchip, its digest checked against Microchip's before it
+runs: the 32-bit `double` refused at `types.h`, Tier 0 compiling with
+`-fno-short-double`, Tier 1 refused by its `#error`, as on AVR. Run 1
+measured and reported only; VERIFY-108 pins and enforces. The close
+changes nothing but this record.
+
+What it shows:
+
+- **A vendor compiler, fetched, measured on the runner first.** Nothing
+  of XC-DSC ran here; each figure above is the runner's, and each matched
+  what Microchip's documents and AVR's outcomes led the record to expect.
+- **Two targets, one data model, one outcome.** dsPIC's core and AVR
+  differ in compiler, C library and instruction set, and share `int`,
+  `size_t` and pointers of 16 bits: the tiers fall the same way at both,
+  header for header, but for two of avr-libc's gaps, one of which
+  Microchip's library shares.
+- **Report-only, then enforced.** Run 1 could not fail on a figure, only
+  on the fetch, the digest or the archive, so a wrong guess about a
+  compiler never run here would have shown as a figure, not as a red run.
