@@ -62,9 +62,10 @@ optional (7.18.1.1). **Canon-C** uses `u8` to `i64` throughout. **Checked**:
 and capacity limits need 32 bits. **Checked**: `core/primitives/limits.h`
 refuses a smaller `size_t` (`#error`, Tier 1), and `2 · Platforms` checks
 the refusal with AVR's 16-bit `size_t` (`tools/avr_tier_check.sh`), and
-since VERIFY-107 with dsPIC's, reporting only at its run 1 (`dspic`,
-`tools/tier_check.sh`). Tier 0's headers stay usable there. On MSP430X (`msp430`, VERIFY-096) the tests are
-built at a 16-bit `size_t` and at a 20-bit one, and those below Tier 1 run.
+with dsPIC's (`dspic`, `tools/tier_check.sh`, VERIFY-107), enforced since
+VERIFY-108. Tier 0's headers stay usable there. On MSP430X (`msp430`,
+VERIFY-096) the tests are built at a 16-bit `size_t` and at a 20-bit one,
+and those below Tier 1 run.
 
 ### 3. Pointers as flat byte addresses
 
@@ -219,7 +220,7 @@ compiler reports, never the code it generates.
 |---------------------------|-----------------------------------|
 | right shift of a negative value, and bitwise operators on signed values (J.3.5; 6.5.7p5) | Every shift in the library acts on an unsigned operand (read for this page), and Cppcheck's MISRA rule 10.1 check, which flags a bitwise operator on a signed operand, reports none (`tools/misra/pins.txt`). Cppcheck shows one finding per line, and none of the 57 lines with another finding has a bitwise operator. |
 | how signed integers are represented (J.3.5) | The exact-width types are two's complement by definition (7.18.1.1), and nothing depends on how `int`, `long` or `ptrdiff_t` are represented. |
-| whether plain `char` is signed (J.3.4) | Characters become integers only through `unsigned char`: intern's hash and `str_compare`. Measured: signed on x86-64 and the V850 (RH850), unsigned on Arm, RISC-V, PowerPC, MSP430 and RX; on ARC, compiled only, GCC defines `__CHAR_UNSIGNED__` (VERIFY-106). |
+| whether plain `char` is signed (J.3.4) | Characters become integers only through `unsigned char`: intern's hash and `str_compare`. Measured: signed on x86-64 and the V850 (RH850), unsigned on Arm, RISC-V, PowerPC, MSP430 and RX; on ARC, compiled only, GCC defines `__CHAR_UNSIGNED__` (VERIFY-106); on dsPIC's and PIC24's core, compiled only, XC-DSC's is signed (VERIFY-107, `tools/dspic/probe.pinned`). |
 | the execution character set's values (J.3.4) | Characters are compared for equality only, with `'\0'`, the whitespace characters and `'-'`, all of the basic character set. `str_compare` orders by byte value, as `strcmp` does. |
 | the integer type of an enumeration (J.3.9; 6.7.2.2p4) | `Error` is `unsigned int`, 4 bytes, on x86-64 and RISC-V, and `unsigned short`, 2 bytes, on arm-none-eabi, whose ABI makes enumerations short ("On some targets, -fshort-enums is the default", GCC says). `error_in_range` compares through `int`, and no code reads an enumeration's bytes. |
 | bit-fields (J.3.9) | There are none. |

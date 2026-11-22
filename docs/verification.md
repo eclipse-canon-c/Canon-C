@@ -831,7 +831,8 @@ and `int32_t` is `long`; RV32 and RV64 with picolibc; and AVR, at a 16-bit
 and HS and ARCompact ARC700, with GCC and newlib built from Ubuntu's
 source packages, where plain `char` is unsigned. And (`dspic`, VERIFY-107)
 the platform tiers for dsPIC and PIC24's core, with Microchip's XC-DSC,
-fetched from Microchip: its run 1 measures, and reports only.
+fetched from Microchip, its SHA-256 pinned: measured at its run 1, and
+enforced since VERIFY-108.
 
 ### The other builds, and what each is evidence for
 
@@ -849,7 +850,7 @@ fetched from Microchip: its run 1 measures, and reports only.
 | `c-standards` | C11, C17 and C23 with GCC 14 and Clang, Debug, sanitizers on | the tests at those standards, where the C11 arms are compiled (`_Alignof(max_align_t)`, `_Static_assert`) |
 | `embedded` | Cortex-M, RV32, RV64 and AVR, bare metal | that the headers and tests compile there; nothing runs |
 | `arc` | ARCv2 EM (`em4`), ARCv2 HS (`hs38`) and ARCompact ARC700, bare metal: GCC 13.3 and newlib 4.4 built from Ubuntu's source packages | that the headers and tests compile there; nothing runs, since neither GDB nor QEMU has an ARC simulator |
-| `dspic` | XC-DSC's virtual devices `generic-16dsp` and `generic-16bit`, dsPIC's and PIC24's core: Microchip's XC-DSC 4.00, fetched from Microchip, its digest checked against the one Microchip's page shows | the platform tiers at a 16-bit `size_t`, as at AVR; at VERIFY-107's run 1 measured and reported only, the compiler's version, devices and type sizes printed |
+| `dspic` | XC-DSC's virtual devices `generic-16dsp` and `generic-16bit`, dsPIC's and PIC24's core: Microchip's XC-DSC 4.00, fetched from Microchip, its SHA-256 pinned | the platform tiers at a 16-bit `size_t`, as at AVR, and the compiler's version, devices, type sizes and optimization levels as pinned (`tools/dspic/probe.pinned`); measured at VERIFY-107's run 1, enforced since VERIFY-108 |
 | `lifetime-debug`, `lifetime-token-concurrency` | `CANON_LIFETIME_DEBUG`; the atomic levels, with ThreadSanitizer | the lifetime plumbing and the token generation, by tests |
 
 ### Call-order rules (Aorai)

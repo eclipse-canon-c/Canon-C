@@ -671,71 +671,61 @@ jobs:
           tools/embedded_compile_check.sh
 
   # -------------------------------------------------------------------------
-  # 1n. dsPIC and PIC24's core, with Microchip's XC-DSC (VERIFY-107)
+  # 1n. dsPIC and PIC24's core, with Microchip's XC-DSC (VERIFY-107,
+  #     VERIFY-108)
   #
   #    XC-DSC 4.00 (8 July 2026), Microchip's compiler for dsPIC33, every
   #    optimization level without a key: its archive for Linux, fetched from
-  #    Microchip, its digest checked against the one Microchip's download
-  #    page shows, abbreviated to its first eight digits and last four,
-  #    before anything in it runs. At XC-DSC's virtual devices generic-16dsp
-  #    (dsPIC's core) and generic-16bit (the core without the DSP
-  #    instructions, PIC24's), tools/dspic/probe.sh prints what the compiler
-  #    is: its version and devices, its type sizes, its optimization levels;
-  #    and tools/tier_check.sh checks the README's platform tiers there, as
-  #    at AVR, int, size_t and pointers having 16 bits. Run 1 measures: the
-  #    probe is printed, the tier check reports only, and the job fails only
-  #    if the fetch, the digest or the archive does. A later record pins
-  #    what it measures, and enforces it. Using XC-DSC accepts Microchip's
-  #    licence for it, as the author chose (VERIFY-107).
+  #    Microchip, its SHA-256 pinned before anything in it runs, and kept in
+  #    the Actions cache by it, as msp430's package is. At XC-DSC's virtual
+  #    devices generic-16dsp (dsPIC's core) and generic-16bit (the core
+  #    without the DSP instructions, PIC24's), tools/dspic/probe.sh reports
+  #    what the compiler is: its version and devices, its type sizes, its
+  #    optimization levels; and tools/tier_check.sh checks the README's
+  #    platform tiers there, as at AVR, int, size_t and pointers having 16
+  #    bits. VERIFY-107's run 1 measured them; enforced since VERIFY-108:
+  #    the probe's output must be tools/dspic/probe.pinned, run 1's, and the
+  #    tier check's must hold. Using XC-DSC accepts Microchip's licence for
+  #    it, as the author chose (VERIFY-107).
   # -------------------------------------------------------------------------
   dspic:
     runs-on: ubuntu-24.04
     env:
       XC_DSC_URL: https://ww1.microchip.com/downloads/aemDocuments/documents/DEV/ProductDocuments/SoftwareTools/xc-dsc-v4.00-full-install-linux64.tar.xz
-      # Microchip's download page shows the archive's digest abbreviated,
-      # "4fa70007... acef", and does not name its kind: SHA-256 or SHA-1
-      # matching both ends will do until run 1 prints the full one to pin.
-      XC_DSC_SUM_HEAD: 4fa70007
-      XC_DSC_SUM_TAIL: acef
+      # Microchip's download page shows it abbreviated, "4fa70007... acef";
+      # VERIFY-107's run 1 measured it whole, both ends Microchip's.
+      XC_DSC_SHA256: 4fa70007bf28e246c39ec280270f510a8e003993671297c412ccf8e57c8eacef
     steps:
       - uses: actions/checkout@v6
-      - name: Fetch Microchip's XC-DSC 4.00, its digest checked against Microchip's page
+      - name: Cache Microchip's XC-DSC 4.00's archive
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/xc-dsc.tar.xz
+          key: xc-dsc-${{ env.XC_DSC_SHA256 }}
+      - name: Fetch Microchip's XC-DSC 4.00, its SHA-256 checked
         timeout-minutes: 20
         run: |
           pkg="$RUNNER_TEMP/xc-dsc.tar.xz"
-          curl -fsSL --retry 3 -o "$pkg" "$XC_DSC_URL"
-          echo "size $(stat -c %s "$pkg") bytes"
-          sha256=$(sha256sum "$pkg" | cut -d' ' -f1)
-          sha1=$(sha1sum "$pkg" | cut -d' ' -f1)
-          echo "sha256 $sha256"
-          echo "sha1   $sha1"
-          ok=
-          for s in "$sha256" "$sha1"; do
-            case "$s" in "$XC_DSC_SUM_HEAD"*"$XC_DSC_SUM_TAIL") ok=$s ;; esac
-          done
-          if [ -z "$ok" ]; then
-            echo "FAIL: neither digest is Microchip's $XC_DSC_SUM_HEAD... $XC_DSC_SUM_TAIL"; exit 1
+          [ -f "$pkg" ] || curl -fsSL --retry 3 -o "$pkg" "$XC_DSC_URL"
+          echo "$XC_DSC_SHA256  $pkg" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/xc-dsc"
+          tar -xJf "$pkg" -C "$RUNNER_TEMP/xc-dsc"
+          # Where VERIFY-107's run 1 found the driver.
+          bin="$RUNNER_TEMP/xc-dsc/xc-dsc-v4.00/bin"
+          if [ ! -x "$bin/xc-dsc-gcc" ]; then
+            echo "FAIL: no xc-dsc-v4.00/bin/xc-dsc-gcc in the archive"; exit 1
           fi
-          echo "Microchip's $XC_DSC_SUM_HEAD... $XC_DSC_SUM_TAIL: $ok"
-          dir="$RUNNER_TEMP/xc-dsc"
-          mkdir -p "$dir"
-          tar -xJf "$pkg" -C "$dir"
-          # The driver nearest the archive's top, if it holds more than one.
-          cc=$(find "$dir" -name xc-dsc-gcc \( -type f -o -type l \) | awk -F/ '{ print NF "\t" $0 }' | sort -n | head -1 | cut -f2-)
-          if [ -z "$cc" ]; then
-            echo "FAIL: no xc-dsc-gcc in the archive; its top:"; find "$dir" -maxdepth 3 | head -40; exit 1
-          fi
-          echo "xc-dsc-gcc at ${cc#"$dir/"}"
-          dirname "$cc" >> "$GITHUB_PATH"
-      - name: What XC-DSC is (measured, not enforced)
+          echo "$bin" >> "$GITHUB_PATH"
+      - name: What XC-DSC is, as pinned
         timeout-minutes: 10
+        env:
+          PINS: tools/dspic/probe.pinned
         run: tools/dspic/probe.sh
-      - name: The platform tiers at a 16-bit size_t, at generic-16dsp and generic-16bit (report only)
+      - name: The platform tiers at a 16-bit size_t, at generic-16dsp and generic-16bit
         timeout-minutes: 20
         env:
           CC: xc-dsc-gcc
           F64_FLAGS: -fno-short-double
-          REPORT_ONLY: 1
         run: |
           for cpu in generic-16dsp generic-16bit; do
             TARGET_FLAGS="-mcpu=$cpu" TITLE="dspic $cpu" tools/tier_check.sh

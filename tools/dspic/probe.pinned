@@ -1,0 +1,21 @@
+xc-dsc-gcc: elf-gcc (Microchip Technology) 8.3.1 (XC-DSC, Microchip v4.00.00) Build date: Jun 24 2026
+=== Devices ===
+  -mprint-devices: status 255, 2 lines, generic-16dsp listed 0, generic-16bit listed 0
+=== An empty unit, compiled ===
+  (no -mcpu): status 0, elf-cc1: warning: Could not open resource file: <bin>/bin/../c30_device.info
+  -mcpu=generic-16dsp: status 0, no message
+  -mcpu=generic-16bit: status 0, no message
+=== The types, in bytes, at each device ===
+  generic-16dsp: char signed, short 2, int 2, long 4, long long 8, pointer 2, size_t 2, float 4, double 4 (8 with -fno-short-double), long double 8, little-endian
+  generic-16dsp: GCC 8.3.1, __XC_DSC_VERSION__ 40000
+  generic-16dsp: Microchip's macros: __C30 __C30ELF __C30ELF__ __C30_VERSION__ __C30__ __GENERIC_16DSP__ __HAS_BUILTINS_16__ __HAS_DSP__ __XC16 __XC16ELF __XC16ELF__ __XC16_BUILD_DATE__ __XC16_VERSION __XC16_VERSION__ __XC16__ __XC_DSC __XC_DSCELF __XC_DSCELF__ __XC_DSC_BUILD_DATE__ __XC_DSC_MUSL__ __XC_DSC_VERSION__ __XC_DSC__ __XC__ __dsPIC30 __dsPIC30ELF __dsPIC30ELF__ __dsPIC30__
+  generic-16bit: char signed, short 2, int 2, long 4, long long 8, pointer 2, size_t 2, float 4, double 4 (8 with -fno-short-double), long double 8, little-endian
+  generic-16bit: GCC 8.3.1, __XC_DSC_VERSION__ 40000
+  generic-16bit: Microchip's macros: __C30 __C30ELF __C30ELF__ __C30_VERSION__ __C30__ __GENERIC_16BIT__ __HAS_BUILTINS_16__ __XC16 __XC16ELF __XC16ELF__ __XC16_BUILD_DATE__ __XC16_VERSION __XC16_VERSION__ __XC16__ __XC_DSC __XC_DSCELF __XC_DSCELF__ __XC_DSC_BUILD_DATE__ __XC_DSC_MUSL__ __XC_DSC_VERSION__ __XC_DSC__ __XC__ __dsPIC30 __dsPIC30ELF __dsPIC30ELF__ __dsPIC30__
+=== The optimization levels and the project's warning flags, at generic-16dsp ===
+  -O0: status 0, no message
+  -O1: status 0, no message
+  -O2: status 0, no message
+  -O3: status 0, no message
+  -Os: status 0, no message
+  -std=c99 -Wall -Wextra -Wpedantic -Werror: status 0, no message

@@ -1062,7 +1062,8 @@ For what Canon-C intentionally omits, established C libraries exist:
 > Tier 0 compiles and Tier 1 is refused by its `#error`. The job `dspic`
 > (VERIFY-107) checks the same for dsPIC and PIC24's core, with
 > Microchip's XC-DSC, whose `double` has 32 bits unless
-> `-fno-short-double`; its run 1 measures, and reports only. On MSP430X,
+> `-fno-short-double`: measured at its run 1 and enforced since VERIFY-108,
+> the tiers fall there as on AVR. On MSP430X,
 > whose `int` has 16 bits, the job `msp430` (VERIFY-096) builds each
 > test with TI's GCC, whose `double` has 64 bits, at the small memory
 > model (a 16-bit `size_t`) and the large (a 20-bit one), and runs those
