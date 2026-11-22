@@ -43129,3 +43129,98 @@ What it shows:
 - **A pin can come from the vendor's own figure.** Microchip shows twelve
   of the digest's sixty-four digits; run 1 measured the rest, and both
   ends matched before anything ran.
+
+---
+
+## VERIFY-109: Pre-registration — The README's Examples, Built: Usage Run, Each Example Compiled as Shown; Four That Did Not Include What They Used
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-109 |
+| **Date**       | 2026-11-22 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 15e8467 (VERIFY-108's change; its close, 3a52ebc, a record, is pushed with this): `1` and `3` to `6` #93, `2` #128, `8` #151. `17` is new. |
+| **Scope**      | `.github/workflows/readme.yml`, new, `17 · README examples`; `tools/readme/`, new: `examples.py`, `my_types.h` and seven scaffolds. `README.md`: four examples gain the includes they use, and the Examples' introduction a sentence. The workflow map and `docs/verification.md` (a row). No library or test file. |
+| **Category**   | The first of the three the author agreed to on 2026-11-22: CI builds the README's examples (VERIFY-103's "What follows"). |
+
+### What is missing
+
+No workflow reads the README's examples: VERIFY-103 found three of them
+wrong by reading, and built them by hand, once. An example that stops
+compiling, or a Usage that stops doing what its text says, fails nothing.
+
+### What changes
+
+- **`tools/readme/examples.py`** reads the README's C blocks. Usage's
+  two, `my_types.h` and `main.c`, are written out as shown, built with
+  each compiler at `-std=c99 -Wall -Wextra -Wpedantic -Werror` and `-I`
+  the root and `.`, as Usage's command line has it, and run: "first even:
+  8" on standard output, nothing on standard error, exit 0. Each example's
+  "WITH Canon-C" block is compiled, at `-O0` and `-O2`, in the scaffold of
+  this folder whose `// block:` line is the block's first line. A scaffold
+  gives what the block leaves to its program, and no header of Canon-C's:
+  the Option and Result types the README says the examples assume
+  (`my_types.h`, `CANON_OPTION(int)`, `CANON_RESULT(int, Error)` and
+  `CANON_RESULT(usize, Error)`); stand-ins for the program's own names
+  (`Config`, `verify_crc`, `apply`, `vec_int`, `collect`, `validate`,
+  `sum`, `buf`); and a function for the statements a block shows at file
+  scope, its `// split:` line naming where they begin when a block has
+  both. Two scaffolds add a flag, each for what its block leaves to "...":
+  `-Wno-return-type` (Contracts' `process` shows no end) and
+  `-Wno-unused-variable` (Cleanup's `tmp`). `#line` makes each diagnostic
+  name the README's line. A block without a scaffold, or a scaffold
+  without its block, fails, as does a Usage that is not one `my_types.h`
+  and one `main.c`. The "WITHOUT Canon-C" blocks are plain C to compare
+  with, and are not built.
+- **`17 · README examples`**, `readme.yml`: one job, the runner's GCC and
+  Clang, the script. It runs on a change to `README.md`, to the library's
+  folders, to `tools/readme/` or to itself. The author's plan put it in
+  `1 · Build & test`; but 1 ignores Markdown (`paths-ignore: '**.md'`), so
+  a change to the README alone would never run it there.
+- **The README**: Contracts gains `#include "core/arena.h"` and
+  `"core/ownership.h"`, Ownership `"core/slice.h"`, Error propagation
+  `"core/arena.h"` and `"core/ownership.h"`, Error context
+  `"core/ownership.h"` and `"util/parse.h"`: what each uses and did not
+  include. The Examples' introduction says that the snippets are compiled
+  as shown, and Usage built and run, by 17.
+
+### Measured here
+
+- **The README as it was**, with GCC 13.3.0 (Ubuntu
+  13.3.0-6ubuntu2~24.04.1) and Clang 18.1.3: Usage built and ran with
+  both, "first even: 8", exit 0. Of the seven blocks, three compiled
+  (Cleanup's two and Borrow lifetime's), and four did not: Contracts,
+  "unknown type name 'borrowed'" and, with Clang, 'Arena'; Ownership,
+  "unknown type name 'str_t'"; Error propagation, `borrowed` and `Arena`;
+  Error context, `borrowed`, then `result_i64_Error` and `parse_i64`. The
+  README's Usage says that `borrowed()` comes from `core/ownership.h`,
+  which `core/arena.h` does not include; three examples used it without.
+- **With the includes added**: "Usage built with gcc and clang and run,
+  "first even: 8" and exit 0: 2 of 2; 7 examples compiled in their
+  scaffolds with gcc and clang at -O0 and -O2: 28 of 28; 0 failed".
+- **The check's failures, made to fire**, each on a copy of the tree
+  as committed, exit 1: Borrow lifetime's last call renamed,
+  `region_assert_valid`: "README.md:1592:1: error: implicit declaration
+  of function 'region_assert_valid'", "24 of 28; 4 failed"; Usage's line
+  changed: "FAIL: Usage, gcc: exit 0, out 'first even = 8\n', err ''",
+  and Clang's, "0 of 2"; Ownership's first line changed: "no scaffold
+  names this block" and "no block of the README is its".
+- **The runner's compilers**, from #128's `build` jobs: "The C compiler
+  identification is GNU 13.3.0", and "Clang 18.1.3".
+- `tools/which_workflows.py`: 1 to 6, 8 and 17. 1 to 6 run for
+  `readme.yml`, a new workflow file, which none of them ignores.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| N1 | **1 to 6, 8 and 17 run**, and no other. | another set | H |
+| N2 | **17 is green**, its notice, word for word, "Usage built with gcc and clang and run, "first even: 8" and exit 0: 2 of 2; 7 examples compiled in their scaffolds with gcc and clang at -O0 and -O2: 28 of 28; 0 failed", with GCC 13.3.0 and Clang 18.1.3. | a failure, another word, or other versions | M–H: measured here with the same compilers' versions, never on the runner |
+| N3 | **Nothing else changes**: 1 and 3 to 6 give #93's notices, 2's 37 jobs #128's (times aside); 8 is green, its two jobs as at #151, no notice. | another notice, or a failure | H |
+
+**Not predicted**: 17's time.
+
+### What follows
+
+N1 to N3 scored, and the record closes. Then the second of the three:
+`__FINITE_MATH_ONLY__` refused by an `#error`, with a macro to opt out.
