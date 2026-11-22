@@ -43447,6 +43447,7 @@ What it shows:
 | **ID**         | VERIFY-111 |
 | **Date**       | 2026-11-22 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-22 — Scored: P1 to P3 MATCH, P4 MISS. CLOSED: four scored, one miss ("Scored", below): `embedded`'s slowest header, which the runner's times decide, was another, and P4 set aside the times but not its name, as earlier records had. RX without its FPU links the libraries built without it: the link traced, and no instruction of the FPU in those libraries or in any test's binary. The Status above is the record as committed. |
 | **Baseline**   | fd36206 (VERIFY-110's change; its close, 57a1afa, a record, is pushed with this): `1` and `3` to `6` #95, `2` #130, `8` #153 and `17` #2, each its last run, at fd36206. |
 | **Scope**      | `tools/renesas/renesas.py`: at `rx-nofpu` and `rx-be`, the libraries built without the FPU, from a folder that `-B` puts first; the link traced, and the FPU's instructions counted in what it takes and in GCC's own libraries; at the three RX variants, the FPU's instructions counted in every test's binary. `tools/renesas/README.md` and `pins.txt`'s comments; the README's RX note; `docs/architectures.md` (the RX row and note); `docs/verification.md` (the `renesas` row); `platforms.yml`'s comment on the job. |
 | **Category**   | The third of the three the author agreed to on 2026-11-22: RX without its FPU, and RX with big-endian data, linking GCC's libraries built without the FPU, and the job showing that no binary holds an instruction of it (VERIFY-102's finding). |
@@ -43610,3 +43611,46 @@ waits on the author. Then AArch32, as the author asked on 2026-11-22:
 32-bit Arm Linux (`arm-linux-gnueabihf`) under qemu-user first, then
 Cortex-R5 and Cortex-R52 on bare metal. Then item 9, the CompCert
 matrix.
+
+### Scored (2026-11-22)
+
+The push of 9c52a0c, acad8ff and 08cd79a started eight workflows: `1`
+and `3` to `6` #96, `2` #131, `8` #154 and `17` #3, each green at its
+first attempt; the last, `6`, in 84 minutes.
+
+| # | scored |
+|---|--------|
+| P1 | **MATCH.** 1 to 6, 8 and 17 ran, and no other. |
+| P2 | **MATCH.** `renesas (rx-nofpu)` and `renesas (rx-be)` green, their four legs each "as pinned", #130's outcomes: "61 tests, 58 passed, 2 failed (impl_defined_test 4, file_test 3), 1 not built (time_test)" and "61 tests, 57 passed, 3 failed (impl_defined_test 4, stringbuf_test 1, file_test 3), 1 not built (time_test)", each leg's notice ending "; FPU instructions in 0 of 60 binaries" before its minutes. `renesas rx-nofpu libraries` and `renesas rx-be libraries` word for word as predicted: every start file and library from the support folder, 13 and 15 files with no instruction of the FPU, and 2092 in GCC's own. The toolchain from the cache gave the figures of the one built here. |
+| P3 | **MATCH.** `renesas (rx)` green, its four legs "as pinned", #130's outcomes, "random_test 2" at Debug and "random_test times-out" at the other three, with "FPU instructions in 4 of 60 binaries" at Debug and "in 2 of 60" at Release, RelWithDebInfo and MinSizeRel. |
+| P4 | **MISS.** Every other job green, and with the predicted parts taken out, every notice of the 104 jobs its last run's, times aside, but one: `embedded`'s "compiled at -O2 in 1.1 s in all, the slowest 0.08 s (data/convenience/smallvec.h), times reported only", where #130 had `algo/any_all/any_all.h`, at 0.06 s. The slowest header is the one that took longest on the runner, and its name changes with the times; VERIFY-101's E6 and F6, VERIFY-102's G6 and VERIFY-106's K5 set it aside with them. From VERIFY-107's L8 the predictions set aside the times alone, and L8, M6, N3 and VERIFY-110's P5 held on it only because the name stayed `algo/any_all/any_all.h`, as it had since #124. P4 set aside the times alone, and missed. |
+
+Three of four, one miss. Not predicted, and as it fell: with the
+counting, every leg of `rx-nofpu` and `rx-be` took 0.2 minutes, against
+0.1 or 0.2 at #130, and `rx`'s 1.1 to 1.2 and 0.2 at Debug, against 1.1
+and 0.2.
+
+**Closed.** At `rx-nofpu` and `rx-be` the tests are linked with GCC's and
+newlib's libraries built without the FPU, which GCC 13.3's driver does
+not pick; the run checks that the link takes them, that they hold no
+instruction of the FPU where GCC's own hold 2092, and that no test's
+binary holds one, as some at `rx` must. The pins are unchanged. The close
+changes nothing but this record.
+
+What it shows:
+
+- **A prediction keeps what its predecessors set aside.** The slowest
+  header's name is the runner's times, not the change. VERIFY-101, 102
+  and 106 set it aside in words; from VERIFY-107 the predictions did not,
+  and held while the name stayed, until P4. A "nothing else changes"
+  names every field the times decide.
+- **A check of the binaries alone would not have shown the libraries.**
+  With GCC's own libraries, none of the 60 tests' binaries holds an
+  instruction of the FPU: no test calls a library function that has one.
+  Measured before the run, this is why the link and the libraries are
+  checked themselves, and each check was broken once, in a copy, to see it
+  fail.
+- **A count needs a case where it must find something.** At `rx` some
+  binaries, and in GCC's own libraries some files, must hold an
+  instruction of the FPU, or the run fails: a count that saw nothing
+  would otherwise pass every variant without the FPU.
