@@ -43014,6 +43014,7 @@ What it shows:
 | **ID**         | VERIFY-108 |
 | **Date**       | 2026-11-22 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-22 — Scored: M1 to M6 MATCH. CLOSED: six of six scored ("Scored", below). dsPIC's and PIC24's core are held: XC-DSC's SHA-256 pinned, the archive cached by it, the probe as pinned, the platform tiers enforced. The Status above is the record as committed. |
 | **Baseline**   | a420848 (VERIFY-107's change; its close, b5aba34, a record, is pushed with this): `1` and `3` to `6` #92, `2` #127, `8` #150. |
 | **Scope**      | `.github/workflows/platforms.yml`, the `dspic` job: the archive's SHA-256 pinned, the archive cached by it, the driver's directory as run 1 found it, the probe held to its pins, the tier check without `REPORT_ONLY`. `tools/dspic/probe.sh`: `PINS`, its output with the compiler's directory written `<bin>` and no blank at a line's end, and its notice's version without the build date; `tools/dspic/probe.pinned`, new. The documents that said run 1 reports only. No library or test file. |
 | **Category**   | VERIFY-107's "What follows": what its run 1 measured, pinned and enforced. |
@@ -43096,3 +43097,35 @@ the README's examples; `__FINITE_MATH_ONLY__` refused by an `#error`,
 with a macro to opt out; RX without its FPU, and RX with big-endian data,
 linking GCC's libraries built without it, checked. Then item 9, the
 CompCert matrix.
+
+### Scored (2026-11-22)
+
+The push of d657e64, b0bf20e and 15e8467 started seven workflows: `1` and
+`3` to `6` #93, `2` #128 and `8` #151, each green at its first attempt.
+
+| # | scored |
+|---|--------|
+| M1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| M2 | **MATCH.** "Cache not found for input keys: xc-dsc-4fa70007bf28e246c39ec280270f510a8e003993671297c412ccf8e57c8eacef"; the archive fetched from Microchip in about a second, "/home/runner/work/_temp/xc-dsc.tar.xz: OK"; "Cache saved with key: xc-dsc-4fa70007bf28e246c39ec280270f510a8e003993671297c412ccf8e57c8eacef". |
+| M3 | **MATCH.** "as pinned (tools/dspic/probe.pinned, 21 lines)", no difference shown; the notice `dspic probe` begins "elf-gcc (Microchip Technology) 8.3.1 (XC-DSC, Microchip v4.00.00);" and ends "as pinned (tools/dspic/probe.pinned, 21 lines)". |
+| M4 | **MATCH.** At both devices, "80 headers: 30 compile, 49 refused by Tier 1, 1 other; 0 check(s) failed", without "report only", and "OK". |
+| M5 | **MATCH.** `dspic` green, in 22 s. |
+| M6 | **MATCH.** `embedded`'s AVR step's 56 lines are those of #127, line for line. Of the 102 jobs, the 101 other than `dspic` gave #92's, #127's and #150's notices, times aside; 8 green, its two jobs as at #150, no notice. |
+
+Six of six scored.
+
+**Closed.** dsPIC's core and PIC24's are checked, and held: XC-DSC 4.00's
+archive against its SHA-256 before it runs, kept in the Actions cache by
+it; the compiler's version, devices, type sizes and optimization levels
+as `tools/dspic/probe.pinned` gives them; the platform tiers at both
+virtual devices as at AVR, a failed check failing the job. Item 8 is done.
+The close changes nothing but this record.
+
+What it shows:
+
+- **Measured on the runner, then held there.** The pins are run 1's
+  output, taken from its log; run 2 printed them back word for word, with
+  the runner's path written as the probe now writes it.
+- **A pin can come from the vendor's own figure.** Microchip shows twelve
+  of the digest's sixty-four digits; run 1 measured the rest, and both
+  ends matched before anything ran.
