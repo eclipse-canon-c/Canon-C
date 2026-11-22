@@ -42983,6 +42983,14 @@ known", Microchip's library having no `struct timespec`, as avr-libc has
 none. The probe's notice cut the version's line at 80 characters, within
 its date.
 
+> **Correction (2026-11-22, VERIFY-110).** That `util/time.h` fails for
+> want of Microchip's `struct timespec` is not shown: `tools/tier_check.sh`
+> compiled with `-I util`, under which `util/time.h`'s `#include <time.h>`
+> is `util/time.h` itself, already guarded, and no C library's `<time.h>`
+> is read, at any target. At AVR, avr-libc's declares none either
+> (VERIFY-110, measured without `-I util`); at dsPIC it is not known.
+> VERIFY-110 drops `-I util` from the check.
+
 **Closed.** Canon-C's platform tiers are checked for dsPIC's core and
 PIC24's, at XC-DSC's virtual devices, with Microchip's XC-DSC 4.00,
 fetched from Microchip, its digest checked against Microchip's before it
@@ -43256,3 +43264,133 @@ What it shows:
 - **A check must run when its input changes.** Put in 1, as planned, it
   would never have run for a README-only change, since 1 ignores
   Markdown.
+
+---
+
+## VERIFY-110: Pre-registration — Finite Math, Refused: `compare.h` and `random.h` Name It with an `#error`, `CANON_ALLOW_FINITE_MATH` to Build Anyway
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-110 |
+| **Date**       | 2026-11-22 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | f11cddd (VERIFY-109's change; its close, b5e27b6, a record, is pushed with this): `1` and `3` to `6` #94, `2` #129, `8` #152, `17` #1; `7` #35, `9` #39, `13` #17, `14` #27, `15` #6 and `16` #3 at a7b4d87, `11` #14 at ba0ebd2, each its last run, none of whose files has changed since. |
+| **Scope**      | `core/primitives/compare.h` and `util/random.h`: an `#error` each, and its comment. `tools/renesas/renesas.py`: a variant's own defines, `rx`'s `-DCANON_ALLOW_FINITE_MATH`; `pins.txt`'s and `README.md`'s comments. `tools/finite_math_check.py`, new, and the job `finite-math` of `2 · Platforms`. `tools/tier_check.sh`: no `-I util`. `docs/implementation-defined.md` (section 7), the README's RX note, `docs/architectures.md` (the RX note; the dsPIC row's `util/time.h`), `docs/verification.md` (a row), the workflow map, `tools/dspic/README.md`; a correction in VERIFY-107's close. |
+| **Category**   | The second of the three the author agreed to on 2026-11-22: finite math refused by an `#error`, with a macro to opt out (VERIFY-102's decision for the author). |
+
+### What is missing
+
+Finite math lets GCC and Clang assume there is no NaN and no infinity.
+`compare.h`'s float comparators order NaN by `x != x`, and `random.h`'s
+float ranges return `min` for a NaN or an infinite bound by comparisons;
+finite math folds both away, without a word. VERIFY-102 found it at RX,
+where GCC's port turns finite math on with the FPU and no flag turns it
+off: there `algo_cmp_f64` orders a NaN as a number and
+`random_f64_range`, given an infinite bound, does not return.
+`docs/implementation-defined.md` says finite math is "not supported", and
+nothing says so to a compiler.
+
+### What changes
+
+- **`compare.h` and `random.h`**, after their includes: where
+  `__FINITE_MATH_ONLY__` is defined and not 0, and
+  `CANON_ALLOW_FINITE_MATH` is not defined, an `#error` that names the
+  header's checks, the four ways to finite math (`-ffinite-math-only`,
+  `-ffast-math`, `-Ofast`, GCC's RX port with its FPU) and the macro. At
+  the property's origin, as `types.h`'s platform contract asks of a header
+  that relies on more than it establishes; so every header that includes
+  either refuses too, and the others do not. The `defined()` gate leaves
+  MSVC and CompCert, which do not define the macro, and the static
+  analyzers an error-free configuration, as `limits.h`'s does.
+- **`rx`**, `tools/renesas/renesas.py`: its tests are built with
+  `-DCANON_ALLOW_FINITE_MATH`, a variant's own `defines`, so that `rx`
+  goes on testing what a user of GCC's default gets; its pins stand.
+- **`tools/finite_math_check.py`**, run by `finite-math`, a job of
+  `2 · Platforms`, with the runner's GCC and Clang: the two headers
+  refused, each by its own `#error`, under each of the three flags; both
+  compiling under `-ffinite-math-only` with the macro, and without finite
+  math; every public header (`tools/tier_check.sh`'s 80) under
+  `-ffinite-math-only` compiling or refused by one of the two, anything
+  else failing; and every one compiling with the macro. A notice for each
+  compiler.
+- **`tools/tier_check.sh` without `-I util`**, found while building the
+  check: under it, `util/time.h`'s `#include <time.h>` is `util/time.h`
+  itself, already guarded, and the C library's `<time.h>` is never read;
+  `CMakeLists.txt`'s `time_test` has no `util` either. VERIFY-107's close
+  put `util/time.h`'s failure at dsPIC on Microchip's library; a
+  correction there says it is not known.
+- **The documents**: section 7 of `docs/implementation-defined.md` says
+  "Refused" for "Not supported", and how; the README's and
+  `docs/architectures.md`'s RX notes, the RX README and `pins.txt` say
+  that `rx` defines the macro; `docs/verification.md` and the workflow
+  map gain `finite-math`; the dsPIC row and README no longer give a cause
+  for `util/time.h`.
+
+### Measured here
+
+- **The refusal**, with GCC 13.3.0 and Clang 18.1.3: each of the two
+  headers, alone, refused under `-ffinite-math-only`, `-ffast-math` and
+  `-Ofast`, by its `#error` ("Canon-C: compare.h's float comparators
+  order NaN, ...", "Canon-C: random.h's float ranges refuse a NaN or an
+  infinite bound, ..."); compiling with `-DCANON_ALLOW_FINITE_MATH`, and
+  without finite math. With GCC's RX port, `-mcpu=rx600
+  -m64bit-doubles`: `compare.h` refused, and compiling with the macro.
+- **`tools/finite_math_check.py`**, as committed, with each compiler: "80
+  headers under -ffinite-math-only: 56 compile, 24 refused by the
+  finite-math #error; with CANON_ALLOW_FINITE_MATH: 80 compile; 0
+  check(s) failed", "OK", in 10 s for both. The 24, at both compilers:
+  `compare.h`; the 21 headers of `algo/`'s `any_all`, `filter`, `find`,
+  `reverse`, `search`, `sort` and `unique` (each module's own, `_decl.h`
+  and `_defn.h`); `data/priority_queue.h`; and `util/random.h`.
+- **`util/time.h`**: with `-I util`, the only one of the 80 that does not
+  compile on the host, "storage size of 'ts' isn't known"; without it,
+  none. With avr-gcc 7.3.0 and without `-I util`, it still fails so:
+  avr-libc's `<time.h>` declares no `struct timespec`.
+- **`rx`, all four builds**, with the toolchain built here by `build.sh`:
+  "Variant: rx; flags: -mcpu=rx600 -m64bit-doubles
+  -DCANON_LIFETIME_NO_ATOMICS -DCANON_ALLOW_FINITE_MATH"; each leg "as
+  pinned", its outcomes those of #129: "61 tests, 55 passed, 5 failed
+  (compare_test 12, impl_defined_test 9, file_test 3, parse_test 6,
+  random_test times-out), 1 not built (time_test)", and at Debug
+  "random_test 2"; 219 s. `renesas.py check`: "9 pins, 61 tests in
+  CMakeLists.txt; 0 problem(s)".
+- **The other compilers' defaults**: `__FINITE_MATH_ONLY__` 0 with
+  `v850-elf` at `rh850` and `rh850-soft`, `rx-elf` at `rx-nofpu` and
+  `rx-be`, `arm-none-eabi-gcc` at Cortex-M0+ and Cortex-M4 with its FPU,
+  `riscv64-unknown-elf-gcc` at RV32, and avr-gcc; 1 at `rx` only. ARC's
+  three were measured at VERIFY-106: off. XC-DSC's and TI's MSP430 GCC's
+  were not measured.
+- **The AVR check**, as committed: its 56 lines those of #128, line for
+  line.
+- **The rest unchanged**: `compare.h`'s preprocessed text, by GCC and
+  Clang, with and without `CANON_NO_REQUIRE`, is the same as before;
+  `random.h`'s differs only in the line numbers its contracts' messages
+  carry, 17 lines later. `tools/size/size.py`: "as pinned: 57 rows, 798
+  figures", and its tokens "418582". Ubuntu's Cppcheck 2.13.0, with 3 ·
+  Static analysis' options, on `compare_test.c`, `priority_queue_test.c`
+  and `random_test.c`: its configurations now include
+  "CANON_ALLOW_FINITE_MATH;__FINITE_MATH_ONLY__", exit 0, nothing found.
+  `shellcheck`: `tier_check.sh` clean.
+- `tools/which_workflows.py`: 1 to 9, 11 and 13 to 17.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| P1 | **1 to 9, 11 and 13 to 17 run**, and no other. | another set | H |
+| P2 | **`finite-math` is green**, its two notices, `finite-math gcc` and `finite-math clang`, each word for word "80 headers under -ffinite-math-only: 56 compile, 24 refused by the finite-math #error; with CANON_ALLOW_FINITE_MATH: 80 compile; 0 check(s) failed". | a failure, or another word | M–H: measured here with the runner's compilers' versions, never on the runner |
+| P3 | **`renesas (rx)` as at #129**: each of its four legs "as pinned", with #129's outcomes; the other four Renesas jobs as at #129. | another outcome, or a failure | H: measured here, with the toolchain the cache holds, built by the same script |
+| P4 | **`dspic` as pinned**: the probe "as pinned"; at both devices Parts 1 and 2 as at #129, `compare.h` among Tier 0's compiling, and "0 check(s) failed". | a failed check, `compare.h` refused, or the probe not as pinned | M–H: XC-DSC's `__FINITE_MATH_ONLY__` not measured; GCC's default, and dsPIC has no FPU |
+| P5 | **Nothing else changes**: every other job green, its notices its last run's (times aside): 1 and 3 to 6 #94's, 2's #129's (`embedded`'s AVR step's 56 lines among them), 8 #152's, 17 #1's; 7 #35's, 9 #39's, 13 #17's, 14 #27's, 15 #6's, 16 #3's; 11 #14's. | another notice, or a failure | M–H: the change is preprocessor lines that no build with finite math off reads, but fifteen workflows, and TI's MSP430 GCC not measured |
+
+**Not predicted**: at dsPIC, `util/time.h`'s outcome without `-I util`,
+and so the tier notices' counts of "compile" and "other"; the times.
+
+### What follows
+
+P1 to P5 scored, and the record closes. Then the third of the three: RX
+without its FPU, and RX with big-endian data, linking GCC's libraries
+built without it, checked. Then AArch32, as the author asked on
+2026-11-22: 32-bit Arm Linux (`arm-linux-gnueabihf`) under qemu-user
+first, then Cortex-R5 and Cortex-R52 on bare metal. Then item 9, the
+CompCert matrix.
