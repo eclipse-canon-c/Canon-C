@@ -962,9 +962,12 @@ For what Canon-C intentionally omits, established C libraries exist:
 > default. Where a NaN or an infinity can occur, build with `-nofpu`,
 > with which those checks pass; `double` is
 > computed in software either way, since the FPU has single precision
-> only. The newlib GCC 13.3 links for RX, whatever the flags, is the one
-> built for the FPU, with finite math: its `printf` formats an infinity
-> or a NaN wrongly, and with `%f` writes past its buffer
+> only. But GCC 13.3's driver links the libraries built for the FPU
+> whatever the flags, `-nofpu` and `-mcpu=rx200` among them: libgcc and
+> newlib compiled with finite math and the FPU's instructions, whose
+> `printf` formats an infinity or a NaN wrongly, and with `%f` writes
+> past its buffer. Link the `no-fpu-libs` multilib instead, as the job's
+> `rx-nofpu` and `rx-be` do since VERIFY-111
 > (`tools/renesas/README.md`). Canon-C formats neither.
 >
 > **`CANON_LIFETIME_DEBUG` without 64-bit atomics**

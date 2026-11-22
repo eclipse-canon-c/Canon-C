@@ -7,7 +7,9 @@
 # begin with FAIL; or "times-out". A test no line names must pass. The
 # lines are measures, taken with the toolchains build.sh builds, at each
 # variant and build type, with the support each variant links: the RH850
-# lines before VERIFY-101's run 1, the RX lines before VERIFY-102's.
+# lines before VERIFY-101's run 1, the RX lines before VERIFY-102's; and
+# rx-nofpu's and rx-be's again before VERIFY-111's, with the libraries
+# built without the FPU, which they link since, and the same.
 #
 # TEST              VARIANTS  BUILDS  OUTCOME
 

@@ -543,12 +543,14 @@ jobs:
   #    and without, linked with tools/renesas/open.c's _open, which
   #    newlib's V850 port gets wrong; the RX600 with its FPU (GCC's
   #    default, finite math), without it, and without it with big-endian
-  #    data, linked with tools/msp430/tmpfile.c's tmpfile(), and the last
-  #    with crt files whose arrays are data. It runs each test under the
-  #    target's simulator after a probe that the simulator carries a
-  #    program's output and exit status, and holds the outcomes against
-  #    tools/renesas/pins.txt, enforced from each record's run 1: the pins
-  #    were measured before it with the same toolchain.
+  #    data, linked with tools/msp430/tmpfile.c's tmpfile(), the last with
+  #    crt files whose arrays are data, and the two without the FPU with
+  #    the libraries built without it, which GCC's driver does not pick,
+  #    their binaries holding none of its instructions (VERIFY-111). It
+  #    runs each test under the target's simulator after a probe that the
+  #    simulator carries a program's output and exit status, and holds the
+  #    outcomes against tools/renesas/pins.txt, enforced from each record's
+  #    run 1: the pins were measured before it with the same toolchain.
   # -------------------------------------------------------------------------
   renesas:
     runs-on: ubuntu-24.04

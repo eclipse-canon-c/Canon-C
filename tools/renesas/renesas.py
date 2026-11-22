@@ -23,12 +23,16 @@ exit status through newlib's system calls. The variants:
                 (VERIFY-110); linked with -msim, libgloss's system calls
                 for the simulator, and tmpfile.c's tmpfile().
     rx-nofpu    the same with -nofpu: the tests compiled without the FPU,
-                and so without finite math. GCC links the libraries of the
-                FPU all the same (facts(), below).
+                and so without finite math; linked with GCC's and newlib's
+                no-fpu-libs, which GCC itself does not link whatever the
+                flags (facts(), below), by a folder that -B puts first
+                (nofpu_libs, below); neither those libraries nor a test's
+                binary may hold an instruction of the FPU (nofpu_check,
+                fpu_check; VERIFY-111).
     rx-be       rx-nofpu with -mbig-endian-data: data big-endian, the
                 instructions as ever; linked also with crtbegin.o and
-                crtend.o whose .init_array and .fini_array are marked as
-                data (crt_fixed, below).
+                crtend.o, no-fpu-libs', whose .init_array and .fini_array
+                are marked as data (crt_fixed, below).
 
 Each is built at the four build types of CMake: Debug (-O0), Release
 (-O3), RelWithDebInfo (-O2) and MinSizeRel (-Os), with
@@ -49,7 +53,11 @@ do not name must pass. An outcome other than its pin's is a difference;
 with ENFORCE, a difference fails the run, unless the run is --report-only.
 A run that cannot configure, whose probe fails, that finds no test, builds
 none, or builds a binary not of the variant's machine and flags, always
-fails.
+fails; so does one, at RX, whose binaries hold an instruction of the FPU
+where the variant has none, or none at all where it has the FPU
+(fpu_check), and one, where the variant links no-fpu-libs, whose link
+takes a start file or a library from elsewhere, or whose libraries hold
+one (nofpu_check; VERIFY-111).
 
     python3 tools/renesas/renesas.py run VARIANT [BUILD...] [--report-only]
     python3 tools/renesas/renesas.py check
@@ -92,15 +100,17 @@ SHOWN = 6             # differences named in a notice
 # (link), what its binaries say (machine and data from the ELF header, an
 # e_flags word and the RH850 ABI's FPU note where it has them), its
 # support: open.c's _open (open_c), tmpfile.c's tmpfile() (tmpfile_c), the
-# corrected crt files (crt_fixed); the flags of CMake's Debug, where the
-# variant sets them (debug); and the defines of its tests besides DEFINES
-# (defines).
+# corrected crt files (crt_fixed); whether it links the libraries built
+# without the FPU (nofpu_libs); what its binaries hold of the FPU's
+# instructions, where they are counted: 'some' or 'none' (fpu_insns); the
+# flags of CMake's Debug, where the variant sets them (debug); and the
+# defines of its tests besides DEFINES (defines).
 V850 = {'target': 'v850-elf', 'link': [], 'machine': 'V850', 'data': 'little endian',
         'e_flags': None, 'open_c': True, 'tmpfile_c': False, 'crt_fixed': False,
-        'debug': None, 'defines': ''}
+        'nofpu_libs': False, 'fpu_insns': None, 'debug': None, 'defines': ''}
 RX = {'target': 'rx-elf', 'link': ['-msim'], 'machine': 'Renesas RX', 'fpu': None,
       'e_flags': '64-bit doubles', 'open_c': False, 'tmpfile_c': True, 'debug': '-O0',
-      'defines': ''}
+      'nofpu_libs': False, 'fpu_insns': 'some', 'defines': ''}
 VARIANTS = {
     'rh850': {**V850, 'flags': '-mv850e3v5', 'fpu': 'FPU-3.0'},
     'rh850-soft': {**V850, 'flags': '-mv850e3v5 -msoft-float', 'fpu': 'not set'},
@@ -110,9 +120,11 @@ VARIANTS = {
     'rx': {**RX, 'flags': '-mcpu=rx600 -m64bit-doubles', 'data': 'little endian',
            'crt_fixed': False, 'defines': '-DCANON_ALLOW_FINITE_MATH'},
     'rx-nofpu': {**RX, 'flags': '-mcpu=rx600 -m64bit-doubles -nofpu',
-                 'data': 'little endian', 'crt_fixed': False},
+                 'data': 'little endian', 'crt_fixed': False, 'nofpu_libs': True,
+                 'fpu_insns': 'none'},
     'rx-be': {**RX, 'flags': '-mcpu=rx600 -m64bit-doubles -nofpu -mbig-endian-data',
-              'data': 'big endian', 'crt_fixed': True},
+              'data': 'big endian', 'crt_fixed': True, 'nofpu_libs': True,
+              'fpu_insns': 'none'},
 }
 DEFINES = '-DCANON_LIFETIME_NO_ATOMICS'
 
@@ -124,6 +136,15 @@ def defines(variant):
 BUILDS = cortexm.BUILDS
 SUPPORT = ('build.sh', 'toolchain.cmake', 'open.c', 'pins.txt', 'README.md')
 CRT_ARRAYS = ('.init_array', '.fini_array')
+# The RX FPU's instructions, as objdump names them, without a size: RXv1's,
+# RXv2's (fsqrt, ftou, utof) and RXv3's of the double-precision FPU (dcmp
+# with its condition). Not among them: MVTC and MVFC, which move a control
+# register, the FPSW among them; libgloss's crt0 writes the FPSW at every
+# multilib, no-fpu-libs' too (VERIFY-111).
+FPU_INSN = re.compile(r'fadd|fcmp|fdiv|fmul|fsub|ftoi|itof|round|fsqrt|ftou|utof'
+                      r'|dabs|dadd|dcmp\w*|ddiv|dmov|dmul|dneg|dpopm|dpushm|dround'
+                      r'|dsqrt|dsub|dtof|dtoi|dtou|ftod|itod|utod|mvfdc|mvtdc|mvfdr')
+FPSW = re.compile(r'(mvtc|mvfc)\t.*\bfpsw\b')
 WRAP_TMPFILE = '-Wl,--wrap=tmpfile'
 PIN = re.compile(r'^(\w+)\s+(\S+)\s+(\S+)\s+(not-built|fails|times-out)(?:\s+(\d+))?$')
 PROBE = r'''#include <limits.h>
@@ -254,11 +275,12 @@ def versions(variant):
 
 def facts(variant):
     """newlib's version; the folder of the multilib GCC links for the
-    variant's flags, its newlib and libgcc; whether it compiles with finite
-    math; and the compiler's macros of the target. At RX, GCC 13.3 links no
-    folder of no-fpu-libs, whatever the flags: t-rx's MULTILIB_MATCHES maps
-    -mnofpu, and -mcpu=rx200 and rx100, to "nofpu", which is no multilib
-    option, so -nofpu links the libraries built for the FPU."""
+    variant's flags, its newlib and libgcc, and the folder the variant links
+    instead (nofpu_libs); whether it compiles with finite math; and the
+    compiler's macros of the target. At RX, GCC 13.3 links no folder of
+    no-fpu-libs, whatever the flags: t-rx's MULTILIB_MATCHES maps -mnofpu,
+    and -mcpu=rx200 and rx100, to "nofpu", which is no multilib option, so
+    -nofpu links the libraries built for the FPU."""
     flags = VARIANTS[variant]['flags'].split()
     r = sh([tool(variant, 'gcc'), *flags, '-E', '-dM', '-x', 'c', '-'],
            input='#include <stdio.h>\n')
@@ -266,7 +288,13 @@ def facts(variant):
     version = macros.get('_NEWLIB_VERSION', '?').strip('"')
     keys = [k for k in sorted(macros) if re.match(r'__(v850|V850|RH850|RX)\w*__$', k)]
     multi = sh([tool(variant, 'gcc'), *flags, '-print-multi-directory']).stdout.strip()
-    return (f'newlib {version}; libraries {multi or "?"}; __FINITE_MATH_ONLY__ '
+    libs = multi or '?'
+    if VARIANTS[variant]['nofpu_libs']:
+        try:
+            libs = f'{nofpu_multi(variant)}, for GCC\'s {multi}'
+        except RuntimeError:   # support() says why, as an error
+            libs = f'?, for GCC\'s {multi}'
+    return (f'newlib {version}; libraries {libs}; __FINITE_MATH_ONLY__ '
             f'{macros.get("__FINITE_MATH_ONLY__", "?")}; ' + ', '.join(keys))
 
 
@@ -307,26 +335,86 @@ def compiled(variant, src, d):
     return obj
 
 
+def support_folder(variant, out):
+    return os.path.abspath(os.path.join(out, 'support-' + variant))
+
+
 def support(variant, out):
     """What each test of the variant is linked with besides its own objects:
     the variant's link flags; open.c's object (open_c); tmpfile.c's, with
     -Wl,--wrap=tmpfile, which puts its tmpfile() in place of newlib's
-    (tmpfile_c); and the folder of the corrected crt files (crt_fixed).
-    Returns the arguments of the link."""
+    (tmpfile_c); the folder of the corrected crt files (crt_fixed); and
+    that of the libraries built without the FPU (nofpu_libs), after it, so
+    that the corrected files come first. Returns the arguments of the
+    link."""
     v = VARIANTS[variant]
-    d = os.path.abspath(os.path.join(out, 'support-' + variant))
+    d = support_folder(variant, out)
     os.makedirs(d, exist_ok=True)
     link = list(v['link'])
     if v['open_c']:
         link.append(compiled(variant, os.path.join(HERE, 'open.c'), d))
     if v['tmpfile_c']:
         link += [WRAP_TMPFILE, compiled(variant, msp430.TMPFILE, d)]
+    nofpu = nofpu_libs(variant, d) if v['nofpu_libs'] else None
     if v['crt_fixed']:
-        link.append('-B' + crt_fixed(variant, d) + os.sep)
+        link.append('-B' + crt_fixed(variant, d, nofpu) + os.sep)
+    if nofpu is not None:
+        link.append('-B' + nofpu + os.sep)
     return link
 
 
-def crt_fixed(variant, d):
+def nofpu_multi(variant):
+    """The multilib folder GCC builds without the FPU for the variant's
+    flags: the one -print-multi-lib gives the options of GCC's own choice
+    and -mnofpu."""
+    flags = VARIANTS[variant]['flags'].split()
+    multi = sh([tool(variant, 'gcc'), *flags, '-print-multi-directory']).stdout.strip()
+    table = {}
+    for line in sh([tool(variant, 'gcc'), '-print-multi-lib']).stdout.split():
+        folder, _, opts = line.partition(';')
+        table[folder] = frozenset(o for o in opts.split('@') if o)
+    if multi not in table:
+        raise RuntimeError(f'{variant}: GCC\'s multilib {multi} is not in -print-multi-lib')
+    want = table[multi] | {'mnofpu'}
+    found = [f for f, o in table.items() if o == want]
+    if len(found) != 1:
+        raise RuntimeError(f'{variant}: no one multilib of {sorted(want)}: {found}')
+    return found[0]
+
+
+def nofpu_libs(variant, d):
+    """GCC's RX port links the FPU's multilib whatever the flags (facts()).
+    Copies of every file of the multilib folder without the FPU
+    (nofpu_multi), libgcc's (crtbegin.o, crtend.o, libgcc.a) and newlib's
+    (crt0.o, libc.a, libm.a, libsim.a and the rest), under the name of
+    GCC's own multilib, in a folder that -B puts first: the driver looks
+    there before its own folders, for the start files and the libraries
+    alike (VERIFY-111). Returns the folder."""
+    flags = VARIANTS[variant]['flags'].split()
+    multi = sh([tool(variant, 'gcc'), *flags, '-print-multi-directory']).stdout.strip()
+    nofpu = nofpu_multi(variant)
+    folder = os.path.join(d, 'nofpu')
+    into = os.path.join(folder, multi)
+    shutil.rmtree(folder, ignore_errors=True)
+    os.makedirs(into)
+    for name in ('libgcc.a', 'libc.a'):
+        path = sh([tool(variant, 'gcc'), *flags, '-print-file-name=' + name]).stdout.strip()
+        suffix = os.path.join(multi, name)
+        if not os.path.isabs(path) or not path.endswith(os.sep + suffix):
+            raise RuntimeError(f'{variant}: {name} is not under its multilib folder: {path}')
+        source = os.path.join(path[:-len(suffix)], nofpu)
+        if not os.path.exists(os.path.join(source, name)):
+            raise RuntimeError(f'{variant}: no {name} in {source}')
+        for f in sorted(os.listdir(source)):
+            if not os.path.isfile(os.path.join(source, f)):
+                continue
+            if os.path.exists(os.path.join(into, f)):
+                raise RuntimeError(f'{variant}: {f} is both libgcc\'s and newlib\'s')
+            shutil.copy2(os.path.join(source, f), os.path.join(into, f))
+    return folder
+
+
+def crt_fixed(variant, d, nofpu=None):
     """GCC's RX port declares .init_array and .fini_array executable
     ("awx", rx.h's INIT_ARRAY_SECTION_ASM_OP), so crtbegin.o and crtend.o
     carry them as code; the simulator's linker script puts them into .data,
@@ -334,13 +422,17 @@ def crt_fixed(variant, d):
     executable with its 32-bit words swapped, data and all, which the
     simulator loads as the file holds it. Copies of the two files whose
     arrays are marked as data, in a folder that -B puts before GCC's, under
-    the variant's multilib folder: returns the folder."""
+    the variant's multilib folder; made from those of the folder without the
+    FPU, when given (nofpu_libs): returns the folder."""
     flags = VARIANTS[variant]['flags'].split()
     multi = sh([tool(variant, 'gcc'), *flags, '-print-multi-directory']).stdout.strip()
     folder = os.path.join(d, 'crt')
     os.makedirs(os.path.join(folder, multi), exist_ok=True)
     for name in ('crtbegin.o', 'crtend.o'):
-        src = sh([tool(variant, 'gcc'), *flags, '-print-file-name=' + name]).stdout.strip()
+        if nofpu is not None:
+            src = os.path.join(nofpu, multi, name)
+        else:
+            src = sh([tool(variant, 'gcc'), *flags, '-print-file-name=' + name]).stdout.strip()
         args = []
         for sec in CRT_ARRAYS:
             args += ['--set-section-flags', sec + '=alloc,load,contents,data']
@@ -464,6 +556,112 @@ def attributes(b, name, binary, variant, build):
     return what + (f', and {v["debug"]} without -g' if debug else ''), problems
 
 
+def fpu_insns(variant, binary):
+    """The instructions of the RX FPU in the code of a binary, an object or
+    an archive, by objdump: (their number, the FPSW's moves). A section
+    that is written is not code, whatever its flags say: GCC's RX port
+    marks .init_array and .fini_array executable (crt_fixed), and the
+    simulator's linker script puts them into .data, which objdump would
+    disassemble."""
+    r = sh([tool(variant, 'objdump'), '-h', '-w', binary])
+    sections = list(dict.fromkeys(
+        name for name, flags in re.findall(r'^\s*\d+\s+(\S+)\s.*\s2\*\*\d+\s+(.*)$',
+                                           r.stdout, re.M)
+        if 'CODE' in flags and 'READONLY' in flags))
+    if r.returncode != 0 or not sections:
+        shown(r.stdout + r.stderr)
+        raise RuntimeError(f'{variant}: objdump finds no code in {rel(binary)}')
+    r = sh([tool(variant, 'objdump'), '-d', *('-j' + name for name in sections), binary])
+    if r.returncode != 0:
+        shown(r.stdout + r.stderr)
+        raise RuntimeError(f'{variant}: objdump does not disassemble {rel(binary)}')
+    fpu = fpsw = 0
+    for line in r.stdout.splitlines():
+        parts = line.split('\t')
+        if len(parts) < 3 or not parts[2].strip():
+            continue
+        if FPU_INSN.fullmatch(parts[2].split()[0].split('.')[0]):
+            fpu += 1
+        elif FPSW.match('\t'.join(parts[2:])):
+            fpsw += 1
+    return fpu, fpsw
+
+
+def nofpu_check(variant, out, link):
+    """Where the variant links no-fpu-libs (nofpu_libs): the start files and
+    the libraries that a program linked as the tests are takes, by ld's
+    trace, each of which must be the support folder's; the FPU's
+    instructions in those and in every library and start file of the
+    folder without the FPU, which must be none; and in GCC's own files of
+    the same names, which must be some, or the count would see nothing
+    (VERIFY-111). Returns the notice line, or raises."""
+    flags = VARIANTS[variant]['flags'].split()
+    d = os.path.realpath(support_folder(variant, out))
+    p = os.path.abspath(os.path.join(out, 'probe-' + variant))
+    src, obj, elf = (os.path.join(p, name) for name in ('probe.c', 'probe.o', 'probe-traced'))
+    r = sh([tool(variant, 'gcc'), *flags, '-std=c99', '-O1', '-c', src, '-o', obj])
+    if r.returncode == 0:
+        r = sh([tool(variant, 'gcc'), *flags, obj, *link, '-Wl,-t', '-o', elf])
+    if r.returncode != 0:
+        shown(r.stdout + r.stderr)
+        raise RuntimeError(f'{variant}: the probe does not link with ld\'s trace')
+    traced = list(dict.fromkeys(os.path.realpath(line.strip())
+                                for line in (r.stdout + r.stderr).splitlines()
+                                if line.strip().endswith(('.o', '.a'))))
+    traced = [t for t in traced if t != os.path.realpath(obj)]
+    outside = [t for t in traced if not t.startswith(d + os.sep)]
+    if not traced or outside:
+        raise RuntimeError(f'{variant}: a program linked as the tests are takes '
+                           + (', '.join(outside[:SHOWN]) or 'nothing') + ' from outside '
+                           + rel(d))
+    multi = sh([tool(variant, 'gcc'), *flags, '-print-multi-directory']).stdout.strip()
+    folder = os.path.join(d, 'nofpu', multi)
+    files = list(dict.fromkeys(traced + sorted(
+        os.path.join(folder, f) for f in os.listdir(folder) if f.endswith(('.a', '.o')))))
+    ours = {f: fpu_insns(variant, f)[0] for f in files}
+    gccs = {}
+    for name in dict.fromkeys(os.path.basename(f) for f in files):
+        path = sh([tool(variant, 'gcc'), *flags, '-print-file-name=' + name]).stdout.strip()
+        if os.path.isabs(path) and os.path.exists(path):
+            gccs[name] = fpu_insns(variant, path)[0]
+    held = [f for f, n in ours.items() if n]
+    if held:
+        raise RuntimeError(f'{variant}: {sum(ours.values())} instruction(s) of the FPU in what '
+                           f'the tests link: ' + ', '.join(f'{rel(f)} {ours[f]}' for f in held))
+    if not any(gccs.values()):
+        raise RuntimeError(f'{variant}: no instruction of the FPU in GCC\'s {multi} libraries '
+                           f'either: objdump\'s are not counted')
+    return ('linked: ' + ', '.join(os.path.basename(t) for t in traced)
+            + f', all from the support folder ({nofpu_multi(variant)}); FPU instructions: 0 in '
+            f'those and the folder\'s other files, {len(files)} in all; {sum(gccs.values())} in '
+            f'GCC\'s own {multi} files of the same names ('
+            + ', '.join(f'{n} {c}' for n, c in gccs.items() if c) + ')')
+
+
+def fpu_check(variant, build, built):
+    """The FPU's instructions in every built test, against the variant's
+    fpu_insns: 'none' fails on any, 'some' on none in all (the count would
+    then see nothing). Returns the notice's part, or raises."""
+    want = VARIANTS[variant]['fpu_insns']
+    counts = {t['name']: fpu_insns(variant, t['command'][-1]) for t in built}
+    holding = sorted((n for n, (fpu, _) in counts.items() if fpu), key=lambda n: -counts[n][0])
+    total = sum(fpu for fpu, _ in counts.values())
+    moves = sum(fpsw for _, fpsw in counts.values())
+    print(f'--- {variant} {build}: FPU instructions: {total} in {len(holding)} of {len(built)} '
+          f'binaries' + (' (' + ', '.join(f'{n} {counts[n][0]}' for n in holding[:10])
+                         + (', ...' if len(holding) > 10 else '') + ')' if holding else '')
+          + f'; FPSW moves (MVTC, MVFC), not counted: {moves}')
+    if want == 'none' and holding:
+        raise RuntimeError(f'{variant} {build}: {total} instruction(s) of the FPU, in '
+                           f'{len(holding)} of {len(built)} binaries ('
+                           + ', '.join(holding[:SHOWN]) + '): the variant has no FPU')
+    if want == 'some' and not holding:
+        raise RuntimeError(f'{variant} {build}: no instruction of the FPU in {len(built)} '
+                           f'binaries, where the variant has the FPU: objdump\'s are not '
+                           f'counted')
+    return f'FPU instructions in {len(holding)} of {len(built)} binaries'
+
+
 def leg(variant, build, out, env, pins):
     """One build type: (notice line, differences, data), or raises."""
     t0 = time.time()
@@ -488,6 +686,8 @@ def leg(variant, build, out, env, pins):
     if attr_problems:
         raise RuntimeError(f'{variant} {build}: {built[0]["name"]} is not the variant\'s: '
                            + '; '.join(attr_problems))
+    fpu = (fpu_check(variant, build, built) if VARIANTS[variant]['fpu_insns'] is not None
+           else None)
     names = {t['name'] for t in tests}
     diffs = []
     for r in rows:
@@ -512,6 +712,8 @@ def leg(variant, build, out, env, pins):
     line += '; as pinned' if not diffs else (
         f'; {len(diffs)} difference(s): ' + ', '.join(diffs[:SHOWN])
         + (f', and {len(diffs) - SHOWN} more' if len(diffs) > SHOWN else ''))
+    if fpu is not None:
+        line += '; ' + fpu
     line += f'; {minutes:.1f} minutes'
     print(line)
     print(f'--- {variant} {build}: {built[0]["name"]}: {attrs}')
@@ -541,7 +743,7 @@ def leg(variant, build, out, env, pins):
             'seconds': {r['name']: r['got']['seconds'] for r in rows
                         if r['got']['seconds'] is not None},
             'not_built': {r['name']: r['got']['why'] for r in unbuilt},
-            'differences': diffs, 'attributes': attrs, 'line': line}
+            'differences': diffs, 'attributes': attrs, 'fpu': fpu, 'line': line}
     with open(b + '.json', 'w') as f:
         json.dump(data, f, indent=1)
     return line, diffs, data
@@ -595,7 +797,7 @@ def main(argv):
     os.makedirs(OUT, exist_ok=True)
     all_diffs = list(problems)
     try:
-        for name in ('gcc', 'run', 'readelf', 'objcopy'):
+        for name in ('gcc', 'run', 'readelf', 'objcopy', 'objdump'):
             if not shutil.which(tool(variant, name)):
                 raise RuntimeError(f'{tool(variant, name)} must be on the PATH: '
                                    f'tools/renesas/build.sh builds it')
@@ -603,6 +805,10 @@ def main(argv):
         line = probe(variant, OUT, link)
         print(line)
         print(f'::notice title=renesas {variant} probe::{line}')
+        if VARIANTS[variant]['nofpu_libs']:
+            line = nofpu_check(variant, OUT, link)
+            print(line)
+            print(f'::notice title=renesas {variant} libraries::{line}')
         for line in file_probe(variant, OUT, link):
             print(line)
             print(f'::notice title=renesas {variant} file probe::{line}')

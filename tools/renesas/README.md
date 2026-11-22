@@ -31,7 +31,7 @@ builds it, in about 20 minutes on two CPUs for `v850-elf`, and 27 for
 | `rh850` | `v850-elf` | `-mv850e3v5` | RH850's V850E3V5 instruction set, Renesas' RH850 ABI (GCC's default), its FPU |
 | `rh850-soft` | `v850-elf` | `-mv850e3v5 -msoft-float` | the same with no FPU: `float` and `double` in libgcc's software |
 | `rx` | `rx-elf` | `-mcpu=rx600 -m64bit-doubles` | the RX600 with its FPU, GCC's default, and so with finite math (below); little-endian data |
-| `rx-nofpu` | `rx-elf` | `-mcpu=rx600 -m64bit-doubles -nofpu` | the same without the FPU, and without finite math |
+| `rx-nofpu` | `rx-elf` | `-mcpu=rx600 -m64bit-doubles -nofpu` | the same without the FPU, and without finite math; linked with the libraries built without the FPU, which GCC's driver does not pick (below) |
 | `rx-be` | `rx-elf` | `-mcpu=rx600 -m64bit-doubles -nofpu -mbig-endian-data` | `rx-nofpu` with big-endian data (the instructions are as ever) |
 
 Under the RH850 ABI, `int`, `long`, pointers and `size_t` have 32 bits,
@@ -49,12 +49,14 @@ provides none; RX's links a 4-byte `__atomic_fetch_add`, not an 8-byte
 one. Before the tests, a probe checks that the simulator carries a
 program's output and its exit status, and prints the type sizes and
 alignments as the target has them. The script prints newlib's version,
-the multilib GCC links, and the target's macros, `__FINITE_MATH_ONLY__`
-among them; it checks that the binaries are the target's, of its byte
-order: at RH850, under the RH850 ABI, with the notes that ABI writes
-into them (8-byte objects aligned to 4, and the FPU the variant uses,
-`FPU-3.0` or none); at RX, with 64-bit doubles in their ELF flags. It
-prints each test's seconds.
+the multilib GCC links (and at `rx-nofpu` and `rx-be` the one linked
+instead, below), and the target's macros, `__FINITE_MATH_ONLY__` among
+them; it checks that the binaries are the target's, of its byte order:
+at RH850, under the RH850 ABI, with the notes that ABI writes into them
+(8-byte objects aligned to 4, and the FPU the variant uses, `FPU-3.0` or
+none); at RX, with 64-bit doubles in their ELF flags, and with the FPU's
+instructions as the variant has the FPU (below). It prints each test's
+seconds.
 
 **`open.c`, at RH850.** newlib 4.4 defines the V850's `_open` with two
 fixed parameters, and calls it, from `_open_r` and so from `open()`,
@@ -101,19 +103,39 @@ multilibs, 16 of them without the FPU (`no-fpu-libs`), but its driver
 picks none of those 16: `t-rx`'s `MULTILIB_MATCHES` maps `-mnofpu`,
 which `-nofpu` stands for, and `-mcpu=rx200` and `-mcpu=rx100`, to
 `nofpu`, which is not one of the multilib options, and the driver takes
-an option's first match only. So `rx-nofpu` and `rx-be` link the
-libraries built for the FPU, compiled with finite math, as any program
-GCC 13.3 links with `-nofpu` does (the script's first lines name the
-multilib: `64-bit-double`, or `64-bit-double/big-endian-data`); the
-tests' own code has neither. newlib's `printf` from those libraries
-formats an infinity as `I.nfinitye+9998` and a NaN as `N.aNe+9998` with
-`%g`, and much the same with `%e`, and with `%f` writes past its buffer
-and stops the program ("Read from unwritten memory at 0x30303038"), with
-the FPU or `-nofpu`; linked by hand with the `no-fpu-libs` libraries, it
-prints `inf` and `nan`. No test formats either, nor does the library:
-its one `%f`, `hashmap_fmt.h`'s load factor, is finite. A core without
-the FPU (RX200, RX100) would be given the FPU's instructions in those
-libraries; this job runs none.
+an option's first match only. So a program GCC 13.3 links with `-nofpu`
+is given the libraries built for the FPU, compiled with finite math, and
+their instructions of the FPU: 81 in `libgcc.a`, 12 in `libc.a` and 1987
+in `libm.a`, at either byte order (VERIFY-111). newlib's `printf` from
+those libraries formats an infinity as `I.nfinitye+9998` and a NaN as
+`N.aNe+9998` with `%g`, and much the same with `%e`, and with `%f` writes
+past its buffer and stops the program ("Read from unwritten memory at
+0x30303038"), with the FPU or `-nofpu`; with the `no-fpu-libs`
+libraries, it prints `inf` and `nan`. Since VERIFY-111, as the author
+chose, `rx-nofpu` and `rx-be` link those: the script copies every file of
+the multilib folder without the FPU, libgcc's and newlib's, into a
+folder of its own under the name of the multilib GCC picks, which `-B`
+puts before GCC's folders (after the crt files' at `rx-be`), so that the
+driver takes the start files and the libraries from there. It prints the
+multilib linked, and checks it: a program linked as the tests are must
+take every start file and library from that folder (ld's trace); those,
+and the folder's other files, must hold no instruction of the FPU; and
+GCC's own files of the same names must hold some, or the count would see
+nothing. In every test's binary it counts the FPU's instructions too,
+with `objdump`, the sections that are written left out (`.data` is code
+at `rx` and `rx-nofpu`, below): none at `rx-nofpu` and `rx-be`, and some
+at `rx`, for the same reason. `mvtc` and `mvfc`, which
+move a control register, are not the FPU's; libgloss's `crt0.S` writes
+the FPSW, the FPU's status word, with `mvtc` at every multilib,
+`no-fpu-libs` too, and the script prints how many such moves the
+binaries hold. No test formats an infinity or a NaN, nor does the
+library: its one `%f`, `hashmap_fmt.h`'s load factor, is finite; and the
+tests' outcomes, with either set of libraries, are the pins'. Linked as
+GCC 13.3 links it, a program for a core without the FPU (RX200, RX100,
+which this job does not run) is given the FPU's instructions wherever it
+calls a library function that holds them. No test does: with GCC's own
+libraries, none of the tests' binaries holds one, which is why the
+libraries are checked, and not the binaries alone (VERIFY-111).
 
 **`tmpfile.c`, at RX.** GDB's RX simulator carries eight system calls:
 `exit`, `open`, `close`, `read`, `write`, `getpid` (which returns 42),
@@ -143,7 +165,11 @@ no big-endian program runs: `nm` gives the data's symbols as code
 "Read from unwritten memory at 0xdc90000c". As the author chose, the
 script copies the two files with their arrays marked as data
 (`objcopy --set-section-flags`), into the variant's multilib folder
-under a folder that `-B` puts before GCC's own.
+under a folder that `-B` puts before GCC's own; since VERIFY-111, made
+from `no-fpu-libs`' two, and their folder before that of those
+libraries. At `rx` and `rx-nofpu`, little-endian, the arrays are code as
+GCC marks them, and the programs run: `.data` is code there, which
+`objdump` would disassemble.
 
 **Debug, at RX.** GCC 13.3's RX port stops with an internal compiler
 error at `-O0 -g` on nearly every file, `int f(int a) { return a; }`
@@ -195,7 +221,9 @@ toolchain `build.sh` builds. The same run found `memory_test` taking a
 static `u64` array to be aligned to 8, which the RH850 ABI does not
 give; the test was fixed, as the author chose. RX is enforced from
 VERIFY-102's run 1, its pins measured before it in the same way, with
-`build.sh` unchanged. The predictions and their scores are in
+`build.sh` unchanged. `rx-nofpu` and `rx-be` link `no-fpu-libs` from
+VERIFY-111, the pins unchanged: measured with them before its run 1,
+the outcomes were the pins'. The predictions and their scores are in
 `docs/deviations.md`.
 
 **ARC.** The job `arc`, in the same workflow, builds `arc-elf32` with
