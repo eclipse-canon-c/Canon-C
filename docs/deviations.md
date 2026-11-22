@@ -43004,3 +43004,95 @@ What it shows:
 - **Report-only, then enforced.** Run 1 could not fail on a figure, only
   on the fetch, the digest or the archive, so a wrong guess about a
   compiler never run here would have shown as a figure, not as a red run.
+
+---
+
+## VERIFY-108: Pre-registration — dsPIC and PIC24's Core, Enforced: XC-DSC's SHA-256 Pinned and Cached, Its Probe as Pinned, the Platform Tiers Held
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-108 |
+| **Date**       | 2026-11-22 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | a420848 (VERIFY-107's change; its close, b5aba34, a record, is pushed with this): `1` and `3` to `6` #92, `2` #127, `8` #150. |
+| **Scope**      | `.github/workflows/platforms.yml`, the `dspic` job: the archive's SHA-256 pinned, the archive cached by it, the driver's directory as run 1 found it, the probe held to its pins, the tier check without `REPORT_ONLY`. `tools/dspic/probe.sh`: `PINS`, its output with the compiler's directory written `<bin>` and no blank at a line's end, and its notice's version without the build date; `tools/dspic/probe.pinned`, new. The documents that said run 1 reports only. No library or test file. |
+| **Category**   | VERIFY-107's "What follows": what its run 1 measured, pinned and enforced. |
+
+### What is missing
+
+VERIFY-107's run 1 could fail on nothing it measured: the digest was
+checked against Microchip's abbreviation, the probe printed, the tier
+check reported only. Its figures (Scored, VERIFY-107) are the runner's
+and are nowhere held.
+
+### What changes
+
+- **The archive**: `XC_DSC_SHA256`, run 1's SHA-256,
+  4fa70007bf28e246c39ec280270f510a8e003993671297c412ccf8e57c8eacef, both
+  ends Microchip's, checked by `sha256sum -c` before anything in the
+  archive runs; the archive cached by it, `xc-dsc-` and the digest, and
+  fetched from Microchip only when the cache has none, as `msp430` does
+  with TI's package. The driver's directory is the one run 1 found,
+  `xc-dsc-v4.00/bin`; its absence fails the job.
+- **The probe** (`probe.sh`) with `PINS`: its output must be the file's,
+  line for line, or the job fails, showing the difference. So that it does
+  not depend on where the archive is unpacked, the compiler's directory is
+  written `<bin>`, in a message before it is cut, and no line ends in a
+  blank. `probe.pinned` is run 1's 21 lines, taken from the job's log so.
+  The notice gives the version without its build date, which run 1's cut
+  in two, and ends "as pinned".
+- **The tier check** runs without `REPORT_ONLY`: a failed check fails the
+  job, as at AVR. The classification of every header is reported, as at
+  AVR.
+- **The documents**: the "Compiled for" row, with run 1's outcome; the
+  rule's examples in "Waiting for a compiler" (`dspic` fetches
+  Microchip's); the README's platform tiers; `docs/verification.md`;
+  `docs/implementation-defined.md` (`size_t`, and plain `char`, signed);
+  the workflow map; `tools/dspic/README.md`.
+
+### Measured here
+
+- **The probe's statements** are run 1's but for two: the warning flags'
+  status, renamed `WST` for the notice, and the result's line.
+- **`probe.pinned`**: run 1's lines 169 to 189 of the job's log, from the
+  version to the warning flags, the log's timestamps cut, the runner's
+  `/home/runner/work/_temp/xc-dsc/xc-dsc-v4.00/bin` written `<bin>` (once,
+  in the warning without `-mcpu`), and the blanks at lines' ends dropped
+  (two after the version, one after each macro list): 21 lines, no tab,
+  carriage return or escape.
+- **The pinned mode**, with VERIFY-107's stand-in (avr-gcc behind it): a
+  pinned file of its own output, "as pinned (..., 21 lines)", exit 0; that
+  file with `int 2` changed to `int 4`, the two lines shown by `diff -u`,
+  "FAIL: not as pinned (...)", exit 1. A second stand-in, in a directory
+  named as run 1's (`xc-dsc/xc-dsc-v4.00/bin`), that names itself in a
+  warning without `-mcpu`: "<bin>/bin/../c30_device.info", whole, where
+  the cut before writing `<bin>` had kept "<bin>/bi" under this
+  workspace's longer path.
+- **The fetch step's script**, with a stand-in archive already in the
+  cache's place: with its own digest, "OK", and the `PATH` given
+  `.../xc-dsc/xc-dsc-v4.00/bin`; with XC-DSC's, "FAILED", "WARNING: 1
+  computed checksum did NOT match", exit 1, before unpacking.
+- `shellcheck` clean: `probe.sh` and the fetch step. `tools/which_workflows.py`:
+  1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| M1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| M2 | **The archive**: `dspic` finds no entry for `xc-dsc-4fa70007…`, fetches the archive from Microchip, "xc-dsc.tar.xz: OK", and saves the entry. | a refused download, "FAILED", no entry saved | M–H: run 1's file, unless Microchip has replaced it |
+| M3 | **The probe as pinned**: "as pinned (tools/dspic/probe.pinned, 21 lines)", its notice's version "elf-gcc (Microchip Technology) 8.3.1 (XC-DSC, Microchip v4.00.00)". | a difference, or another version | M–H: run 1's compiler, unpacked where run 1 unpacked it; the pins are its log's, `<bin>` and the blanks never yet handled on the runner |
+| M4 | **The tiers, enforced**: at both devices "80 headers: 30 compile, 49 refused by Tier 1, 1 other; 0 check(s) failed", without "report only", and "OK". | a failed check, or another count | H: run 1's, the headers unchanged |
+| M5 | **`dspic` is green.** | a failed step | M–H: if M2 and M3 hold |
+| M6 | **Nothing else changes**: `embedded`'s AVR step's 56 lines those of #127; 1 and 3 to 6 give #92's notices, 2's 36 other jobs #127's (times aside); 8 is green, its two jobs as at #150, no notice. | another line, another notice, or a failure | H |
+
+**Not predicted**: the download's and the job's times.
+
+### What follows
+
+M1 to M6 scored, and the record closes; item 8 ends with it. Then the
+three the author agreed to on 2026-11-22, each its own record: CI builds
+the README's examples; `__FINITE_MATH_ONLY__` refused by an `#error`,
+with a macro to opt out; RX without its FPU, and RX with big-endian data,
+linking GCC's libraries built without it, checked. Then item 9, the
+CompCert matrix.
