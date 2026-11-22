@@ -43654,3 +43654,119 @@ What it shows:
   binaries, and in GCC's own libraries some files, must hold an
   instruction of the FPU, or the run fails: a count that saw nothing
   would otherwise pass every variant without the FPU.
+
+---
+
+## VERIFY-112: Pre-registration — The Tests on 32-Bit Arm Linux (armhf) under qemu-user: Armv7-A, Thumb-2, Hard Float, and `lifetime.h`'s 64-Bit Atomic Lock-Free, No Test Linked with libatomic
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-112 |
+| **Date**       | 2026-11-22 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 08cd79a (VERIFY-111's change; its close, 7caebcf, a record, is pushed with this): `1` and `3` to `6` #96, `2` #131, `8` #154 and `17` #3, each its last run, at 08cd79a. |
+| **Scope**      | `.github/workflows/platforms.yml`: a job, `armhf`, and the workflow's opening comment. `docs/architectures.md`: a row in "Tested on". The lists of where the tests run: `docs/implementation-defined.md`, `docs/autosar-classic.md`, `docs/verification.md` (a row, and what is tested and proved), the workflow map. `README.md`: the note on `CANON_LIFETIME_DEBUG` without 64-bit atomics. |
+| **Category**   | The first of AArch32's three, which the author asked for on 2026-11-22, after the three changes agreed that day: 32-bit Arm Linux (`arm-linux-gnueabihf`) under qemu-user; then Cortex-R5 and Cortex-R52 on bare metal. |
+
+### What is missing
+
+32-bit Arm Linux is one of the machine models the ten core/ units are
+proved at, and Eva's programs run at (VERIFY-060, VERIFY-066), and no test
+runs there. The 32-bit targets with an operating system that run the tests
+are i386 and 32-bit PowerPC: i386 aligns a `uint64_t` in a struct to 4
+bytes and its `char` is signed; 32-bit PowerPC is big-endian, and has no
+lock-free 64-bit atomic, so `lifetime.h`'s counter is libatomic's there
+(VERIFY-095). No test has run on a little-endian ILP32 Linux that aligns
+a `uint64_t` to 8, nor where the 64-bit atomic is the CPU's own.
+
+### What changes
+
+- **`armhf`**, in `platforms.yml`, after `big-endian-32`: Ubuntu's
+  `gcc-arm-linux-gnueabihf`, `libc6-dev-armhf-cross` and `qemu-user`,
+  through `.github/actions/apt-install` (VERIFY-093), its cache name
+  `armhf`; Release and Debug, each with `CANON_LIFETIME` off and debug, as
+  `big-endian-32`'s, for the `lifetime_t` field in each owner; CTest runs
+  each test under `qemu-arm -L /usr/arm-linux-gnueabihf`,
+  `--no-tests=error`. No sanitizers, as at the other qemu-user jobs.
+- **A step checks the binaries** before the tests: `bitset_test` is "ELF
+  32-bit LSB ... ARM, EABI5"; its attributes say Armv7-A (`Tag_CPU_arch:
+  v7`, `Tag_CPU_arch_profile: Application`) and the hard-float ABI
+  (`Tag_ABI_VFP_args: VFP registers`); its `main` is Thumb code, its
+  address odd (`Tag_THUMB_ISA_use: Thumb-2` says what may be used, and
+  says it of Arm code too). In every test binary, `readelf -d` must show
+  `libc.so.6`, so that it was read; none may need libatomic; and those
+  whose code holds LDREXD, the 64-bit atomic inline, are named, of which
+  `lifetime_test` must be one. A notice without a title, as
+  `big-endian-32`'s: "armhf BUILD LIFETIME: Armv7-A, Thumb-2, hard float;
+  N of M test binaries linked with libatomic, K with the 64-bit atomic
+  inline (LDREXD)". The disassembly and the dynamic section are read
+  whole, not piped into `grep -q`: under the step's `pipefail`, grep's
+  early exit stops `objdump` with SIGPIPE, and the test reads false.
+- **The documents**: the row in `docs/architectures.md`; 32-bit Arm in the
+  lists of where the tests run (`docs/implementation-defined.md`,
+  `docs/autosar-classic.md`, `docs/verification.md`, the workflow map),
+  and in `docs/verification.md`'s targets tested for all and proved for
+  core/; the README's note says that on 32-bit Arm Linux the atomic is
+  lock-free, and no test linked with libatomic.
+
+### Measured here
+
+With Ubuntu 24.04's packages, installed here from its archive:
+`gcc-arm-linux-gnueabihf` 4:13.2.0-7ubuntu1 (GCC 13.3.0-6ubuntu2~24.04.1),
+`libc6-dev-armhf-cross` 2.39-0ubuntu8cross1, `binutils-arm-linux-gnueabihf`
+2.42-4ubuntu2.10 and `qemu-user` 1:8.2.2+ds-0ubuntu1.18 (qemu-arm 8.2.2):
+
+- **The compiler's defaults**: `-march=armv7-a+fp`, `-mthumb`,
+  `-mfloat-abi=hard`, `-mabi=aapcs-linux`, `-munaligned-access`;
+  `__CHAR_UNSIGNED__`, `__GCC_ATOMIC_LLONG_LOCK_FREE` 2, 4-byte enums.
+  `struct { char c; uint64_t u; }` is 16 bytes, `_Alignof(uint64_t)`,
+  `_Alignof(double)` and `_Alignof(max_align_t)` 8, `long double` 8 bytes;
+  at i386 (`gcc -m32`), 12, 4, 4, 16 and 12, and `char` signed.
+- **The four legs**, configured, built and run as the job does: 61 of 61
+  tests passed in each, in 2.45 to 2.85 s under qemu-arm, the builds
+  without a warning; "Performing Test CANON_C_ATOMIC64_LINKS - Success" in
+  each, and no "linked with libatomic". `bitset_test`: "ELF 32-bit LSB pie
+  executable, ARM, EABI5 version 1 (SYSV), dynamically linked,
+  interpreter /lib/ld-linux-armhf.so.3"; `Tag_CPU_arch: v7`, `Application`,
+  `Thumb-2`, `VFPv3-D16`, `Tag_ABI_align_needed: 8-byte`,
+  `Tag_ABI_enum_size: int`, `Tag_ABI_VFP_args: VFP registers`.
+- **The step, as committed**, on each leg's binaries, under bash `-eo
+  pipefail` as the runner's: "main at 0x00000561: Thumb code" (Release
+  off); the notices "armhf Release off: Armv7-A, Thumb-2, hard float; 0 of
+  61 test binaries linked with libatomic, 1 with the 64-bit atomic inline
+  (LDREXD)", the same at Debug off, and "24 with" at Release debug and
+  Debug debug: at off `lifetime_test` alone, and at debug the 24 test
+  binaries that 32-bit PowerPC links with libatomic (VERIFY-095), the
+  names those of `big-endian-32 (Release, debug)` at #131.
+- **Piped into `grep -q`, the step read false.** Its first form, `objdump
+  -d "$f" | grep -qw ldrexd`, under `pipefail`, found 0 binaries holding
+  LDREXD at three legs and 1 at the fourth (`vec_fmt_test`), and failed
+  each: "lifetime_test holds no LDREXD". Read whole, 1 and 24.
+- **The step fails when it should**, each case in a copy of Release off's
+  binaries, exit status 1: `bitset_test` built with `-marm`, "bitset_test's
+  main, at 0x000003dc, is not Thumb code"; a test binary linked with
+  libatomic, "linked with libatomic: x_test"; `lifetime_test` without
+  LDREXD, "lifetime_test holds no LDREXD"; `bitset_test` with the
+  soft-float ABI (`-mfloat-abi=softfp`), "bitset_test lacks
+  Tag_ABI_VFP_args: VFP registers". Built with `-marm`, a binary also says
+  `Tag_THUMB_ISA_use: Thumb-2`.
+- `tools/which_workflows.py`: 1 to 6, 8 and 17.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Q1 | **1 to 6, 8 and 17 run**, and no other. | another set | H |
+| Q2 | **The four `armhf` jobs are green at their first attempt**, 61 of 61 tests passed in each, under qemu-arm 8.2.2, built by GCC 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04.1). | a failure, or another version | M–H: measured here with the same packages, not on a runner |
+| Q3 | **The step in each**: "CANON_C_ATOMIC64_LINKS - Success" and no "linked with libatomic"; `bitset_test` "ELF 32-bit LSB pie executable, ARM, EABI5", its `main` Thumb code; the notice word for word "armhf Release off: Armv7-A, Thumb-2, hard float; 0 of 61 test binaries linked with libatomic, 1 with the 64-bit atomic inline (LDREXD)", the same at Debug off, and "24 with" at Release debug and Debug debug. | another line or count | H, given Q2 |
+| Q4 | **The install**: nothing left to apt in each job, each within its 30 minutes; the entry saved by one job, the three others told that another job may be creating it, as at VERIFY-095. | a file left to apt, a step over its limit, or no entry saved | M: the archive's speed from GitHub's runners and the four jobs' race to save are not measured here |
+| Q5 | **Nothing else changes**: every other job of the eight green, and every notice the project prints its last run's, word for word, the times, `embedded`'s slowest header's name and GitHub's own notices aside (VERIFY-111's P4): 1 and 3 to 6 #96's, 2's #131's, 8 #154's, 17 #3's. | another notice, or a failure | H: no other job reads `platforms.yml`'s `armhf`, and `17` reads the README, whose change is in no example |
+
+**Not predicted**: the times, and how many package files the install
+lists.
+
+### What follows
+
+Q1 to Q5 scored, and the record closes. Then Cortex-R5 and Cortex-R52 on
+bare metal, the second and third of AArch32. Then item 9, the CompCert
+matrix.
