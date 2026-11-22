@@ -1,0 +1,49 @@
+name: "17 · README examples"
+
+# ---------------------------------------------------------------------------
+# The README's examples, built (VERIFY-109): Usage's my_types.h and main.c,
+# as the README shows them, built with GCC and Clang at -std=c99 -Wall
+# -Wextra -Wpedantic -Werror and run, which must print "first even: 8" and
+# exit 0; and each example's "WITH Canon-C" block compiled in its scaffold,
+# tools/readme/*.c, with both compilers at -O0 and -O2. A scaffold gives
+# what a block leaves to its program, never a header of Canon-C's: each
+# block includes what it uses. tools/readme/examples.py says how; a
+# diagnostic names the README's line. Map: .github/workflows/README.md.
+#
+# It runs when the README changes, which 1 to 6 do not read, and when a
+# header the examples include can change: the library's folders.
+# ---------------------------------------------------------------------------
+
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - 'README.md'
+      - 'core/**'
+      - 'semantics/**'
+      - 'data/**'
+      - 'algo/**'
+      - 'util/**'
+      - 'tools/readme/**'
+      - '.github/workflows/readme.yml'
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  examples:
+    # Pinned, not ubuntu-latest: see the runner note in ci.yml (VERIFY-039,
+    # runner pin). Its GCC and Clang are the image's.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build the README's Usage and run it, and compile its examples
+        run: python3 -I tools/readme/examples.py

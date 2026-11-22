@@ -851,6 +851,7 @@ enforced since VERIFY-108.
 | `embedded` | Cortex-M, RV32, RV64 and AVR, bare metal | that the headers and tests compile there; nothing runs |
 | `arc` | ARCv2 EM (`em4`), ARCv2 HS (`hs38`) and ARCompact ARC700, bare metal: GCC 13.3 and newlib 4.4 built from Ubuntu's source packages | that the headers and tests compile there; nothing runs, since neither GDB nor QEMU has an ARC simulator |
 | `dspic` | XC-DSC's virtual devices `generic-16dsp` and `generic-16bit`, dsPIC's and PIC24's core: Microchip's XC-DSC 4.00, fetched from Microchip, its SHA-256 pinned | the platform tiers at a 16-bit `size_t`, as at AVR, and the compiler's version, devices, type sizes and optimization levels as pinned (`tools/dspic/probe.pinned`); measured at VERIFY-107's run 1, enforced since VERIFY-108 |
+| `examples` (`17 · README examples`) | the README's Usage, its `my_types.h` and `main.c` as shown, built with the runner's GCC and Clang at `-std=c99 -Wall -Wextra -Wpedantic -Werror` and run; each example's "WITH Canon-C" block compiled in its scaffold (`tools/readme/`), at `-O0` and `-O2` | that Usage builds and does what its text says, and that each example's code compiles as the README shows it, with what it includes: since VERIFY-109, which found four that did not include what they used |
 | `lifetime-debug`, `lifetime-token-concurrency` | `CANON_LIFETIME_DEBUG`; the atomic levels, with ThreadSanitizer | the lifetime plumbing and the token generation, by tests |
 
 ### Call-order rules (Aorai)

@@ -1142,7 +1142,9 @@ real programs — the conventions you see in each snippet are the same ones
 you will find everywhere in a Canon-C codebase, whether it is 300 lines or
 30,000. The snippets assume their Option and Result types are defined once,
 in a header of your own, as in **Usage** below: `CANON_RESULT(int, Error)`
-gives `result_int_Error`.
+gives `result_int_Error`. Each "WITH Canon-C" snippet is compiled as shown,
+with the includes it shows, by `17 · README examples`, which also builds
+and runs Usage (VERIFY-109).
 
 ---
 
@@ -1159,6 +1161,8 @@ int process(Arena* arena, Config* cfg, size_t count) {
 ```c
 /* WITH Canon-C — preconditions are visible, grep-able, self-documenting */
 #define CANON_CONTRACT_IMPL
+#include "core/arena.h"
+#include "core/ownership.h"
 #include "core/primitives/contract.h"
 
 result_int_Error process(
@@ -1196,6 +1200,7 @@ printf("%s\n", name); /* is name still valid? nobody knows */
 ```c
 /* WITH Canon-C — intent is visible at every call site */
 #include "core/ownership.h"
+#include "core/slice.h"
 
 /* caller receives ownership — caller must free */
 owned(Config*)  config_create(owned(u8*) buffer, usize size);
@@ -1407,6 +1412,8 @@ if (result < 0) {
 ```
 ```c
 /* WITH Canon-C — failures are values, propagation is explicit */
+#include "core/arena.h"
+#include "core/ownership.h"
 #include "semantics/result/result.h"
 #include "semantics/error.h"
 
@@ -1460,9 +1467,11 @@ if (load_config("config.txt", &timeout) < 0) {
 ```
 ```c
 /* WITH Canon-C — full chain survives from root cause to surface */
+#include "core/ownership.h"
 #include "semantics/diag.h"
 #include "semantics/result/result.h"
 #include "semantics/error.h"
+#include "util/parse.h"
 
 /* ... deep in the call chain ... */
 
