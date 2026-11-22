@@ -18,8 +18,10 @@ exit status through newlib's system calls. The variants:
     rx          rx-elf, -mcpu=rx600 -m64bit-doubles: the RX600, double of
                 64 bits (GCC's default is 32), little-endian data, and the
                 FPU, GCC's default, with which GCC's RX port turns on
-                -ffinite-math-only; linked with -msim, libgloss's system
-                calls for the simulator, and tmpfile.c's tmpfile().
+                -ffinite-math-only, which compare.h and random.h refuse
+                unless CANON_ALLOW_FINITE_MATH is defined, as it is here
+                (VERIFY-110); linked with -msim, libgloss's system calls
+                for the simulator, and tmpfile.c's tmpfile().
     rx-nofpu    the same with -nofpu: the tests compiled without the FPU,
                 and so without finite math. GCC links the libraries of the
                 FPU all the same (facts(), below).
@@ -90,24 +92,35 @@ SHOWN = 6             # differences named in a notice
 # (link), what its binaries say (machine and data from the ELF header, an
 # e_flags word and the RH850 ABI's FPU note where it has them), its
 # support: open.c's _open (open_c), tmpfile.c's tmpfile() (tmpfile_c), the
-# corrected crt files (crt_fixed); and the flags of CMake's Debug, where
-# the variant sets them (debug).
+# corrected crt files (crt_fixed); the flags of CMake's Debug, where the
+# variant sets them (debug); and the defines of its tests besides DEFINES
+# (defines).
 V850 = {'target': 'v850-elf', 'link': [], 'machine': 'V850', 'data': 'little endian',
         'e_flags': None, 'open_c': True, 'tmpfile_c': False, 'crt_fixed': False,
-        'debug': None}
+        'debug': None, 'defines': ''}
 RX = {'target': 'rx-elf', 'link': ['-msim'], 'machine': 'Renesas RX', 'fpu': None,
-      'e_flags': '64-bit doubles', 'open_c': False, 'tmpfile_c': True, 'debug': '-O0'}
+      'e_flags': '64-bit doubles', 'open_c': False, 'tmpfile_c': True, 'debug': '-O0',
+      'defines': ''}
 VARIANTS = {
     'rh850': {**V850, 'flags': '-mv850e3v5', 'fpu': 'FPU-3.0'},
     'rh850-soft': {**V850, 'flags': '-mv850e3v5 -msoft-float', 'fpu': 'not set'},
+    # GCC's RX FPU turns on finite math, which compare.h and random.h
+    # refuse without CANON_ALLOW_FINITE_MATH (VERIFY-110): defined, so that
+    # rx goes on testing what a user of GCC's default gets.
     'rx': {**RX, 'flags': '-mcpu=rx600 -m64bit-doubles', 'data': 'little endian',
-           'crt_fixed': False},
+           'crt_fixed': False, 'defines': '-DCANON_ALLOW_FINITE_MATH'},
     'rx-nofpu': {**RX, 'flags': '-mcpu=rx600 -m64bit-doubles -nofpu',
                  'data': 'little endian', 'crt_fixed': False},
     'rx-be': {**RX, 'flags': '-mcpu=rx600 -m64bit-doubles -nofpu -mbig-endian-data',
               'data': 'big endian', 'crt_fixed': True},
 }
 DEFINES = '-DCANON_LIFETIME_NO_ATOMICS'
+
+
+def defines(variant):
+    """The defines of the variant's tests: DEFINES, and its own."""
+    return (DEFINES + ' ' + VARIANTS[variant]['defines']).strip()
+
 BUILDS = cortexm.BUILDS
 SUPPORT = ('build.sh', 'toolchain.cmake', 'open.c', 'pins.txt', 'README.md')
 CRT_ARRAYS = ('.init_array', '.fini_array')
@@ -382,7 +395,7 @@ def file_probe(variant, out, link):
 def environment(variant, link):
     env = dict(os.environ)
     env['CANON_RS_TARGET'] = VARIANTS[variant]['target']
-    env['CANON_RS_FLAGS'] = (VARIANTS[variant]['flags'] + ' ' + DEFINES).strip()
+    env['CANON_RS_FLAGS'] = (VARIANTS[variant]['flags'] + ' ' + defines(variant)).strip()
     env['CANON_RS_LINK'] = ' '.join(link)
     env['CANON_RS_RUN'] = tool(variant, 'run')
     return env
@@ -576,7 +589,7 @@ def main(argv):
         print(v)
     print(f'C library and target: {facts(variant)}')
     debug = VARIANTS[variant]['debug']
-    print(f'Variant: {variant}; flags: {VARIANTS[variant]["flags"]} {DEFINES}'.rstrip()
+    print(f'Variant: {variant}; flags: {VARIANTS[variant]["flags"]} {defines(variant)}'.rstrip()
           + (f'; Debug: {debug}, without -g' if debug is not None else ''))
     pins, problems = read_pins()
     os.makedirs(OUT, exist_ok=True)

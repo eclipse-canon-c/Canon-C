@@ -46,7 +46,9 @@ since VERIFY-091.
 On RX, GCC compiles with `-ffinite-math-only` wherever it uses the FPU,
 its default for the RX600, so that NaN and infinity are assumed away, and
 `-fno-finite-math-only` does not undo it; with `-nofpu` those checks pass
-(the README's bare-metal section, and `tools/renesas/README.md`).
+(the README's bare-metal section, and `tools/renesas/README.md`). Since
+VERIFY-110 `compare.h` and `random.h` refuse finite math unless
+`CANON_ALLOW_FINITE_MATH` is defined, which the `rx` variant defines.
 
 *Planned:*
 
@@ -66,7 +68,7 @@ its default for the RX600, so that NaN and infinity are assumed away, and
 | RISC-V 32 (RV32IMAC), bare metal | picolibc | GCC (`riscv64-unknown-elf`) | the same | `embedded` |
 | RISC-V 64 (RV64IMAC), bare metal | picolibc | GCC (`riscv64-unknown-elf`) | the same | `embedded` |
 | AVR (ATmega328P), 16-bit `size_t` | avr-libc | avr-gcc 7 | Tier 0 only (the README's platform tiers): the refusal of a 32-bit `double`, and with that check removed, Tier 0 compiled and Tier 1 refused | `embedded` (`tools/avr_tier_check.sh`) |
-| dsPIC33 and PIC24's core (XC-DSC's virtual devices `generic-16dsp` and `generic-16bit`), 16-bit `size_t` | Microchip's | Microchip's XC-DSC 4.00, fetched from Microchip, its SHA-256 pinned | Tier 0 only, as on AVR: the refusal of XC-DSC's own 32-bit `double`, and with `-fno-short-double`, Tier 0 compiled and Tier 1 refused; of the 80 headers, 30 compile, 49 are refused by Tier 1, and `util/time.h` wants a `struct timespec` Microchip's library lacks. Measured at VERIFY-107's run 1, enforced since VERIFY-108, the compiler's figures as pinned (`tools/dspic/probe.pinned`) | `dspic` (`platforms.yml`, `tools/tier_check.sh`, `tools/dspic/`) |
+| dsPIC33 and PIC24's core (XC-DSC's virtual devices `generic-16dsp` and `generic-16bit`), 16-bit `size_t` | Microchip's | Microchip's XC-DSC 4.00, fetched from Microchip, its SHA-256 pinned | Tier 0 only, as on AVR: the refusal of XC-DSC's own 32-bit `double`, and with `-fno-short-double`, Tier 0 compiled and Tier 1 refused; of the 80 headers, 30 compile, 49 are refused by Tier 1, and `util/time.h` did not compile (VERIFY-110: the check's `-I util` hid the C library's `<time.h>`). Measured at VERIFY-107's run 1, enforced since VERIFY-108, the compiler's figures as pinned (`tools/dspic/probe.pinned`) | `dspic` (`platforms.yml`, `tools/tier_check.sh`, `tools/dspic/`) |
 | ARC: ARCv2 EM (`-mcpu=em4`), ARCv2 HS (`-mcpu=hs38`), ARCompact ARC700 (`-mcpu=arc700`) | newlib 4.4 | GCC 13.3.0 (`arc-elf32`), built from Ubuntu's source packages (`tools/renesas/build.sh`) | the same as Cortex-M's; nothing runs, since neither GDB nor QEMU has an ARC simulator (VERIFY-106) | `arc` (`platforms.yml`, `tools/embedded_compile_check.sh`) |
 
 *Planned*, each compiled as the Cortex-M entries are, with code size

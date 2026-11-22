@@ -164,9 +164,16 @@ stopwatch its seconds. It needs binary32 and binary64, whose NaN is
 unequal to itself. **Checked**: `core/primitives/types.h` refuses a `float`
 not 4 bytes or a `double` not 8 (AVR's GCC makes `double` 4 bytes unless
 given `-mdouble=64`); `ieee_floats` checks the radix, precision and
-exponent range, and the NaN. **Not supported**: `-ffast-math` and
-`-ffinite-math-only`, with which GCC and Clang assume there are no NaNs and
-may fold `x != x` to false.
+exponent range, and the NaN. **Refused**: finite math, with which GCC and
+Clang assume there are no NaNs and infinities and fold `x != x` to false:
+`-ffinite-math-only`, and `-ffast-math` and `-Ofast`, which turn it on, and
+GCC's RX port with its FPU, whatever the command line (VERIFY-102).
+`compare.h` and `random.h` each refuse it with an `#error`, where
+`__FINITE_MATH_ONLY__` is not 0, and so does every header that includes
+them, 24 of the 80 (VERIFY-110, `tools/finite_math_check.py`, job
+`finite-math`). Defining `CANON_ALLOW_FINITE_MATH` builds them anyway: the
+float comparators then order a NaN as a number, and the float ranges must
+be given finite bounds. MSVC defines no such macro, and is not checked.
 
 ### 8. `#include "..."` looks beside the including file first
 

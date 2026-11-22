@@ -91,7 +91,10 @@ own: `algo_cmp_f32` and `algo_cmp_f64` order a NaN as a number, the
 tests' `isnan` and `isinf` are 0, and `random_f32_range` and
 `random_f64_range`, given an infinite bound, take it for a finite one
 and, at `-O2`, `-O3` and `-Os`, do not return. Those tests are pinned at
-`rx`, and pass at `rx-nofpu`.
+`rx`, and pass at `rx-nofpu`. Since VERIFY-110, `compare.h` and
+`random.h` refuse finite math with an `#error` unless
+`CANON_ALLOW_FINITE_MATH` is defined; `rx` defines it, so that it goes on
+testing what a user of GCC's default gets.
 
 **The libraries, at RX.** GCC's RX port builds newlib and libgcc for 32
 multilibs, 16 of them without the FPU (`no-fpu-libs`), but its driver

@@ -30,7 +30,10 @@ TARGET_FLAGS=${TARGET_FLAGS:--mmcu=$MCU}
 F64_FLAGS=${F64_FLAGS:-}
 TITLE=${TITLE:-avr}
 WARN="-std=c99 -Wall -Wextra -Wpedantic -Werror"
-INC="-I . -I core/primitives -I core -I semantics -I data -I algo -I util"
+# Not -I util: under it, util/time.h's <time.h> is util/time.h itself, and
+# the C library's is never read (VERIFY-110; CMakeLists.txt's time_test has
+# no util either).
+INC="-I . -I core/primitives -I core -I semantics -I data -I algo"
 OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT
 "$CC" --version | head -1

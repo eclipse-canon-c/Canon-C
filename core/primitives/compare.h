@@ -19,6 +19,27 @@
 #include "core/primitives/types.h"
 #include <stdbool.h>   /* bool — explicit, even though types.h pulls it in transitively */
 
+/* ── Finite math (VERIFY-110) ───────────────────────────────────────────────
+ * The float comparators below order NaN by x != x, IEEE 754's test for it.
+ * Under finite math GCC and Clang assume there is no NaN and fold that test
+ * to false: a NaN is then ordered as a number, without a diagnostic. Finite
+ * math is -ffinite-math-only, and -ffast-math and -Ofast, which turn it on;
+ * and GCC's RX port with its FPU, whatever the command line says
+ * (VERIFY-102). Refused here, at the property's origin (types.h's platform
+ * contract); define CANON_ALLOW_FINITE_MATH to build anyway, knowing that
+ * the comparators' NaN order does not hold. The defined() gate leaves
+ * compilers that do not define the macro (MSVC, CompCert) and static
+ * analyzers an error-free configuration, as limits.h's does.
+ * ──────────────────────────────────────────────────────────────────────── */
+#if defined(__FINITE_MATH_ONLY__)
+#  if (__FINITE_MATH_ONLY__ != 0) && !defined(CANON_ALLOW_FINITE_MATH)
+#    error "Canon-C: compare.h's float comparators order NaN, which finite \
+math (__FINITE_MATH_ONLY__: -ffinite-math-only, -ffast-math, -Ofast, or \
+GCC's RX port with its FPU) compiles away. Define CANON_ALLOW_FINITE_MATH \
+to build anyway (VERIFY-110)."
+#  endif
+#endif
+
 /**
  * @file core/primitives/compare.h
  * @brief Three-way comparator type and built-in comparators

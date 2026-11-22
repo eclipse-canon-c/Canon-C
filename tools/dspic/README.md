@@ -46,5 +46,6 @@ fetch, the digest or the archive. Every figure was as the record expected:
 `int`, `size_t` and pointers of 2 bytes, `double` 4 and 8 with
 `-fno-short-double`, plain `char` signed, GCC 8.3.1 beneath, every level
 without a message; of the 80 headers, 30 compile, 49 are refused by Tier
-1, and `util/time.h` wants a `struct timespec`. `probe.pinned` is run 1's
+1, and `util/time.h` did not compile, the check's `-I util` making its
+`<time.h>` itself (VERIFY-110 dropped it). `probe.pinned` is run 1's
 output. VERIFY-108 enforces both: a difference fails the job.

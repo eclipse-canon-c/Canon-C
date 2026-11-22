@@ -23,6 +23,23 @@
 #include "core/primitives/contract.h"
 #include "core/ownership.h"
 
+/* ── Finite math (VERIFY-110) ───────────────────────────────────────────────
+ * random_f32_range and random_f64_range return min for a NaN or an infinite
+ * bound, by comparisons that finite math lets GCC and Clang fold away: an
+ * infinite bound is then taken for a finite one, and the range's loop does
+ * not end (VERIFY-102, at RX with its FPU). Refused here, as in compare.h;
+ * define CANON_ALLOW_FINITE_MATH to build anyway, knowing that the float
+ * ranges' bounds must then be finite numbers.
+ * ──────────────────────────────────────────────────────────────────────── */
+#if defined(__FINITE_MATH_ONLY__)
+#  if (__FINITE_MATH_ONLY__ != 0) && !defined(CANON_ALLOW_FINITE_MATH)
+#    error "Canon-C: random.h's float ranges refuse a NaN or an infinite \
+bound, which finite math (__FINITE_MATH_ONLY__: -ffinite-math-only, \
+-ffast-math, -Ofast, or GCC's RX port with its FPU) compiles away. Define \
+CANON_ALLOW_FINITE_MATH to build anyway (VERIFY-110)."
+#  endif
+#endif
+
 /**
  * @file util/random.h
  * @brief Fast, high-quality, explicit PCG32 pseudo-random number generator

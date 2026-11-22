@@ -6,8 +6,8 @@ name: "2 · Platforms"
 # (Cortex-A78AE, Cortex-R82) under QEMU, and on Renesas RH850 and RX
 # under GDB's simulators, with toolchains built from Ubuntu's source
 # packages, as is ARC's, for which the headers and tests are compiled;
-# and the platform tiers for dsPIC and PIC24's core, with Microchip's
-# XC-DSC, fetched from Microchip.
+# the platform tiers for dsPIC and PIC24's core, with Microchip's XC-DSC,
+# fetched from Microchip; and finite math, refused, with GCC and Clang.
 # Map: .github/workflows/README.md.
 on:
   push:
@@ -730,3 +730,25 @@ jobs:
           for cpu in generic-16dsp generic-16bit; do
             TARGET_FLAGS="-mcpu=$cpu" TITLE="dspic $cpu" tools/tier_check.sh
           done
+
+  # -------------------------------------------------------------------------
+  # 1o. Finite math, refused (VERIFY-110)
+  #
+  #    compare.h's float comparators order NaN, and random.h's float ranges
+  #    refuse an infinite bound, by tests that finite math lets the compiler
+  #    fold away: -ffinite-math-only, -ffast-math and -Ofast, and GCC's RX
+  #    port with its FPU, whatever the command line (VERIFY-102). Each of
+  #    the two refuses it with an #error unless CANON_ALLOW_FINITE_MATH is
+  #    defined. tools/finite_math_check.py checks it with the runner's GCC
+  #    and Clang: the two refused under each of the three flags, compiling
+  #    with the macro and without finite math, and every public header,
+  #    under -ffinite-math-only, compiling or refused by one of the two,
+  #    and compiling with the macro. Compile only.
+  # -------------------------------------------------------------------------
+  finite-math:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Finite math refused, with GCC and Clang
+        timeout-minutes: 10
+        run: python3 -I tools/finite_math_check.py

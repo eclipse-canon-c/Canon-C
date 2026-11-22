@@ -956,8 +956,11 @@ For what Canon-C intentionally omits, established C libraries exist:
 > VERIFY-102): every NaN and infinity is assumed away, in Canon-C's code
 > as in yours. `algo_cmp_f32` and `algo_cmp_f64` then order a NaN as a
 > number, and `random_f32_range` and `random_f64_range`, given an
-> infinite bound, do not return at `-O2`. Where a NaN or an infinity can
-> occur, build with `-nofpu`, with which those checks pass; `double` is
+> infinite bound, do not return at `-O2`; so `compare.h` and `random.h`
+> refuse finite math with an `#error` unless `CANON_ALLOW_FINITE_MATH` is
+> defined (VERIFY-110), as it is for the job's `rx`, which tests GCC's
+> default. Where a NaN or an infinity can occur, build with `-nofpu`,
+> with which those checks pass; `double` is
 > computed in software either way, since the FPU has single precision
 > only. The newlib GCC 13.3 links for RX, whatever the flags, is the one
 > built for the FPU, with finite math: its `printf` formats an infinity

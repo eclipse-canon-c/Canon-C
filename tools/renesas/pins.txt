@@ -26,6 +26,8 @@ time_test           all       all     not-built
 # (parse_test); random_f32_range and random_f64_range take an infinite
 # bound for a finite one and loop (random_test, stopped; at -O0 it ends,
 # its two NaN checks failed, 560 and 561). At rx-nofpu, all of them pass.
+# compare.h and random.h refuse finite math since VERIFY-110; rx defines
+# CANON_ALLOW_FINITE_MATH (renesas.py), so that it goes on testing this.
 compare_test        rx        all     fails 12
 parse_test          rx        all     fails 6
 impl_defined_test   rx        all     fails 9
