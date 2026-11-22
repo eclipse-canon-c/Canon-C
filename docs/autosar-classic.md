@@ -160,8 +160,8 @@ onto those.
 
 - **`autosar_test` and `autosar_bool_test`**
   (`test/integrations/autosar/autosar_test.c`) run in every job that runs
-  the tests: Linux on x86-64, AArch64, i386, s390x and 32-bit PowerPC,
-  with glibc and musl; Cortex-M0+ and Cortex-M4 under QEMU; macOS; Windows
+  the tests: Linux on x86-64, AArch64, i386, 32-bit Arm, s390x and 32-bit
+  PowerPC, with glibc and musl; Cortex-M0+ and Cortex-M4 under QEMU; macOS; Windows
   with MSVC and MinGW-w64's GCC. The first gives `boolean`
   AUTOSAR 4.3.1's form and sets every DET ID; the second gives it R22-11's
   and leaves the IDs at their defaults. Each checks

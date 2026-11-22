@@ -804,10 +804,11 @@ What these proofs rest on, and what they do not show:
 Tested, not proved:
 - big-endian s390x, under qemu (`big-endian`);
 - the data/ and semantics/ units at any model but x86_64, and at i386
-  (`build-32bit`) every unit but arena.h; AArch64 Linux (`build-arm64`) and
-  big-endian 32-bit PowerPC Linux, under qemu (`big-endian-32`), are tested
-  for all and proved for core/: the proofs do not represent PowerPC's byte
-  order, and the tests run in it.
+  (`build-32bit`) every unit but arena.h; AArch64 Linux (`build-arm64`),
+  and 32-bit Arm Linux and big-endian 32-bit PowerPC Linux under qemu
+  (`armhf`, VERIFY-112, and `big-endian-32`), are tested for all and proved
+  for core/: the proofs do not represent PowerPC's byte order, and the
+  tests run in it.
 
 Run under QEMU (`cortex-m`, VERIFY-089): the tests on Cortex-M0+ and
 Cortex-M4, with newlib and picolibc, each that does not pass pinned with
@@ -842,7 +843,7 @@ enforced since VERIFY-108.
 | `coverage` | GCC 14, Debug, `-DCANON_NO_REQUIRE` and both `FORCE_FALLBACK` flags | MC/DC of the proved paths (`docs/traceability.md`) |
 | `compcert` | CompCert 3.17 on x86_64, `-fall -DCANON_NO_GNU_EXTENSIONS` and both `FORCE_FALLBACK` flags; `require` on | the portable C99 paths compile under CompCert, a verified compiler, and pass the tests; informational (`continue-on-error`) and on the upstream repository only, so a failure blocks nothing |
 | `build` (GCC, Clang, MSVC), sanitizers, `fuzzing`, `valgrind`, `mingw` | compiler defaults, `require` on | the shipped configurations, on the tests and fuzz inputs. GCC and Clang run checked.h's and bits.h's builtins, not the proved paths; MSVC runs checked.h's fallback and bits.h's intrinsics |
-| `build-32bit`, `musl`, `build-arm64`, `big-endian`, `big-endian-32` | i386, Alpine's musl, AArch64, s390x and 32-bit PowerPC under qemu | the tests on those platforms |
+| `build-32bit`, `musl`, `build-arm64`, `armhf`, `big-endian`, `big-endian-32` | i386, Alpine's musl, AArch64, and under qemu 32-bit Arm, s390x and 32-bit PowerPC | the tests on those platforms |
 | `cortex-m` | Cortex-M0+ and Cortex-M4 under QEMU: Ubuntu's GCC 13.2 with newlib and picolibc, the Arm GNU Toolchain's GCC 15.3 with newlib; CMake's four build types | the tests on those cores; each that does not pass pinned with the reason |
 | `msp430` | MSP430X under the GDB simulator: TI's GCC 9.3.1 with its newlib; the small and large memory models; CMake's four build types | the tests below Tier 1 at a 16-bit `int`, and 16- and 20-bit `size_t`s; each that does not pass pinned with the reason |
 | `aarch64` | bare-metal AArch64 under QEMU: Ubuntu's GCC 13.3 with picolibc, compiled for Cortex-A78AE and Cortex-R82 and run on QEMU's `max` CPU (QEMU models neither core); CMake's four build types | the tests with no operating system, of the code GCC generates for each core; each that does not pass pinned with the reason |

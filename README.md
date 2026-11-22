@@ -977,7 +977,9 @@ For what Canon-C intentionally omits, established C libraries exist:
 > `__atomic_fetch_add_8`. On Linux, GCC's libatomic provides it,
 > race-free by a mutex: link with `-latomic`. The test build does so
 > where its check finds the call needs it (`CMakeLists.txt`,
-> VERIFY-095), as the `big-endian-32` job shows on 32-bit PowerPC.
+> VERIFY-095), as the `big-endian-32` job shows on 32-bit PowerPC;
+> on 32-bit Arm Linux, whose Armv7-A has a lock-free one (LDREXD and
+> STREXD), the `armhf` job shows no test linked with it (VERIFY-112).
 > On bare metal neither libgcc nor newlib or picolibc provides it, and
 > the link fails. Define
 > `CANON_LIFETIME_NO_ATOMICS` for a single thread of execution: the

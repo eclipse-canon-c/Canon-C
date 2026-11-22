@@ -1,14 +1,14 @@
 name: "2 · Platforms"
 # Portability beyond the build matrix: musl, Linux AArch64, C11 to C23,
-# big-endian s390x and 32-bit PowerPC under qemu, the embedded compile
-# checks (Cortex-M, RISC-V, AVR), the tests on Cortex-M0+ and Cortex-M4
-# under QEMU, on MSP430X under the GDB simulator, on bare-metal AArch64
-# (Cortex-A78AE, Cortex-R82) under QEMU, and on Renesas RH850 and RX
-# under GDB's simulators, with toolchains built from Ubuntu's source
-# packages, as is ARC's, for which the headers and tests are compiled;
-# the platform tiers for dsPIC and PIC24's core, with Microchip's XC-DSC,
-# fetched from Microchip; and finite math, refused, with GCC and Clang.
-# Map: .github/workflows/README.md.
+# 32-bit Arm, big-endian s390x and 32-bit PowerPC under qemu, the
+# embedded compile checks (Cortex-M, RISC-V, AVR), the tests on Cortex-M0+
+# and Cortex-M4 under QEMU, on MSP430X under the GDB simulator, on
+# bare-metal AArch64 (Cortex-A78AE, Cortex-R82) under QEMU, and on Renesas
+# RH850 and RX under GDB's simulators, with toolchains built from Ubuntu's
+# source packages, as is ARC's, for which the headers and tests are
+# compiled; the platform tiers for dsPIC and PIC24's core, with Microchip's
+# XC-DSC, fetched from Microchip; and finite math, refused, with GCC and
+# Clang. Map: .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -244,6 +244,97 @@ jobs:
           case " $need " in
             *" lifetime_test "*) ;;
             *) echo "::error::lifetime_test is not linked with libatomic"; exit 1 ;;
+          esac
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure --no-tests=error
+
+  # -------------------------------------------------------------------------
+  # 1f3. 32-bit Arm — Linux armhf, GCC cross-compiler, run under qemu-user
+  #      (VERIFY-112)
+  #
+  #    Ubuntu's arm-linux-gnueabihf: Armv7-A, Thumb-2, VFPv3-D16 and the
+  #    hard-float ABI. As on 32-bit PowerPC, above, size_t has 32 bits,
+  #    char is unsigned and a uint64_t in a struct is aligned to 8 bytes:
+  #    each build type runs with CANON_LIFETIME=debug too. Unlike it, the
+  #    bytes are little-endian and the 64-bit atomic is lock-free (LDREXD
+  #    and STREXD), so CMakeLists.txt's check links no test with libatomic;
+  #    the job names the test binaries that hold the atomic inline, and
+  #    fails if one is linked with libatomic or lifetime_test holds no
+  #    LDREXD. Packages through .github/actions/apt-install (VERIFY-093).
+  #    No sanitizers, as above. --no-tests=error: a leg that finds no test
+  #    fails.
+  # -------------------------------------------------------------------------
+  armhf:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+        lifetime: ["off", "debug"]   # quoted: YAML 1.1 reads a bare off as false
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install the armhf cross toolchain and qemu-user
+        # From the Actions cache, or from Canonical's archive before Azure's
+        # mirror (VERIFY-093); the limit fails a stalled install in 30 minutes.
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-install
+        with:
+          cache-name: armhf
+          packages: gcc-arm-linux-gnueabihf libc6-dev-armhf-cross qemu-user
+      - name: Show the compiler's and qemu's versions
+        run: |
+          arm-linux-gnueabihf-gcc --version | head -1
+          qemu-arm --version | head -1
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=arm \
+            -DCMAKE_C_COMPILER=arm-linux-gnueabihf-gcc \
+            "-DCMAKE_CROSSCOMPILING_EMULATOR=qemu-arm;-L;/usr/arm-linux-gnueabihf" \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCANON_LIFETIME=${{ matrix.lifetime }} \
+            -S .
+      - name: Build
+        run: cmake --build build -j
+      - name: Check the binaries are Armv7-A, Thumb-2 and hard float, and where the 64-bit atomic is
+        run: |
+          file build/bitset_test
+          file build/bitset_test | grep -q "ELF 32-bit LSB.*ARM, EABI5"
+          attrs=$(arm-linux-gnueabihf-readelf -A build/bitset_test)
+          echo "$attrs"
+          for want in "Tag_CPU_arch: v7" "Tag_CPU_arch_profile: Application" \
+                      "Tag_ABI_VFP_args: VFP registers"; do
+            grep -q "$want" <<< "$attrs" || { echo "::error::bitset_test lacks $want"; exit 1; }
+          done
+          # Tag_THUMB_ISA_use says Thumb-2 is allowed, and says so of Arm
+          # code too; a Thumb function's address is odd.
+          syms=$(arm-linux-gnueabihf-readelf -s build/bitset_test)
+          main=$(awk '$4 == "FUNC" && $8 == "main" && !n++ { print $2 }' <<< "$syms")
+          case "$main" in
+            *[13579bdf]) echo "main at 0x$main: Thumb code" ;;
+            *) echo "::error::bitset_test's main, at 0x$main, is not Thumb code"; exit 1 ;;
+          esac
+          # Read whole, not piped into grep -q: under pipefail, grep's early
+          # exit stops objdump with SIGPIPE, and the test reads as false.
+          all=0; need=""; inline=""
+          for f in $(find build -maxdepth 1 -type f -perm -u+x -name '*_test' | sort); do
+            all=$((all + 1))
+            dyn=$(arm-linux-gnueabihf-readelf -d "$f")
+            grep -q 'NEEDED.*libc\.so\.6' <<< "$dyn" || { echo "::error::${f#build/}: no libc.so.6 in readelf -d"; exit 1; }
+            if grep -q 'NEEDED.*libatomic' <<< "$dyn"; then need="$need ${f#build/}"; fi
+            dis=$(arm-linux-gnueabihf-objdump -d "$f")
+            if grep -qw ldrexd <<< "$dis"; then inline="$inline ${f#build/}"; fi
+          done
+          echo "linked with libatomic:$need"
+          echo "the 64-bit atomic inline (LDREXD):$inline"
+          # No title, as big-endian-32's: the leg is in the message.
+          echo "::notice::armhf ${{ matrix.build_type }} ${{ matrix.lifetime }}: Armv7-A, Thumb-2, hard float; $(echo "$need" | wc -w) of $all test binaries linked with libatomic, $(echo "$inline" | wc -w) with the 64-bit atomic inline (LDREXD)"
+          if [ -n "$need" ]; then echo "::error::linked with libatomic:$need"; exit 1; fi
+          case " $inline " in
+            *" lifetime_test "*) ;;
+            *) echo "::error::lifetime_test holds no LDREXD"; exit 1 ;;
           esac
       - name: Test
         working-directory: build
