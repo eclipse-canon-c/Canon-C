@@ -43437,3 +43437,176 @@ What it shows:
 - **A refusal at the property's origin is narrow.** 24 of 80 headers
   refuse finite math, not all of them; a user of the rest, under
   `-ffast-math`, is not stopped for comparators he does not include.
+
+---
+
+## VERIFY-111: Pre-registration — RX Without Its FPU Links the Libraries Built Without It: the Link Traced, the FPU's Instructions Counted in the Libraries and in Every Binary
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-111 |
+| **Date**       | 2026-11-22 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | fd36206 (VERIFY-110's change; its close, 57a1afa, a record, is pushed with this): `1` and `3` to `6` #95, `2` #130, `8` #153 and `17` #2, each its last run, at fd36206. |
+| **Scope**      | `tools/renesas/renesas.py`: at `rx-nofpu` and `rx-be`, the libraries built without the FPU, from a folder that `-B` puts first; the link traced, and the FPU's instructions counted in what it takes and in GCC's own libraries; at the three RX variants, the FPU's instructions counted in every test's binary. `tools/renesas/README.md` and `pins.txt`'s comments; the README's RX note; `docs/architectures.md` (the RX row and note); `docs/verification.md` (the `renesas` row); `platforms.yml`'s comment on the job. |
+| **Category**   | The third of the three the author agreed to on 2026-11-22: RX without its FPU, and RX with big-endian data, linking GCC's libraries built without the FPU, and the job showing that no binary holds an instruction of it (VERIFY-102's finding). |
+
+### What is missing
+
+GCC 13.3's RX port builds newlib and libgcc for 32 multilibs, 16 of them
+without the FPU (`no-fpu-libs`), and its driver picks none of the 16:
+`t-rx`'s `MULTILIB_MATCHES` maps `-mnofpu`, which `-nofpu` stands for, and
+`-mcpu=rx200` and `-mcpu=rx100`, to `nofpu`, which is no multilib option.
+So `rx-nofpu` and `rx-be` have linked the libraries built for the FPU,
+compiled with finite math, whose `printf` formats an infinity as
+`I.nfinitye+9998` and with `%f` stops the program (VERIFY-102), and whose
+code holds the FPU's instructions, which a core without the FPU (RX200,
+RX100) does not have. Nothing in the job says which libraries a test is
+linked with, or whether its binary holds an instruction of the FPU.
+
+### What changes
+
+- **The libraries** (`nofpu_libs`, at `rx-nofpu` and `rx-be`): the
+  script copies every file of the multilib folder without the FPU,
+  libgcc's and newlib's (`64-bit-double/no-fpu-libs`, or
+  `64-bit-double/no-fpu-libs/big-endian-data`), into the support folder,
+  under the name of the multilib GCC picks (`64-bit-double`, or
+  `64-bit-double/big-endian-data`), and links with `-B` to it; the driver
+  looks there before its own folders, for the start files and for the
+  libraries alike. At `rx-be` the crt files whose arrays are data are made
+  from `no-fpu-libs`' two, and their `-B` comes first. A file name both
+  libraries have fails the run. `build.sh` is unchanged, and so is the
+  toolchain's cache key: nothing is rebuilt.
+- **The libraries' check** (`nofpu_check`, a notice `renesas <variant>
+  libraries`): the probe, compiled and linked as the tests are with ld's
+  trace (`-Wl,-t`), must take every start file and library from the
+  support folder; none of those, nor of the folder's other files, may hold
+  an instruction of the FPU; and GCC's own files of the same names, those
+  `-print-file-name` gives, must hold some, or the count would see
+  nothing. The notice names the files taken, the multilib, and the
+  counts.
+- **The binaries' check** (`fpu_check`, at `rx`, `rx-nofpu` and `rx-be`):
+  every built test's binary is disassembled (`objdump -d`, its sections
+  that are code and not written: GCC's RX port marks `.init_array` and
+  `.fini_array` executable, and at `rx` and `rx-nofpu`, whose crt files
+  are GCC's, the linker script's `.data` that holds them is code); each
+  variant says what the binaries hold of the FPU's instructions
+  (`fpu_insns`): `none` at `rx-nofpu` and `rx-be`, any failing the run;
+  `some` at `rx`, none in all failing it, or the count would see nothing.
+  Each leg's notice gives "FPU instructions in K of N binaries" before its
+  minutes, and a line of the log the count in each binary and the moves
+  of the FPSW (`mvtc`, `mvfc`), which are not counted: they move a control
+  register, and libgloss's `crt0.S` writes the FPSW at every multilib.
+  Counted are the FPU's instructions as binutils 2.42's disassembler names
+  them: RXv1's `fadd`, `fcmp`, `fdiv`, `fmul`, `fsub`, `ftoi`, `itof` and
+  `round`; RXv2's `fsqrt`, `ftou` and `utof`; and those of RXv3's
+  double-precision FPU (`dadd` to `mvfdr`). `objdump` joins the tools the
+  run requires.
+- **The documents**: `tools/renesas/README.md` (the variants' table, what
+  the script prints and checks, the libraries at RX, the crt files at
+  `rx-be`, the runs), `pins.txt`'s header (the pins measured again), the
+  README's RX note (GCC links the FPU's libraries whatever the flags: link
+  `no-fpu-libs`), the RX row and note of `docs/architectures.md`, the
+  `renesas` row of `docs/verification.md`, and `platforms.yml`'s comment on
+  the job.
+
+### Measured here
+
+With the `rx-elf` toolchain built here by `build.sh` from the same four
+packages (the cache's was built by CI with the same script):
+
+- **The libraries' instructions of the FPU**, with the count as
+  committed: at `64-bit-double`, `libgcc.a` 81, `libc.a` 12, `libg.a`
+  (newlib's other copy of `libc.a`) 12 and `libm.a` 1987, `crt0.o`,
+  `crtbegin.o`, `crtend.o` and `libsim.a` none; at
+  `64-bit-double/big-endian-data` the same; in every file of `no-fpu-libs`,
+  at either byte order, none. `crt0.o` has one move of the FPSW, at both.
+- **The binaries alone do not show the libraries.** `rx-nofpu` linked as
+  before, with GCC's own libraries (`nofpu_libs` off, in a copy), at
+  Debug: "FPU instructions in 0 of 60 binaries", as pinned. No test calls
+  a function that holds the FPU's instructions in those libraries. A
+  program that calls `sqrtf` does: linked as GCC links it at `-nofpu`, 7,
+  none of them in its own object; with `no-fpu-libs`, none. So the run
+  checks the libraries, and what the link takes.
+- **The link**, by ld's trace, at `rx-nofpu`: `crt0.o`, `crtbegin.o`,
+  `tmpfile.o`, `libgcc.a`, `libc.a`, `libsim.a`, `crtend.o` and `crtn.o`,
+  each from the support folder; at `rx-be` the same, `crtbegin.o` and
+  `crtend.o` from the crt files' folder. The two multilibs' linker
+  scripts, `rx-sim.ld` and `rx.ld`, and `nosys.specs` are the same files
+  byte for byte. `.data` is code (`WAX`) at `rx` and `rx-nofpu`, data
+  (`WA`) at `rx-be`.
+- **The disassembly**: of `libc.a`, the sections kept give 74533
+  instructions and all its sections 74535, the two left out one member's
+  `.init_array`, executable as GCC's RX port marks it; `libm.a` 28634 and
+  `libgcc.a` 9125 either way.
+- **The three variants, all four builds**, with the script as committed
+  but for its comments and one error path (and at Debug again as
+  committed, the same notices); and `rh850` at Debug, its notices
+  #130's:
+  - `rx-nofpu`: "C library and target: newlib 4.4.0; libraries
+    64-bit-double/no-fpu-libs, for GCC's 64-bit-double;
+    __FINITE_MATH_ONLY__ 0; ..."; "linked: crt0.o, crtbegin.o, tmpfile.o,
+    libgcc.a, libc.a, libsim.a, crtend.o, crtn.o, all from the support
+    folder (64-bit-double/no-fpu-libs); FPU instructions: 0 in those and
+    the folder's other files, 13 in all; 2092 in GCC's own 64-bit-double
+    files of the same names (libgcc.a 81, libc.a 12, libg.a 12, libm.a
+    1987)"; each leg "61 tests, 58 passed, 2 failed (impl_defined_test 4,
+    file_test 3), 1 not built (time_test); as pinned; FPU instructions in
+    0 of 60 binaries", with 60 moves of the FPSW; 60 s.
+  - `rx-be`: "C library and target: newlib 4.4.0; libraries
+    64-bit-double/no-fpu-libs/big-endian-data, for GCC's
+    64-bit-double/big-endian-data; __FINITE_MATH_ONLY__ 0; ...";
+    "linked: crt0.o, crtbegin.o, tmpfile.o, libgcc.a, libc.a, libsim.a,
+    crtend.o, crtn.o, all from the support folder
+    (64-bit-double/no-fpu-libs/big-endian-data); FPU instructions: 0 in
+    those and the folder's other files, 15 in all; 2092 in GCC's own
+    64-bit-double/big-endian-data files of the same names (libgcc.a 81,
+    libc.a 12, libg.a 12, libm.a 1987)", 15 for `rx-nofpu`'s 13 because
+    the crt files' two are files of their own; each leg "61 tests, 57
+    passed, 3 failed (impl_defined_test 4, stringbuf_test 1, file_test 3),
+    1 not built (time_test); as pinned; FPU instructions in 0 of 60
+    binaries", with 60 moves of the FPSW; 62 s.
+  - `rx`: each leg as pinned, #130's outcomes, with "FPU instructions in 4
+    of 60 binaries" at Debug (31: `random_test` 25, `compare_test`,
+    `types_test` and `impl_defined_test` 2 each), and "in 2 of 60" at
+    Release (24), RelWithDebInfo (24) and MinSizeRel (32), `random_test`'s
+    and `impl_defined_test`'s; 227 s.
+- **The checks fail when they should**, each mutation in a copy, at
+  Debug, the run's exit status 1:
+  - the link without the folder (`rx-nofpu`): "a program linked as the
+    tests are takes .../rx-elf/lib/64-bit-double/crt0.o,
+    .../64-bit-double/crtbegin.o, .../64-bit-double/libgcc.a,
+    .../rx-elf/lib/64-bit-double/libc.a, .../libsim.a,
+    .../64-bit-double/crtend.o from outside" the support folder;
+  - the folder filled from GCC's own multilib, the FPU's (`rx-nofpu`):
+    "2092 instruction(s) of the FPU in what the tests link: ...libgcc.a
+    81, ...libc.a 12, ...libg.a 12, ...libm.a 1987";
+  - a count that sees nothing: at `rx-nofpu`, "no instruction of the FPU
+    in GCC's 64-bit-double libraries either: objdump's are not counted";
+    at `rx`, "rx Debug: no instruction of the FPU in 60 binaries, where
+    the variant has the FPU: objdump's are not counted".
+- `renesas.py check`: "9 pins, 61 tests in CMakeLists.txt; 0 problem(s)".
+  `tools/readme/examples.py`: its line as at #2, "0 failed".
+  `tools/which_workflows.py`: 1 to 6, 8 and 17.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| P1 | **1 to 6, 8 and 17 run**, and no other. | another set | H |
+| P2 | **`renesas (rx-nofpu)` and `renesas (rx-be)` are green**, their four legs each "as pinned", with #130's outcomes, each leg's notice ending "; FPU instructions in 0 of 60 binaries" before its minutes; `renesas rx-nofpu libraries` word for word "linked: crt0.o, crtbegin.o, tmpfile.o, libgcc.a, libc.a, libsim.a, crtend.o, crtn.o, all from the support folder (64-bit-double/no-fpu-libs); FPU instructions: 0 in those and the folder's other files, 13 in all; 2092 in GCC's own 64-bit-double files of the same names (libgcc.a 81, libc.a 12, libg.a 12, libm.a 1987)", and `renesas rx-be libraries` word for word "linked: crt0.o, crtbegin.o, tmpfile.o, libgcc.a, libc.a, libsim.a, crtend.o, crtn.o, all from the support folder (64-bit-double/no-fpu-libs/big-endian-data); FPU instructions: 0 in those and the folder's other files, 15 in all; 2092 in GCC's own 64-bit-double/big-endian-data files of the same names (libgcc.a 81, libc.a 12, libg.a 12, libm.a 1987)". | a failure, another outcome, or another word | M–H: measured here with a toolchain built by the same script from the same packages, not with the cache's |
+| P3 | **`renesas (rx)` is green**, its four legs "as pinned", with #130's outcomes, each notice ending "; FPU instructions in 4 of 60 binaries" at Debug and "in 2 of 60" at Release, RelWithDebInfo and MinSizeRel, before its minutes. | a failure, another outcome, or another count | M–H: the same |
+| P4 | **Nothing else changes**: every other job of the eight green, and every notice the project prints its last run's, word for word, times aside (GitHub's own, such as the macOS runners' capacity note, aside): 1 and 3 to 6 #95's, 2's #130's (`renesas (rh850)`'s and `renesas (rh850-soft)`'s among them, and the three RX jobs' probes and file probes), 8 #153's, 17 #2's. | another notice, or a failure | H: of the changed files, `renesas` alone reads any but the documents, `17` the README, whose change is in no example, and `8` the records; none of the eight chooses its jobs from the push |
+
+**Not predicted**: the times.
+
+### What follows
+
+P1 to P4 scored, and the record closes. With it, the three changes the
+author agreed to on 2026-11-22 are done; the fourth, drafts of the
+reports to GCC (`t-rx`'s `MULTILIB_MATCHES`, and its manual on finite
+math at RX) and to newlib (the V850's `_open`) for the author to file,
+waits on the author. Then AArch32, as the author asked on 2026-11-22:
+32-bit Arm Linux (`arm-linux-gnueabihf`) under qemu-user first, then
+Cortex-R5 and Cortex-R52 on bare metal. Then item 9, the CompCert
+matrix.
