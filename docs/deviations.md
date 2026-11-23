@@ -43664,6 +43664,7 @@ What it shows:
 | **ID**         | VERIFY-112 |
 | **Date**       | 2026-11-22 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-23 — Scored: Q1 to Q5 MATCH. CLOSED: five of five ("Scored", below). The tests run on 32-bit Arm Linux under qemu-arm, 61 of 61 at each of the four legs; the binaries Armv7-A Thumb code with the hard-float ABI, none linked with libatomic, `lifetime.h`'s 64-bit atomic inline. The Status above is the record as committed. |
 | **Baseline**   | 08cd79a (VERIFY-111's change; its close, 7caebcf, a record, is pushed with this): `1` and `3` to `6` #96, `2` #131, `8` #154 and `17` #3, each its last run, at 08cd79a. |
 | **Scope**      | `.github/workflows/platforms.yml`: a job, `armhf`, and the workflow's opening comment. `docs/architectures.md`: a row in "Tested on". The lists of where the tests run: `docs/implementation-defined.md`, `docs/autosar-classic.md`, `docs/verification.md` (a row, and what is tested and proved), the workflow map. `README.md`: the note on `CANON_LIFETIME_DEBUG` without 64-bit atomics. |
 | **Category**   | The first of AArch32's three, which the author asked for on 2026-11-22, after the three changes agreed that day: 32-bit Arm Linux (`arm-linux-gnueabihf`) under qemu-user; then Cortex-R5 and Cortex-R52 on bare metal. |
@@ -43770,3 +43771,39 @@ lists.
 Q1 to Q5 scored, and the record closes. Then Cortex-R5 and Cortex-R52 on
 bare metal, the second and third of AArch32. Then item 9, the CompCert
 matrix.
+
+### Scored (2026-11-23)
+
+The push of ef18aa9, 6307c79 and 813198b started eight workflows: `1`
+and `3` to `6` #97, `2` #132, `8` #155 and `17` #4, each green at its
+first attempt; the last, `6`, in 88 minutes.
+
+| # | scored |
+|---|--------|
+| Q1 | **MATCH.** 1 to 6, 8 and 17 ran, and no other. |
+| Q2 | **MATCH.** The four `armhf` jobs green at their first attempt, "100% tests passed, 0 tests failed out of 61" in each, in 1.33 to 1.95 s, under "qemu-arm version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.18)", built by "arm-linux-gnueabihf-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0". |
+| Q3 | **MATCH.** "Performing Test CANON_C_ATOMIC64_LINKS - Success" in each, and no "linked with libatomic"; `bitset_test` "ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV)", its `main` Thumb code at each leg (0x00000561, 0x0000058d, 0x000047ad and 0x00004861); the four notices word for word: 0 of 61 linked with libatomic, and 1 with the 64-bit atomic inline at off, 24 at debug. |
+| Q4 | **MATCH.** Each job listed 19 package files, 50 MB, and found no cache: "0 from the cache, 19 fetched, 0 left to apt"; each was done in 80 s at most. `armhf (Debug, off)` saved the entry, and the three others were told "Unable to reserve cache with key apt-armhf-Linux-X64-b82e4be5e3fca853, another job may be creating this cache". |
+| Q5 | **MATCH.** Every other job green, and every notice of the 104 jobs its last run's, word for word, but `embedded`'s time report, which Q5 set aside: "in 1.0 s in all, the slowest 0.03 s (algo/any_all/any_all.h)", where #131 had 1.1 s and `data/convenience/smallvec.h`. |
+
+Five of five. Not predicted, and as they fell: the times, and 19 package
+files for the install.
+
+**Closed.** The tests run on 32-bit Arm Linux under qemu-arm, at Release
+and Debug, each with `CANON_LIFETIME` off and debug: 61 of 61 at each.
+The binaries are Armv7-A Thumb code with the hard-float ABI, and none is
+linked with libatomic: `lifetime.h`'s 64-bit atomic is the CPU's own
+(LDREXD and STREXD), in the 24 binaries that 32-bit PowerPC links with
+libatomic. The close changes nothing but this record.
+
+What it shows:
+
+- **A set-aside written down holds.** Q5 named `embedded`'s slowest
+  header, which VERIFY-111's P4 had not, and the name changed again, back
+  to `algo/any_all/any_all.h`: two names in two runs, the runner's.
+- **A check that reads a pipe under `pipefail` reads it whole.** Piped
+  into `grep -q`, the step found no LDREXD where there were 1 and 24 (the
+  record, measured before the run); read whole, it found them at each leg.
+- **The same code needs the same atomic on both 32-bit targets; only where
+  it comes from differs.** The 24 binaries that hold LDREXD on Arm are the
+  24 that 32-bit PowerPC links with libatomic.
