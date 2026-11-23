@@ -43991,3 +43991,210 @@ What it shows:
 - **A measure of what a job reads lets it install less.** The headers and
   links traced showed nothing of newlib's, so the job installs none, and
   its outcomes were those measured here with newlib present.
+
+---
+
+## VERIFY-114: Pre-registration — CompCert 3.17 at Six More Targets: 32-Bit Arm, AArch64, PowerPC 32, x86 and RISC-V 64 Linux under qemu-user, and RISC-V 32 Compiled Only; Run 1 Measuring
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-114 |
+| **Date**       | 2026-11-23 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | de230a5 (VERIFY-113's change; its close, 12587c6, a record, is pushed with this): `1` and `3` to `6` #98, `2` #133, `8` #156 and `17` #5, each its last run, at de230a5. |
+| **Scope**      | `.github/workflows/analysis.yml`: a job, `compcert-targets`, and the file's opening comment. `docs/architectures.md` (a row in "Tested on", one in "Compiled for", the planned entry removed), `docs/verification.md` (a row), the workflow map, `docs/compcert-licensing.md` (the forks' paragraph names both jobs) and the README (two sentences: CompCert's jobs). No library, test or tool file. |
+| **Category**   | The list's item 9, the CompCert matrix, as the author chose on 2026-11-23: CompCert at six more of its targets, and CI measuring first. |
+
+### What is missing
+
+CompCert compiles and runs the tests at x86-64 only (`compcert`).
+`docs/architectures.md` plans "CompCert at 32-bit Arm, AArch64, RISC-V 32
+and 64, PowerPC 32 and x86". The licensing record's permission covers
+compiling the library "across CompCert's supported targets"
+(`docs/compcert-licensing.md`); CI uses one of them.
+
+### The author's choices (2026-11-23)
+
+- The aim, in the author's words: "I just want it to be able to ported
+  any place that CompCert targets".
+- All six planned targets, RISC-V 32 compiled only: Ubuntu has no C
+  library for 32-bit RISC-V Linux.
+- CI measures first. Asked whether CompCert may be built here, the author
+  answered no: nothing of CompCert is built or run here, run 1 reports
+  its outcomes, and the next record pins them.
+
+### What changes
+
+- **`compcert-targets`**, in `analysis.yml`, after `compcert`: its
+  licensing note holds word for word, with the same `if:` guard, upstream
+  only, and the same `continue-on-error`. One job a target:
+
+  | target | toolchain (Ubuntu's packages) | the tests |
+  |--------|-------------------------------|-----------|
+  | `arm-linux` | `gcc-arm-linux-gnueabihf`, `libc6-dev-armhf-cross` | built, and run under `qemu-arm` |
+  | `aarch64-linux` | `gcc-aarch64-linux-gnu`, `libc6-dev-arm64-cross` | built, and run under `qemu-aarch64` |
+  | `ppc-linux` | `gcc-powerpc-linux-gnu`, `libc6-dev-powerpc-cross` | built, and run under `qemu-ppc` |
+  | `x86_32-linux` | `gcc-multilib` | built, and run natively |
+  | `rv64-linux` | `gcc-riscv64-linux-gnu`, `libc6-dev-riscv64-cross` | built, and run under `qemu-riscv64` |
+  | `rv32-linux` | `gcc-riscv64-unknown-elf`, `picolibc-riscv64-unknown-elf` | compiled to objects only |
+
+  Each job installs its toolchain (and `qemu-user`) through
+  `.github/actions/apt-install`, its cache name `compcert-TARGET`, and
+  takes CompCert built for its target from the Actions cache (key
+  `compcert-3.17-TARGET-build-v1`), or builds it: OCaml and opam from apt;
+  the opam switch the `compcert` job caches, restored by its key, or
+  installed as that job installs it; CompCert 3.17's archive, the one
+  opam's `coq-compcert.3.17` names, checked against opam's SHA-256;
+  `./configure TARGET -toolprefix PREFIX -prefix ~/compcert-TARGET
+  -use-external-Flocq -use-external-MenhirLib -ignore-coq-version`, the
+  flags opam gives at x86_64 but the prefix, the tool prefix and the
+  target, and without the Coq development or `clightgen`; `make -j` and
+  `make install`. At `rv32-linux`, two scripts under the names configure
+  derives from the tool prefix, `riscv32-gcc` (`riscv64-unknown-elf-gcc
+  -march=rv32gc --specs=picolibc.specs`) and `riscv32-ar`, kept in the
+  build's folder, which the cache keeps and `compcert.ini` names; and
+  `-no-runtime-lib`.
+- **The tests**: every `*_test.c`, as `compcert` finds them, with
+  `compcert`'s flags and its second source where there is one; built and
+  run under the target's emulator, each run limited to 600 s; at
+  `rv32-linux`, each source compiled to an object. A notice, `compcert
+  TARGET`: "N / M compiled, K ran", or "N / M compiled to objects; nothing
+  linked or run", and the tests not compiled, or not run, named. **Run 1
+  measures**: the step exits 0 whatever the outcomes; a failed fetch,
+  configure or build fails the job, which `continue-on-error` keeps from
+  the workflow's result.
+- **The documents**: a row in "Tested on" for the five Linux targets and
+  one in "Compiled for" for RISC-V 32, where the planned entry leaves;
+  a row in `docs/verification.md`; the workflow map. The licensing
+  record's paragraph on forks names both jobs, `compcert` and
+  `compcert-targets`, which a fork in a commercial context disables, and
+  the README's two sentences on CompCert's job speak of its jobs. The
+  permission and its scope are unchanged: it covers compiling the library
+  "across CompCert's supported targets".
+
+### Read, in CompCert 3.17's source
+
+Its source at the tag `v3.17`, read, not built or run:
+
+- **`configure`'s targets**: among them `arm-linux` ("ARM, EABI using
+  hardware FP registers, little endian", ARMv7-A with VFPv3-d16 by
+  default), `aarch64-linux`, `ppc-linux`, `x86_32-linux`, `rv32-linux` and
+  `rv64-linux`; and also `ppc-eabi`, `ppc-eabi-diab`, `arm-eabi`,
+  `arm-eabihf`, the big-endian `armeb-*`, `x86_32-bsd`, `x86_64-bsd`,
+  `x86_64-macos`, `x86_64-cygwin`, `aarch64-macos` and `manual`.
+- **The tools it derives from `-toolprefix`**: `gcc` to preprocess
+  (`-U__GNUC__ -E`; at ARM also `-D__REDIRECT(name,proto,alias)=name
+  proto` and `-D__REDIRECT_NTH(...)`, at RISC-V `-mabi=ilp32d` or
+  `-mabi=lp64d`, at x86 32 `-m32`), to assemble and to link, and `ar rcs`.
+  It tests the assembler for CFI directives and the linker for
+  `-no-pie`, and requires Coq 8.15 to 9.1 (or `-ignore-coq-version`),
+  OCaml 4.05 to 4.14 and Menhir.
+- **The driver's preprocessing**: `-std=c99`; `__COMPCERT__` and its
+  version; `__STDC_NO_ATOMICS__`, `__STDC_NO_COMPLEX__`,
+  `__STDC_NO_THREADS__`, `__STDC_NO_VLA__`; `__COMPCERT_WCHAR_TYPE__`,
+  `unsigned int` at ARM and AArch64, `long` at PowerPC, `int` at x86 and
+  RISC-V; and its own include folder (`float.h`, `stdarg.h`, `stdbool.h`,
+  `stddef.h` and four more).
+- **opam's `coq-compcert.3.17`**: the archive
+  `https://github.com/AbsInt/CompCert/archive/v3.17.tar.gz`, SHA-256
+  `671425695c92d6c3a44d9f0833a803a9fa6b9199675a0b10dfdc131a0e2abffa`;
+  the configure flags above, at x86_64; `make -j`.
+
+### Measured here, with GCC in ccomp's place
+
+- **Every test preprocessed as ccomp 3.17 preprocesses it** at each
+  target: the target's GCC with configure's preprocessor options, the
+  driver's macros and its include folder (read from the source), and
+  `compcert`'s flags. At `x86_64-linux`, `arm-linux`, `aarch64-linux`,
+  `ppc-linux`, `x86_32-linux` and `rv64-linux`, 61 of 61 each
+  (`x86_32-linux` with `gcc-multilib`: without it, three tests found no
+  `asm/errno.h`). At `rv32-linux`, 58 of 61: `lifetime_token_test`, since
+  picolibc has no `pthread.h`; and `memory_test` and `autosar_test`,
+  refused by `types.h`'s Tier 0 `#error`. Each includes `<stdint.h>`
+  before `types.h`; picolibc's `<stdint.h>` includes `sys/_intsup.h`,
+  which includes `<limits.h>` where `__GNUC_PREREQ(3, 2)` is false, as it
+  is with `__GNUC__` undefined, as ccomp's preprocessor has it; and
+  `-I core/primitives` makes that `<limits.h>` Canon-C's own, which
+  includes `types.h` before `UINT8_MAX` is defined. It is the trap
+  `limits.h` records ("header-name shadowing"), met by a C library's
+  header.
+- **Then compiled by GCC, linked and run**, under qemu-user (natively at
+  `x86_32-linux`), glibc's fallback typedefs of `_Float32` and the like
+  renamed for GCC, to which they are keywords (to CompCert, names): at
+  `aarch64-linux`, `ppc-linux`, `x86_32-linux` and `rv64-linux`, 61 built
+  and 61 ran; at `arm-linux`, 61 built and 60 ran, `time_test` failing
+  105 of its 224 checks. Ubuntu 24.04's GCC for 32-bit Arm and for
+  PowerPC defines `_TIME_BITS=64` and `_FILE_OFFSET_BITS=64`, and glibc
+  2.39 then declares `clock_gettime`, `nanosleep` and the other functions
+  that take a time as their 64-bit versions: through `__REDIRECT`, an
+  alias in an `asm` label, where it is defined, and through `#define
+  clock_gettime __clock_gettime64` where it is not. CompCert's configure
+  defines `__REDIRECT` and `__REDIRECT_NTH` at ARM, as `name proto`,
+  without the alias: `time_test` calls `clock_gettime@GLIBC_2.17`, whose
+  `struct timespec` has a 32-bit `tv_sec`, with the 64-bit one. At
+  PowerPC, which configure leaves without them, it calls
+  `__clock_gettime64`; and at ARM too, with `-U__REDIRECT
+  -U__REDIRECT_NTH` after configure's definitions, as options on ccomp's
+  command line come: 61 built and 61 ran. At `rv32-linux`, compiled
+  only: 57 of 61, `time_test` too ("'CLOCK_MONOTONIC' undeclared":
+  picolibc declares it only with `_POSIX_TIMERS`).
+- **What GCC compiles and CompCert would not.** Each target's
+  preprocessed tests against x86-64's, which ccomp compiles in
+  `compcert`, word by word: at the five Linux targets, the words not in
+  x86-64's are names of types, fields and functions; `_Float128`, at
+  AArch64 and RISC-V 64, is a typedef of `long double`, which `-fall`'s
+  `-flongdouble` takes. At `rv32-linux`, picolibc's headers bring
+  `extern __thread int errno;` (in `header_combination_test`,
+  `impl_defined_test` and `parse_test`), and, in its RISC-V
+  `machine/math.h`, statement expressions, `({ ... })`, and `asm` operands
+  of kind `f` (in `compare_test` and `parse_test`). CompCert 3.17's lexer
+  has no `__thread` and its parser no statement expression (read), and
+  its extended `asm` takes operands of kinds `r`, `m`, `i` and `n` only.
+- **The job's test step**, extracted and run under bash `-eo pipefail`
+  with a script calling GCC in ccomp's place: at `rv32-linux`, "57 / 61
+  compiled to objects; nothing linked or run; not compiled:
+  lifetime_token_test memory_test autosar_test time_test", exit 0; at
+  `arm-linux`, with `arm-linux-gnueabihf-gcc`, "61 / 61 compiled, 61 ran"
+  under `qemu-arm`, `lifetime_token_test`'s threads among them. The two
+  scripts the build step writes for `rv32-linux` preprocess a C file and
+  assemble configure's CFI test. shellcheck finds nothing in the build,
+  install and test steps.
+- **`gcc-multilib` and Ubuntu's cross compilers exclude each other**:
+  installing it removes `gcc-arm-linux-gnueabihf`,
+  `gcc-aarch64-linux-gnu`, `gcc-powerpc-linux-gnu` and
+  `gcc-riscv64-linux-gnu`, and installing any of them removes it. Each
+  target is a job of its own, and installs its toolchain alone.
+- Not measured: the archive, which the proxy here refuses (its SHA-256 is
+  opam's); ccomp itself, at any target, as the author chose. GCC after
+  its preprocessing shows what the preprocessing does to the calls into
+  the C library, not CompCert's parsing, its code or its runtime library.
+  `tools/which_workflows.py`: 1 to 6, 8 and 17. `tools/readme/examples.py`:
+  its line as at #5, "0 failed".
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| S1 | **1 to 6, 8 and 17 run**, and no other. | another set | H |
+| S2 | **The six `compcert (TARGET)` jobs are green**, each building CompCert: the archive's SHA-256 is opam's, configure accepts the target and its tool prefix, `make` and `make install` end, and `ccomp -version` names 3.17. | a failed fetch, digest, configure, build or install, or another version | M–L: never fetched or built here |
+| S3 | **At `aarch64-linux`, `ppc-linux`, `x86_32-linux` and `rv64-linux`**, the notice is "61 / 61 compiled, 61 ran"; **at `arm-linux`**, "61 / 61 compiled, 60 ran; did not run: time_test". | another count or another name | M–L: GCC after ccomp's preprocessing gave these; CompCert's parsing of each C library's headers, its code and its runtime library are not measured |
+| S4 | **At `rv32-linux`**, the notice is "53 / 61 compiled to objects; nothing linked or run; not compiled: lifetime_token_test memory_test compare_test header_combination_test impl_defined_test autosar_test parse_test time_test". | another count or another name | L–M: four of the eight GCC did not compile either; the other four by CompCert's lexer and parser, read against picolibc's headers |
+| S5 | **The installs and the caches**: each job's packages installed, nothing left to apt, within its 30 minutes; each restores the opam switch from `compcert`'s cache; each saves its build under `compcert-3.17-TARGET-build-v1`. | a file left to apt, a step over its limit, the switch installed, or a build not saved | M |
+| S6 | **Nothing else changes**: `compcert`'s notice "61 / 61 compiled, 61 ran"; every other job of the eight green, and every notice the project prints its last run's, word for word, the times, `embedded`'s slowest header's name and GitHub's own notices aside: 1 and 3 to 6 #98's, 2's #133's, 8 #156's, 17 #5's. | another notice, or a failure | H: no other job reads `compcert-targets`, and the README's changed lines are prose |
+
+**Not predicted**: the times, CompCert's build time at each target, and
+how many package files each install lists.
+
+### What follows
+
+S1 to S6 scored, and the record closes. Then the next record pins run
+1's outcomes and holds each target to them, and answers what run 1
+finds: at 32-bit Arm, the 64-bit time that configure's `__REDIRECT`
+drops, which `-U__REDIRECT -U__REDIRECT_NTH` gives back in the stand-in;
+at RISC-V 32, picolibc's thread-local `errno` and its statement
+expressions, beyond CompCert's C. The trap `limits.h` records is met by
+picolibc's `<stdint.h>` here: whether to rename `limits.h`, which its own
+comment calls a breaking change of the include path, is the author's.
+CompCert's other targets wait: the big-endian `armeb-*`, `arm-eabi` and
+`ppc-eabi` on bare metal, and BSD, macOS and Cygwin. Then item 10's
+backlog; the upstream reports' drafts wait on the author.
