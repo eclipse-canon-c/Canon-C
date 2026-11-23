@@ -9,7 +9,7 @@ CompCert's supported targets to produce portability evidence
 
 CompCert is **not** shipped, linked, redistributed, vendored, or made a
 dependency of any Canon-C artifact. No CompCert output is distributed.
-The CI job is observational only.
+The CI jobs are observational only.
 
 ## Permission
 
@@ -36,14 +36,15 @@ evaluation use**. It does **not** extend to third parties.
 In particular:
 
 - **Forks and downstream users:** if you fork Canon-C or reuse its CI
-  configuration in a **commercial context**, running the CompCert job
-  constitutes *your own* use of CompCert and is **not** covered by this
-  permission. You must either **disable the CompCert CI job** or obtain
-  an appropriate CompCert license from AbsInt
+  configuration in a **commercial context**, running the CompCert jobs
+  (`compcert`, and since VERIFY-114 `compcert-targets`, in
+  `analysis.yml`) constitutes *your own* use of CompCert and is **not**
+  covered by this permission. You must either **disable the CompCert CI
+  jobs** or obtain an appropriate CompCert license from AbsInt
   (https://www.absint.com/).
-- The CompCert CI job is therefore configured as **optional /
+- The CompCert CI jobs are therefore configured as **optional /
   informational** and clearly labeled in the pipeline configuration.
-  Disabling it does not affect any other evidence stream (Frama-C/WP
+  Disabling them does not affect any other evidence stream (Frama-C/WP
   proofs, MC/DC coverage, fuzzing, sanitizers).
 
 ## What the CompCert stream does and does not claim

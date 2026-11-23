@@ -1,6 +1,7 @@
 name: "3 · Static analysis & coverage"
 # clang-tidy and Cppcheck, MISRA C:2012 (advisory), MC/DC and branch
-# coverage (GCC 14), and CompCert (informational, upstream only).
+# coverage (GCC 14), and CompCert at x86-64 and at six other targets
+# (informational, upstream only).
 # Map: .github/workflows/README.md.
 on:
   push:
@@ -2196,6 +2197,223 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: compcert-logs
+          path: ccomp-out/*.log
+          retention-days: 90
+          if-no-files-found: ignore
+
+  # -------------------------------------------------------------------------
+  # 12b. CompCert at its other targets — INFORMATIONAL, upstream repository
+  #      only (VERIFY-114)
+  #
+  #   LICENSING — the compcert job's note above holds here word for word:
+  #   docs/compcert-licensing.md, the same `if:` guard and the same
+  #   continue-on-error. Its permission covers compiling the library "across
+  #   CompCert's supported targets".
+  #
+  #   CompCert 3.17 from the archive opam's coq-compcert.3.17 names, checked
+  #   against opam's SHA-256, configured for one of its targets with Ubuntu's
+  #   cross toolchain (configure's -toolprefix), and built in the opam
+  #   switch the compcert job caches, as opam builds it for x86_64; the build
+  #   is kept in the Actions cache by target. The tests are compiled with the
+  #   compcert job's flags, and run under qemu-user, natively at x86_32-linux.
+  #   Ubuntu has no C library for 32-bit RISC-V Linux: at rv32-linux the
+  #   tests are compiled to objects only, nothing linked or run, with
+  #   picolibc's headers, its GCC (riscv64-unknown-elf-gcc -march=rv32gc)
+  #   standing in for a riscv32 toolchain, and no runtime library.
+  #
+  #   Run 1 measures (VERIFY-114, as the author chose on 2026-11-23): the
+  #   outcomes are reported, not held to pins, and the step exits 0 whatever
+  #   they are. A failed fetch, configure or build fails the job.
+  # -------------------------------------------------------------------------
+  compcert-targets:
+    name: compcert (${{ matrix.target }})
+    runs-on: ubuntu-24.04
+    if: github.repository == 'eclipse-canon-c/Canon-C'
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: arm-linux
+            packages: gcc-arm-linux-gnueabihf libc6-dev-armhf-cross qemu-user
+            toolprefix: arm-linux-gnueabihf-
+            emulator: qemu-arm -L /usr/arm-linux-gnueabihf
+          - target: aarch64-linux
+            packages: gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user
+            toolprefix: aarch64-linux-gnu-
+            emulator: qemu-aarch64 -L /usr/aarch64-linux-gnu
+          - target: ppc-linux
+            packages: gcc-powerpc-linux-gnu libc6-dev-powerpc-cross qemu-user
+            toolprefix: powerpc-linux-gnu-
+            emulator: qemu-ppc -L /usr/powerpc-linux-gnu
+          - target: x86_32-linux
+            packages: gcc-multilib
+            toolprefix: ""
+            emulator: ""
+          - target: rv64-linux
+            packages: gcc-riscv64-linux-gnu libc6-dev-riscv64-cross qemu-user
+            toolprefix: riscv64-linux-gnu-
+            emulator: qemu-riscv64 -L /usr/riscv64-linux-gnu
+          - target: rv32-linux
+            packages: gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+            toolprefix: ""       # the build step writes riscv32-gcc and riscv32-ar
+            emulator: ""         # compiled only
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install the target's toolchain
+        # From the Actions cache, or from Canonical's archive before Azure's
+        # mirror (VERIFY-093); the limit fails a stalled install in 30 minutes.
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-install
+        with:
+          cache-name: compcert-${{ matrix.target }}
+          packages: ${{ matrix.packages }}
+
+      - name: Restore CompCert built for the target
+        id: target-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/compcert-${{ matrix.target }}
+          # The version, the target, and this job's build recipe, its last
+          # part: bump it with any change to the build step below, as the
+          # compcert job bumps its key with its pin.
+          key: compcert-3.17-${{ matrix.target }}-build-v1
+
+      - name: Install OCaml and opam
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y opam m4 pkg-config
+
+      - name: Restore the opam switch the compcert job caches
+        id: opam-cache
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.opam
+          key: opam-Linux-ocaml-4.14.2-compcert-3.17-v1
+
+      - name: Install CompCert's prerequisites, as the compcert job does
+        if: steps.target-cache.outputs.cache-hit != 'true' && steps.opam-cache.outputs.cache-hit != 'true'
+        run: |
+          opam init --bare --disable-sandboxing --yes
+          opam switch create compcert 4.14.2 --yes
+          eval "$(opam env --switch=compcert)"
+          opam repository add coq-released https://coq.inria.fr/opam/released --yes
+          opam install coq-compcert.3.17 --yes
+
+      - name: Build CompCert 3.17 for the target
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 90
+        env:
+          TARGET: ${{ matrix.target }}
+          TOOLPREFIX: ${{ matrix.toolprefix }}
+        run: |
+          eval "$(opam env --switch=compcert)"
+          # opam's coq-compcert.3.17: its archive and its SHA-256.
+          url=https://github.com/AbsInt/CompCert/archive/v3.17.tar.gz
+          sha256=671425695c92d6c3a44d9f0833a803a9fa6b9199675a0b10dfdc131a0e2abffa
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/compcert.tar.gz" "$url"
+          echo "$sha256  $RUNNER_TEMP/compcert.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/compcert-src"
+          tar -xzf "$RUNNER_TEMP/compcert.tar.gz" -C "$RUNNER_TEMP/compcert-src" --strip-components=1
+          prefix="$HOME/compcert-$TARGET"
+          extra=()
+          if [ "$TARGET" = rv32-linux ]; then
+            # No riscv32 toolchain in Ubuntu: its riscv64-unknown-elf-gcc,
+            # told rv32gc and given picolibc, under the names configure
+            # derives from -toolprefix. Kept in the build's folder, which the
+            # cache keeps: compcert.ini names them.
+            mkdir -p "$prefix/tools"
+            printf '#!/bin/sh\nexec riscv64-unknown-elf-gcc -march=rv32gc --specs=picolibc.specs "$@"\n' > "$prefix/tools/riscv32-gcc"
+            printf '#!/bin/sh\nexec riscv64-unknown-elf-ar "$@"\n' > "$prefix/tools/riscv32-ar"
+            chmod +x "$prefix/tools/riscv32-gcc" "$prefix/tools/riscv32-ar"
+            TOOLPREFIX="$prefix/tools/riscv32-"
+            extra=(-no-runtime-lib)
+          fi
+          cd "$RUNNER_TEMP/compcert-src" || exit 1
+          # opam's flags for x86_64, but -prefix, -toolprefix and the target,
+          # and no Coq development or clightgen.
+          ./configure "$TARGET" -toolprefix "$TOOLPREFIX" -prefix "$prefix" \
+            -use-external-Flocq -use-external-MenhirLib -ignore-coq-version "${extra[@]}"
+          make -j"$(nproc)"
+          make install
+
+      - name: Compile and run the test suite with ccomp
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          EMULATOR: ${{ matrix.emulator }}
+        run: |
+          ccomp="$HOME/compcert-$TARGET/bin/ccomp"
+          "$ccomp" -version
+          if ! "$ccomp" -version | grep -q "version 3.17"; then
+            echo "FAIL: ccomp is not the pinned 3.17"; exit 1
+          fi
+          # The compcert job's flags, and its reasons.
+          CCOMP_FLAGS=(
+            -fall
+            -DCANON_NO_GNU_EXTENSIONS
+            -DCANON_CHECKED_FORCE_FALLBACK
+            -DCANON_BITS_FORCE_FALLBACK
+            -I core/primitives -I core -I semantics -I .
+            -I integrations/autosar -I test/integrations/autosar/stubs
+          )
+          read -r -a run <<< "$EMULATOR"
+          mkdir -p ccomp-out
+          total=0; compiled=0; ran=0; failed_compile=(); failed_run=()
+          while IFS= read -r t; do
+            total=$((total + 1))
+            n=$(basename "$t" .c)
+            extra=(); d="${t%_test.c}_defs.c"; [ -f "$d" ] && extra=("$d")
+            if [ "$TARGET" = rv32-linux ]; then
+              # Compiled only: each source to its object.
+              ok=1
+              for src in "$t" "${extra[@]}"; do
+                o="ccomp-out/$(basename "$src" .c).o"
+                "$ccomp" "${CCOMP_FLAGS[@]}" -c -o "$o" "$src" >> "ccomp-out/$n.log" 2>&1 || ok=0
+              done
+              if [ "$ok" = 1 ]; then compiled=$((compiled + 1)); else failed_compile+=("$n"); fi
+              continue
+            fi
+            if "$ccomp" "${CCOMP_FLAGS[@]}" -o "ccomp-out/$n" "$t" "${extra[@]}" \
+                 > "ccomp-out/$n.log" 2>&1; then
+              compiled=$((compiled + 1))
+              if timeout 600 "${run[@]}" "./ccomp-out/$n" > "ccomp-out/$n.run.log" 2>&1; then
+                ran=$((ran + 1))
+              else
+                failed_run+=("$n")
+              fi
+            else
+              failed_compile+=("$n")
+            fi
+          done < <(find test -name '*_test.c' | sort)
+          if [ "$TARGET" = rv32-linux ]; then
+            line="$compiled / $total compiled to objects; nothing linked or run"
+          else
+            line="$compiled / $total compiled, $ran ran"
+          fi
+          [ ${#failed_compile[@]} -gt 0 ] && line="$line; not compiled: ${failed_compile[*]}"
+          [ ${#failed_run[@]} -gt 0 ] && line="$line; did not run: ${failed_run[*]}"
+          echo "CompCert at $TARGET (INFORMATIONAL): $line"
+          echo "::notice title=compcert $TARGET::$line"   # VERIFY-050
+          # head and tail read the file, not a pipe: under pipefail, sed
+          # stopped by head's early exit would fail the step.
+          for n in "${failed_compile[@]}"; do
+            echo "--- $n: not compiled ---"; head -15 "ccomp-out/$n.log" | sed 's/^/    /'
+          done
+          for n in "${failed_run[@]}"; do
+            echo "--- $n: did not run ---"; tail -15 "ccomp-out/$n.run.log" | sed 's/^/    /'
+          done
+          # Run 1 measures (VERIFY-114): reported, not held to pins.
+          exit 0
+
+      - name: Upload the target's CompCert logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: compcert-logs-${{ matrix.target }}
           path: ccomp-out/*.log
           retention-days: 90
           if-no-files-found: ignore

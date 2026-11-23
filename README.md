@@ -84,8 +84,8 @@
 > each links to its workflow, whose page shows the last result, but Frama-C
 > WP's, which runs in several workflows, links to the workflow map. Why3 and
 > the three provers run in every proof job; their badges link to the one
-> that runs each prover alone. CompCert's job is informational: its result
-> blocks nothing.
+> that runs each prover alone. CompCert's jobs are informational: their
+> results block nothing.
 >
 > "Planned" badges name tools the project plans to run on Canon-C; none
 > has run yet.
@@ -307,7 +307,7 @@ build uses compiler builtins unless
 `-DCANON_CHECKED_FORCE_FALLBACK` and `-DCANON_BITS_FORCE_FALLBACK` are set
 (an MSVC build takes checked.h's fallback and bits.h's MSVC intrinsics).
 The coverage job sets both flags, so MC/DC is measured on the proved
-paths; the CompCert job sets both and keeps the checks on; the GCC and
+paths; the CompCert jobs set both and keep the checks on; the GCC and
 Clang default, sanitizer and fuzz builds use the builtins.
 `docs/verification.md`, "The proved configuration", lists the known
 differences, the tools the proofs trust, and which run-time errors they

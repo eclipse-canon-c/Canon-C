@@ -26,6 +26,7 @@ here for them.
 | x86-64 | Linux, musl (Alpine) | GCC | `musl` (`platforms.yml`) |
 | x86-64 | Windows | MSVC; MinGW-w64 GCC | `build`, `mingw` (`ci.yml`) |
 | x86-64 | Linux, glibc | CompCert 3.17 | `compcert` (`analysis.yml`), informational: its result blocks nothing |
+| 32-bit Arm, AArch64, PowerPC 32, x86 and RISC-V 64 | Linux, glibc | CompCert 3.17, built for each with Ubuntu's cross toolchain | `compcert-targets` (`analysis.yml`), the tests under qemu-user, natively at x86; informational, as `compcert`; run 1 measures (VERIFY-114) |
 | x86, 32-bit | Linux, glibc | GCC (`-m32`) | `build-32bit` (`ci.yml`): `size_t` exactly 32 bits |
 | AArch64 | Linux, glibc | GCC, Clang | `build-arm64` (`platforms.yml`), on GitHub's Arm runner, with sanitizers; `char` is unsigned there |
 | AArch64 | macOS | Apple Clang | `build` (`ci.yml`), `macos-latest` is Apple silicon |
@@ -58,8 +59,6 @@ without the FPU link those built without it.
 *Planned:*
 
 - AArch64 on Windows, MSVC's ARM64 compiler on GitHub's Windows Arm runner.
-- CompCert at 32-bit Arm, AArch64, RISC-V 32 and 64, PowerPC 32 and x86
-  32-bit, Linux, under qemu-user; compiled only where the tests cannot run.
 - PowerPC 64, big-endian, Linux, under qemu-user.
 - SPARC LEON3 and MIPS under qemu, and WebAssembly under a runtime, where
   the emulators work in CI.
@@ -72,6 +71,7 @@ without the FPU link those built without it.
 | Cortex-M4 (Armv7E-M, hard float) | newlib; picolibc | GCC (`arm-none-eabi`) | the same | `embedded` |
 | RISC-V 32 (RV32IMAC), bare metal | picolibc | GCC (`riscv64-unknown-elf`) | the same | `embedded` |
 | RISC-V 64 (RV64IMAC), bare metal | picolibc | GCC (`riscv64-unknown-elf`) | the same | `embedded` |
+| RISC-V 32 (RV32GC), no Linux C library in Ubuntu | picolibc's headers | CompCert 3.17 (`rv32-linux`), `riscv64-unknown-elf-gcc -march=rv32gc` preprocessing and assembling | every test, to an object; nothing linked or run; informational; run 1 measures (VERIFY-114) | `compcert-targets` (`analysis.yml`) |
 | AVR (ATmega328P), 16-bit `size_t` | avr-libc | avr-gcc 7 | Tier 0 only (the README's platform tiers): the refusal of a 32-bit `double`, and with that check removed, Tier 0 compiled and Tier 1 refused | `embedded` (`tools/avr_tier_check.sh`) |
 | dsPIC33 and PIC24's core (XC-DSC's virtual devices `generic-16dsp` and `generic-16bit`), 16-bit `size_t` | Microchip's | Microchip's XC-DSC 4.00, fetched from Microchip, its SHA-256 pinned | Tier 0 only, as on AVR: the refusal of XC-DSC's own 32-bit `double`, and with `-fno-short-double`, Tier 0 compiled and Tier 1 refused; of the 80 headers, 30 compile, 49 are refused by Tier 1, and `util/time.h` did not compile (VERIFY-110: the check's `-I util` hid the C library's `<time.h>`). Measured at VERIFY-107's run 1, enforced since VERIFY-108, the compiler's figures as pinned (`tools/dspic/probe.pinned`) | `dspic` (`platforms.yml`, `tools/tier_check.sh`, `tools/dspic/`) |
 | ARC: ARCv2 EM (`-mcpu=em4`), ARCv2 HS (`-mcpu=hs38`), ARCompact ARC700 (`-mcpu=arc700`) | newlib 4.4 | GCC 13.3.0 (`arc-elf32`), built from Ubuntu's source packages (`tools/renesas/build.sh`) | the same as Cortex-M's; nothing runs, since neither GDB nor QEMU has an ARC simulator (VERIFY-106) | `arc` (`platforms.yml`, `tools/embedded_compile_check.sh`) |
