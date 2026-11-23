@@ -44407,6 +44407,7 @@ What it shows:
 | **ID**         | VERIFY-116 |
 | **Date**       | 2026-11-23 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-24 — Scored: V1 to V5 MATCH. CLOSED: five of five ("Scored", below). CompCert 3.17 builds 55 of the 61 tests at each of its five bare-metal Arm configurations, and the 55 pass on QEMU's Cortex-A9, Cortex-R5F, Cortex-M7 and ARM1176; the six not built are the tests', picolibc's or its semihosting's, none the library's. The Status above is the record as committed. |
 | **Baseline**   | ad611f7 (VERIFY-115's change; its close, 1305ec7, a record, is pushed with this): `1` and `3` to `6` #100, `2` #135 and `8` #158, each its last run, at ad611f7. |
 | **Scope**      | `.github/workflows/analysis.yml`: a job, `compcert-bare`. `docs/architectures.md`: a row in "Tested on", a note, the planned entry for CompCert's other targets, and `ppc-eabi-diab` under "Waiting for a compiler". `docs/verification.md` (a row), `docs/compcert-licensing.md` (the forks' paragraph names the third job), the workflow map. No library, test or tool file. |
 | **Category**   | Item 9b's first step, as the author chose on 2026-11-23: CompCert at its other targets, bare-metal Arm first; and the documents he asked for, the targets planned and `ppc-eabi-diab`, which waits for a commercial compiler. |
@@ -44581,3 +44582,44 @@ V1 to V5 scored, and the record closes. Then the next record holds each
 configuration to its pin, and answers what run 1 finds; `compare_test` and
 `parse_test` by picolibc's `machine/math.h`, if so, are the author's to
 weigh: its inline `asm` is GCC's. Then item 9b's next, `ppc-eabi`.
+
+### Scored (2026-11-24)
+
+The push of ded877f, cc2fca4 and 927742c started seven workflows: `1`
+and `3` to `6` #101, `2` #136 and `8` #159, each green at its first
+attempt; the last, `6`, in 88 minutes.
+
+| # | scored |
+|---|--------|
+| V1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| V2 | **MATCH.** The five `compcert (CONFIG)` jobs green at their first attempt, each building CompCert: "compcert.tar.gz: OK"; configure's summary, `arm`, little-endian, the models `armv7a`, `armv7a`, `armv7r`, `armv7m` and `armv6`, the ABI `hardfloat` but at `armv7a-eabi`, `eabi`; `make install`, and "The CompCert C verified compiler, version 3.17"; the build in 158 to 209 s. |
+| V3 | **MATCH.** Each notice "55 / 61 built, 55 ran; not built: lifetime_token_test compare_test impl_defined_test file_test parse_test time_test; as pinned", word for word, at all five. The reasons the job prints: no `pthread.h`; "undefined reference to `rename'" (`impl_defined_test`, `file_test`); `time_test`'s `CLOCK_MONOTONIC`. `compare_test` stopped at its own uses of `INFINITY` and `NAN`, "use of unknown builtin '__builtin_inff'" and "'__builtin_nanf'", ten at each: CompCert's elaborator refuses a `__builtin_` it does not have, before the `asm` the record named for it, which it does not reach. `parse_test`'s error is past the first 15 lines of its log, all warnings, which are what the job prints: the log's artifact is not readable here, and its reason, `machine/math.h`'s `asm` by the record's reading, is not confirmed by the run. |
+| V4 | **MATCH.** Each toolchain through `apt-install` under its own name, "16 package file(s): 0 from the cache, 16 fetched, 0 left to apt", in 36 to 90 s, each saving its entry; each restored the opam switch from "opam-Linux-ocaml-4.14.2-compcert-3.17-v1" and saved its build under "compcert-3.17-bare-CONFIG-build-v1". |
+| V5 | **MATCH.** Every other job green, and every notice of the other 115 jobs its last run's, word for word, the times aside. `frama-c-pool`'s came back once from the annotations API, as its log prints it; its second copy at #100, which VERIFY-115 found GitHub's, is gone. |
+
+Five of five. Not predicted, and as they fell: the times, CompCert's
+build at each configuration in 158 to 209 s, the tests' step in 135 to
+139 s, and 16 package files at each.
+
+**Closed.** CompCert 3.17 at five of its bare-metal Arm configurations,
+with picolibc, both of ARMv7-A's floating-point ABIs among them: 55 of
+the 61 tests build and pass on QEMU's Cortex-A9, Cortex-R5F, Cortex-M7
+and ARM1176. The six not built are not the library's: `lifetime_token_test`
+needs threads; `time_test`, `impl_defined_test` and `file_test` what
+picolibc on bare metal does not give; `compare_test` and `parse_test`
+include `<math.h>`, which no header of the library includes, and
+picolibc's for ARM is GCC's C. Run 1 measured; the next record pins. The
+close changes nothing but this record.
+
+What it shows:
+
+- **A count right for one of two reasons.** `compare_test` was predicted
+  not built, and it was not, but at the builtins the record had read, not
+  at the `asm` it named: CompCert's elaborator stops at the first.
+- **What a job prints is what can be checked.** The first 15 lines of a
+  log held only warnings for `parse_test`, and its log's artifact is not
+  readable where the run is scored: the error lines are what a job should
+  print.
+- **CompCert reaches cores GCC's tests do not cover.** Cortex-M7, ARMv7-A
+  and ARM1176 joined the cores the tests run on, each with its own
+  configuration of CompCert.
