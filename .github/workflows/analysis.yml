@@ -2461,3 +2461,298 @@ jobs:
           path: ccomp-out/*.log
           retention-days: 90
           if-no-files-found: ignore
+
+  # -------------------------------------------------------------------------
+  # 12c. CompCert on bare-metal Arm — INFORMATIONAL, upstream repository
+  #      only (VERIFY-116)
+  #
+  #   LICENSING — the compcert job's note above holds here word for word:
+  #   docs/compcert-licensing.md, the same `if:` guard and the same
+  #   continue-on-error.
+  #
+  #   CompCert 3.17 built as compcert-targets builds it, for five of its ARM
+  #   configurations with no operating system, Ubuntu's arm-none-eabi GCC
+  #   (13.2) preprocessing, assembling and linking for it, with picolibc
+  #   1.8.6. CompCert's ARM back end does every floating-point operation on
+  #   the VFP, double precision included, and has no software floating
+  #   point: each core has a double-precision FPU (so no Cortex-M0+, M3 or
+  #   M4). Each test is built, compiled and linked, by ccomp, and run on
+  #   QEMU 8.2's model of the core through semihosting, as the cortex-r job
+  #   runs its tests:
+  #
+  #     armv7a-eabihf  arm-eabihf     Cortex-A9   the hard-float ABI
+  #     armv7a-eabi    arm-eabi       Cortex-A9   the base ABI: floating-
+  #                                               point arguments in core
+  #                                               registers (softfp)
+  #     armv7r-eabihf  armv7r-eabihf  Cortex-R5F
+  #     armv7m-eabihf  armv7m-eabihf  Cortex-M7 with FPv5-D16, mps2-an500
+  #     armv6-eabihf   armv6-eabihf   ARM1176, ARM state only
+  #
+  #   Two things for the C library come from code GCC compiles, as picolibc
+  #   itself is compiled. picolibc declares errno thread-local (__thread),
+  #   which CompCert's C does not have: ccomp is given
+  #   -D__PICOLIBC_ERRNO_FUNCTION=canon_errno, picolibc's way of reaching
+  #   errno through a function, and each test is linked with canon_errno,
+  #   which returns &errno through the library's own thread pointer
+  #   (-mtp=soft). And picolibc's start file for ARMv6 enables the FPU
+  #   without opening its coprocessors, which an ARMv6 core requires: at
+  #   armv6-eabihf the program starts at canon_armv6_start, which opens them
+  #   (CPACR) and goes on to picolibc's _start.
+  #
+  #   Run 1 measures (VERIFY-116): the notice says whether the outcome is the
+  #   predicted pin, and the step exits 0 either way; the next record holds
+  #   each configuration to its pin. A failed fetch, configure or build fails
+  #   the job, which continue-on-error keeps from the workflow's result.
+  # -------------------------------------------------------------------------
+  compcert-bare:
+    name: compcert (${{ matrix.config }})
+    runs-on: ubuntu-24.04
+    if: github.repository == 'eclipse-canon-c/Canon-C'
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        # target: configure's. gcc: the core's flags, which the tools
+        # configure derives from -toolprefix add. qemu: the machine and the
+        # core; load: how QEMU takes the program, through its generic loader
+        # or, on an M-profile board, -kernel. layout: picolibc's linker
+        # script, its memory inside QEMU's. start: armv6, the entry above.
+        # pin: the outcome predicted (VERIFY-116): not lifetime_token_test
+        # and time_test, for what picolibc does not have (pthread.h;
+        # CLOCK_MONOTONIC, without _POSIX_TIMERS); not impl_defined_test and
+        # file_test, which call rename, which picolibc's semihosting does
+        # not give; not compare_test and parse_test, whose picolibc
+        # machine/math.h defines sqrt and fabs as GNU inline functions of
+        # asm with VFP operands, which CompCert's extended asm does not take
+        # (and compare_test's INFINITY and NAN are GCC's builtins, which
+        # picolibc's math.h gives CompCert and CompCert 3.17 does not have).
+        include:
+          - config: armv7a-eabihf
+            target: arm-eabihf
+            gcc: -mcpu=cortex-a9 -mfpu=vfpv3-d16 -mfloat-abi=hard -mthumb
+            qemu: -M none -cpu cortex-a9 -m 64M
+            load: loader
+            layout: -Wl,--defsym=__flash=0x0,--defsym=__flash_size=0x1000000,--defsym=__ram=0x1000000,--defsym=__ram_size=0x1000000,--defsym=__stack_size=0x40000
+            start: ""
+            pin: "55 / 61 built, 55 ran; not built: lifetime_token_test compare_test impl_defined_test file_test parse_test time_test"
+          - config: armv7a-eabi
+            target: arm-eabi
+            gcc: -mcpu=cortex-a9 -mfpu=vfpv3-d16 -mfloat-abi=softfp -mthumb
+            qemu: -M none -cpu cortex-a9 -m 64M
+            load: loader
+            layout: -Wl,--defsym=__flash=0x0,--defsym=__flash_size=0x1000000,--defsym=__ram=0x1000000,--defsym=__ram_size=0x1000000,--defsym=__stack_size=0x40000
+            start: ""
+            pin: "55 / 61 built, 55 ran; not built: lifetime_token_test compare_test impl_defined_test file_test parse_test time_test"
+          - config: armv7r-eabihf
+            target: armv7r-eabihf
+            gcc: -mcpu=cortex-r5 -mfpu=vfpv3-d16 -mfloat-abi=hard -mthumb
+            qemu: -M none -cpu cortex-r5f -m 64M
+            load: loader
+            layout: -Wl,--defsym=__flash=0x0,--defsym=__flash_size=0x1000000,--defsym=__ram=0x1000000,--defsym=__ram_size=0x1000000,--defsym=__stack_size=0x40000
+            start: ""
+            pin: "55 / 61 built, 55 ran; not built: lifetime_token_test compare_test impl_defined_test file_test parse_test time_test"
+          - config: armv7m-eabihf
+            target: armv7m-eabihf
+            gcc: -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb
+            qemu: -M mps2-an500
+            load: kernel
+            # mps2-an500: 4 MB of code at 0 and 4 MB of RAM at 0x20000000,
+            # where picolibc's script puts them, as on mps2-an386.
+            layout: -Wl,--defsym=__flash_size=0x400000,--defsym=__ram_size=0x400000,--defsym=__stack_size=0x40000
+            start: ""
+            pin: "55 / 61 built, 55 ran; not built: lifetime_token_test compare_test impl_defined_test file_test parse_test time_test"
+          - config: armv6-eabihf
+            target: armv6-eabihf
+            gcc: -mcpu=arm1176jzf-s -mfpu=vfp -mfloat-abi=hard -marm
+            qemu: -M none -cpu arm1176 -m 64M
+            load: loader
+            layout: -Wl,--defsym=__flash=0x0,--defsym=__flash_size=0x1000000,--defsym=__ram=0x1000000,--defsym=__ram_size=0x1000000,--defsym=__stack_size=0x40000
+            start: armv6
+            pin: "55 / 61 built, 55 ran; not built: lifetime_token_test compare_test impl_defined_test file_test parse_test time_test"
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install the toolchain and QEMU
+        # From the Actions cache, or from Canonical's archive before Azure's
+        # mirror (VERIFY-093); the limit fails a stalled install in 30 minutes.
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-install
+        with:
+          cache-name: compcert-bare-${{ matrix.config }}
+          packages: gcc-arm-none-eabi picolibc-arm-none-eabi qemu-system-arm
+
+      - name: Restore CompCert built for the configuration
+        id: target-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/compcert-bare-${{ matrix.config }}
+          # The version, the configuration, and this job's build recipe, its
+          # last part: bump it with any change to the build step below or to
+          # the configuration's gcc flags, which the cached tools hold.
+          key: compcert-3.17-bare-${{ matrix.config }}-build-v1
+
+      - name: Install OCaml and opam
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y opam m4 pkg-config
+
+      - name: Restore the opam switch the compcert job caches
+        id: opam-cache
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.opam
+          key: opam-Linux-ocaml-4.14.2-compcert-3.17-v1
+
+      - name: Install CompCert's prerequisites, as the compcert job does
+        if: steps.target-cache.outputs.cache-hit != 'true' && steps.opam-cache.outputs.cache-hit != 'true'
+        run: |
+          opam init --bare --disable-sandboxing --yes
+          opam switch create compcert 4.14.2 --yes
+          eval "$(opam env --switch=compcert)"
+          opam repository add coq-released https://coq.inria.fr/opam/released --yes
+          opam install coq-compcert.3.17 --yes
+
+      - name: Build CompCert 3.17 for the configuration
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 90
+        env:
+          CONFIG: ${{ matrix.config }}
+          TARGET: ${{ matrix.target }}
+          GCC_FLAGS: ${{ matrix.gcc }}
+        run: |
+          eval "$(opam env --switch=compcert)"
+          # opam's coq-compcert.3.17: its archive and its SHA-256.
+          url=https://github.com/AbsInt/CompCert/archive/v3.17.tar.gz
+          sha256=671425695c92d6c3a44d9f0833a803a9fa6b9199675a0b10dfdc131a0e2abffa
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/compcert.tar.gz" "$url"
+          echo "$sha256  $RUNNER_TEMP/compcert.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/compcert-src"
+          tar -xzf "$RUNNER_TEMP/compcert.tar.gz" -C "$RUNNER_TEMP/compcert-src" --strip-components=1
+          prefix="$HOME/compcert-bare-$CONFIG"
+          # arm-none-eabi-gcc, given the core's flags and picolibc, under the
+          # names configure derives from -toolprefix: it preprocesses,
+          # assembles (CompCert's runtime library too) and links. Kept in
+          # the build's folder, which the cache keeps: compcert.ini names
+          # them.
+          mkdir -p "$prefix/tools"
+          printf '#!/bin/sh\nexec arm-none-eabi-gcc %s --specs=picolibc.specs "$@"\n' "$GCC_FLAGS" > "$prefix/tools/arm-gcc"
+          printf '#!/bin/sh\nexec arm-none-eabi-ar "$@"\n' > "$prefix/tools/arm-ar"
+          chmod +x "$prefix/tools/arm-gcc" "$prefix/tools/arm-ar"
+          cat "$prefix/tools/arm-gcc"
+          cd "$RUNNER_TEMP/compcert-src" || exit 1
+          # opam's flags for x86_64, but -prefix, -toolprefix and the target,
+          # and no Coq development or clightgen.
+          ./configure "$TARGET" -toolprefix "$prefix/tools/arm-" -prefix "$prefix" \
+            -use-external-Flocq -use-external-MenhirLib -ignore-coq-version
+          make -j"$(nproc)"
+          make install
+
+      - name: Build and run the test suite with ccomp
+        shell: bash
+        env:
+          CONFIG: ${{ matrix.config }}
+          GCC_FLAGS: ${{ matrix.gcc }}
+          QEMU_MACHINE: ${{ matrix.qemu }}
+          LOAD: ${{ matrix.load }}
+          LAYOUT: ${{ matrix.layout }}
+          START: ${{ matrix.start }}
+          PIN: ${{ matrix.pin }}
+        run: |
+          ccomp="$HOME/compcert-bare-$CONFIG/bin/ccomp"
+          "$ccomp" -version
+          if ! "$ccomp" -version | grep -q "version 3.17"; then
+            echo "FAIL: ccomp is not the pinned 3.17"; exit 1
+          fi
+          read -r -a gcc <<< "$GCC_FLAGS"
+          read -r -a machine <<< "$QEMU_MACHINE"
+          mkdir -p ccomp-out
+          # canon_errno, compiled by GCC as picolibc is: errno's address,
+          # through the library's thread pointer (__aeabi_read_tp).
+          printf '#include <errno.h>\nint *canon_errno(void) { return &errno; }\n' > ccomp-out/canon_errno.c
+          arm-none-eabi-gcc "${gcc[@]}" --specs=picolibc.specs -O2 -mtp=soft \
+            -c -o ccomp-out/canon_errno.o ccomp-out/canon_errno.c
+          support=(ccomp-out/canon_errno.o)
+          if [ "$START" = armv6 ]; then
+            # Open the coprocessors of the FPU (CPACR: CP10 and CP11, full
+            # access), flush the prefetch buffer, ARMv6's ISB, and go on to
+            # picolibc's _start, which enables the FPU (FPEXC).
+            cat > ccomp-out/armv6_start.s <<'ASM'
+          .syntax unified
+          .arm
+          .global canon_armv6_start
+          .type canon_armv6_start, %function
+          canon_armv6_start:
+          mrc p15, 0, r0, c1, c0, 2
+          orr r0, r0, #0x00f00000
+          mcr p15, 0, r0, c1, c0, 2
+          mov r0, #0
+          mcr p15, 0, r0, c7, c5, 4
+          b _start
+          ASM
+            arm-none-eabi-gcc "${gcc[@]}" -c -o ccomp-out/armv6_start.o ccomp-out/armv6_start.s
+            support+=(ccomp-out/armv6_start.o "-Wl,--entry=canon_armv6_start")
+          fi
+          # The compcert job's flags, and its reasons; then errno through
+          # canon_errno.
+          CCOMP_FLAGS=(
+            -fall
+            -DCANON_NO_GNU_EXTENSIONS
+            -DCANON_CHECKED_FORCE_FALLBACK
+            -DCANON_BITS_FORCE_FALLBACK
+            -iquote core/primitives -I core -I semantics -I .
+            -I integrations/autosar -I test/integrations/autosar/stubs
+            -D__PICOLIBC_ERRNO_FUNCTION=canon_errno
+          )
+          # picolibc's semihosting and its start file, the memory, libm.
+          LINK=("-WUl,--oslib=semihost,--crt0=semihost" "$LAYOUT" -lm)
+          total=0; built=0; ran=0; failed_build=(); failed_run=()
+          while IFS= read -r t; do
+            total=$((total + 1))
+            n=$(basename "$t" .c)
+            extra=(); d="${t%_test.c}_defs.c"; [ -f "$d" ] && extra=("$d")
+            if "$ccomp" "${CCOMP_FLAGS[@]}" -o "ccomp-out/$n.elf" "$t" "${extra[@]}" \
+                 "${support[@]}" "${LINK[@]}" > "ccomp-out/$n.log" 2>&1; then
+              built=$((built + 1))
+              if [ "$LOAD" = kernel ]; then
+                prog=(-kernel "ccomp-out/$n.elf")
+              else
+                prog=(-device "loader,file=ccomp-out/$n.elf,cpu-num=0")
+              fi
+              if timeout 120 qemu-system-arm "${machine[@]}" -nographic -monitor none -serial none \
+                   -semihosting-config enable=on,target=native "${prog[@]}" \
+                   > "ccomp-out/$n.run.log" 2>&1; then
+                ran=$((ran + 1))
+              else
+                failed_run+=("$n")
+              fi
+            else
+              failed_build+=("$n")
+            fi
+          done < <(find test -name '*_test.c' | sort)
+          line="$built / $total built, $ran ran"
+          [ ${#failed_build[@]} -gt 0 ] && line="$line; not built: ${failed_build[*]}"
+          [ ${#failed_run[@]} -gt 0 ] && line="$line; did not run: ${failed_run[*]}"
+          if [ "$line" = "$PIN" ]; then held="as pinned"; else held="not the pin"; fi
+          echo "CompCert at $CONFIG (INFORMATIONAL): $line; $held"
+          echo "::notice title=compcert $CONFIG::$line; $held"   # VERIFY-050
+          # head and tail read the file, not a pipe: under pipefail, sed
+          # stopped by head's early exit would fail the step.
+          for n in "${failed_build[@]}"; do
+            echo "--- $n: not built ---"; head -15 "ccomp-out/$n.log" | sed 's/^/    /'
+          done
+          for n in "${failed_run[@]}"; do
+            echo "--- $n: did not run ---"; tail -15 "ccomp-out/$n.run.log" | sed 's/^/    /'
+          done
+          # Run 1 measures (VERIFY-116): reported, not held to the pin.
+          exit 0
+
+      - name: Upload the configuration's CompCert logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: compcert-logs-${{ matrix.config }}
+          path: ccomp-out/*.log
+          retention-days: 90
+          if-no-files-found: ignore

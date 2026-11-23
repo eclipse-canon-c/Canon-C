@@ -37,11 +37,11 @@ In particular:
 
 - **Forks and downstream users:** if you fork Canon-C or reuse its CI
   configuration in a **commercial context**, running the CompCert jobs
-  (`compcert`, and since VERIFY-114 `compcert-targets`, in
-  `analysis.yml`) constitutes *your own* use of CompCert and is **not**
-  covered by this permission. You must either **disable the CompCert CI
-  jobs** or obtain an appropriate CompCert license from AbsInt
-  (https://www.absint.com/).
+  (`compcert`, and since VERIFY-114 `compcert-targets` and since
+  VERIFY-116 `compcert-bare`, in `analysis.yml`) constitutes *your own*
+  use of CompCert and is **not** covered by this permission. You must
+  either **disable the CompCert CI jobs** or obtain an appropriate
+  CompCert license from AbsInt (https://www.absint.com/).
 - The CompCert CI jobs are therefore configured as **optional /
   informational** and clearly labeled in the pipeline configuration.
   Disabling them does not affect any other evidence stream (Frama-C/WP

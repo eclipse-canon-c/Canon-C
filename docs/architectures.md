@@ -27,6 +27,7 @@ here for them.
 | x86-64 | Windows | MSVC; MinGW-w64 GCC | `build`, `mingw` (`ci.yml`) |
 | x86-64 | Linux, glibc | CompCert 3.17 | `compcert` (`analysis.yml`), informational: its result blocks nothing |
 | 32-bit Arm, AArch64, PowerPC 32, x86 and RISC-V 64 | Linux, glibc | CompCert 3.17, built for each with Ubuntu's cross toolchain | `compcert-targets` (`analysis.yml`), the tests under qemu-user, natively at x86: 61 of 61 at each, at 32-bit Arm with `-U__REDIRECT -U__REDIRECT_NTH` (below), each target held to that (VERIFY-115); informational, as `compcert` |
+| 32-bit Arm, bare metal: ARMv7-A (Cortex-A9; the hard-float ABI, and the base ABI), ARMv7-R (Cortex-R5F), ARMv7-M (Cortex-M7, double-precision FPU), ARMv6 (ARM1176) | bare metal: picolibc 1.8.6 | CompCert 3.17 (`arm-eabihf`, `arm-eabi`, `armv7r-eabihf`, `armv7m-eabihf`, `armv6-eabihf`), Ubuntu's `arm-none-eabi` GCC preprocessing, assembling and linking for it | `compcert-bare` (`analysis.yml`), on QEMU's models of the cores through semihosting; informational, as `compcert`; run 1 measures (VERIFY-116) |
 | x86, 32-bit | Linux, glibc | GCC (`-m32`) | `build-32bit` (`ci.yml`): `size_t` exactly 32 bits |
 | AArch64 | Linux, glibc | GCC, Clang | `build-arm64` (`platforms.yml`), on GitHub's Arm runner, with sanitizers; `char` is unsigned there |
 | AArch64 | macOS | Apple Clang | `build` (`ci.yml`), `macos-latest` is Apple silicon |
@@ -68,6 +69,18 @@ picolibc's `<stdint.h>` includes where `__GNUC__` is undefined, and two
 tests did not compile at RISC-V 32 (the trap `core/primitives/limits.h`
 records). The README's way, the repository's root on the path, does not
 meet it.
+CompCert's ARM back end does every floating-point operation on the VFP,
+double precision included, and has no software floating point: it
+targets Arm cores with a double-precision FPU, ARMv6 with VFPv2 and ARMv7
+with VFPv3-D16 (Cortex-A, Cortex-R4F and R5F, Cortex-M7 with FPv5-D16),
+and not Cortex-M0+, M3 or M4, which `cortex-m` tests with GCC. With
+picolibc, whose `errno` is thread-local, CompCert, which has no
+`__thread`, reaches `errno` through a function: define
+`__PICOLIBC_ERRNO_FUNCTION` to one that returns `&errno`, compiled by
+GCC as picolibc is, through the library's thread pointer (`-mtp=soft`).
+At ARMv6, picolibc's start file enables the FPU without opening its
+coprocessors (CPACR), which the core requires: open them before it.
+`compcert-bare` does both (VERIFY-116).
 
 *Planned:*
 
@@ -75,6 +88,17 @@ meet it.
 - PowerPC 64, big-endian, Linux, under qemu-user.
 - SPARC LEON3 and MIPS under qemu, and WebAssembly under a runtime, where
   the emulators work in CI.
+- CompCert 3.17 at its other targets, each built for it as
+  `compcert-targets` builds it for Linux, in this order: bare-metal
+  PowerPC (`ppc-eabi`), with GCC and newlib built from Ubuntu's source
+  packages, as `renesas` builds its toolchains, the tests on GDB's PowerPC
+  simulator, since QEMU 8.2 has no semihosting for PowerPC; big-endian Arm
+  (`armeb-linux`), with a toolchain built the same way, under qemu-user;
+  macOS (`aarch64-macos` on GitHub's macOS runner, and `x86_64-macos`,
+  where an Intel runner or Rosetta allows); Cygwin (`x86_64-cygwin`) on
+  GitHub's Windows runner; BSD (`x86_64-bsd`, `x86_32-bsd`) in a FreeBSD
+  virtual machine, GitHub having no BSD runner. `ppc-eabi-diab` waits for
+  a compiler (below).
 
 ## Compiled for
 
@@ -162,6 +186,17 @@ target compiled only, as AVR is.
 | PowerPC e200 with VLE (NXP MPC5xxx) | NXP's GCC 4.9.4 with its VLE patches (`powerpc-eabivle-gcc`, in S32 Design Studio for Power Architecture), free to use | GCC does not generate VLE code (binutils assembles it), and NXP's compiler is downloaded behind its sign-in. QEMU has no e200 machine: nothing would run, it would be compiled only | a copy of NXP's compiler CI can fetch, or a public release. Big-endian 32-bit PowerPC's data model is tested already (`big-endian-32`); e200 would add VLE code, and the machine model planned under "Proved at" |
 | Infineon TriCore (AURIX TC2xx, TC3xx, TC4xx) | HighTec's toolchain and TASKING's VX-toolset, both commercial, each with a free version; a community port of GCC 13.3 with newlib (NoMore201/tricore-gcc-toolchain, downstream of EEESlab's tricore-gcc-toolchain-11.3.0), its releases and sources on GitHub | GCC has no TriCore port upstream. HighTec's free entry toolchain is sent, with a licence file, by e-mail after a form, for a Windows installer; TASKING's free VX-toolset only through a registration, an evaluation licence of three months, node-locked to a server it must reach. The community port is neither a vendor's nor in Ubuntu's archive, and the author chose not to take it (VERIFY-105) | a vendor's compiler CI can fetch, or the author's decision to take the community port, fetched or built with its checksum pinned. Ubuntu's archive has the emulator, `qemu-system-tricore` (QEMU 8.2.2, in `qemu-system-misc`), so the tests could run there as well as compile |
 | Analog Devices SHARC+ addressing bytes (`-char-size-8`: ADSP-SC58x, ADSP-2158x) | Analog Devices' CrossCore Embedded Studio, commercial | no free C compiler: GCC has no SHARC port | a licence for it, and a runner it installs on. Its type sizes are not yet checked; the SHARC+ built for words is not supported (below) |
+
+CompCert's `ppc-eabi-diab` waits for a compiler too, though its
+architecture does not: PowerPC is tested with GCC and planned with
+CompCert's `ppc-eabi` (above). It is CompCert configured to use Wind
+River's Diab tools in place of GNU's: `dcc` to preprocess and to link,
+`das` to assemble, `dar` to archive (CompCert 3.17's `configure`). Diab
+is Wind River's commercial compiler, which CI cannot fetch or install
+without a licence. What would let it in: a licence for Diab and a runner it
+installs on. What it would check beyond `ppc-eabi`: Diab's preprocessor,
+its C library's headers, and its assembler and linker with CompCert's
+code; CompCert's code for PowerPC EABI is the same.
 
 ## Not supported
 
