@@ -43807,3 +43807,145 @@ What it shows:
 - **The same code needs the same atomic on both 32-bit targets; only where
   it comes from differs.** The 24 binaries that hold LDREXD on Arm are the
   24 that 32-bit PowerPC links with libatomic.
+
+---
+
+## VERIFY-113: Pre-registration — The Tests on Bare-Metal Cortex-R5F and Cortex-R52, on QEMU's Models of the Two Cores
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-113 |
+| **Date**       | 2026-11-23 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 813198b (VERIFY-112's change; its close, 05d1212, a record, is pushed with this): `1` and `3` to `6` #97, `2` #132, `8` #155 and `17` #4, each its last run, at 813198b. |
+| **Scope**      | `tools/cortexr/`: `cortexr.py`, `qemu.sh`, `toolchain.cmake`, `pins.txt` and `README.md`, new. `.github/workflows/platforms.yml`: a job, `cortex-r`, and the workflow's opening comment; `records.yml`: the pins' check, and its path. `docs/architectures.md`: a row in "Tested on", the planned entry for Cortex-R5 and Cortex-R52 removed, and the note on GCC 13.2. The README's bare-metal section (the job, and the note on GCC 13.2), `docs/verification.md` (a row, and what runs where), `docs/implementation-defined.md`, `docs/autosar-classic.md`, the workflow map. |
+| **Category**   | The second and third of AArch32's three, which the author asked for on 2026-11-22: Cortex-R5 and Cortex-R52 on bare metal; run, not only compiled, since QEMU 8.2 models both. |
+
+### What is missing
+
+`docs/architectures.md` plans the R-profile's 32-bit cores, Cortex-R5
+(Armv7-R) and Cortex-R52 (Armv8-R AArch32), as entries compiled for, and
+nothing compiles for them or runs on them. The bare-metal AArch64 job
+compiles for Cortex-R82, Armv8-R's 64-bit core, and runs on QEMU's `max`
+CPU, since QEMU models neither of its cores (VERIFY-099); Arm's 32-bit
+real-time cores have no job.
+
+### What changes
+
+- **`tools/cortexr/cortexr.py`**, the bare-metal AArch64 job's runner
+  for two cores, `r5` (`-mcpu=cortex-r5 -mthumb -mfpu=vfpv3-d16
+  -mfloat-abi=hard`, on QEMU's `cortex-r5f`) and `r52` (`-mcpu=cortex-r52
+  -mthumb -mfpu=neon-fp-armv8 -mfloat-abi=hard`, on QEMU's `cortex-r52`),
+  each at CMake's four build types: Ubuntu's `arm-none-eabi-gcc` with
+  picolibc's specs, its semihosting start file and library. A probe, built
+  and run first, must exit with status 3 and print its line: the core's
+  macros, the type sizes, `char`'s sign, the mode the tests run in and its
+  control register's MPU and alignment bits, and an unaligned load's
+  result; its notice, "cortex-r CORE probe". Each leg's first built test
+  must be ELF32, little-endian Arm, of the core's architecture
+  (`Tag_CPU_arch` v7 or v8-R), of the real-time profile, with the
+  hard-float ABI (`Tag_ABI_VFP_args: VFP registers`), and compiled with
+  the core's flags (CMake's `flags.make`); a leg's notice, "cortex-r CORE
+  BUILD", gives its outcomes against `pins.txt`, enforced from run 1.
+  The pins' reader and `check` are `aarch64.py`'s, line for line.
+- **`tools/cortexr/qemu.sh`**: a test on QEMU's empty machine (`-M
+  none`), with the core and 64 MB of RAM from address 0; the generic
+  loader puts the ELF there and the core at its entry, since that machine
+  takes no `-kernel`. **`toolchain.cmake`** sets picolibc's memory inside
+  it: 16 MB of code from 0, 16 MB of data from 16 MB, a 256 KB stack.
+- **`tools/cortexr/pins.txt`**: four pins, below.
+- **`cortex-r`**, in `platforms.yml`, after `aarch64`: `qemu-system-arm`,
+  `gcc-arm-none-eabi` and `picolibc-arm-none-eabi` through
+  `.github/actions/apt-install` (VERIFY-093), its cache name `cortex-r`,
+  without newlib, which apt only recommends and nothing here reads; one
+  job a core, `cortexr.py run CORE`, its summaries and build logs
+  uploaded. **`8 · Records`** runs `cortexr.py check`, and runs on a change
+  to `tools/cortexr/`.
+- **The documents**: the row in "Tested on", where the planned entry
+  leaves "Compiled for"; the README's bare-metal section and
+  `docs/architectures.md`'s note say that GCC 13.2's wrong code (VERIFY-089)
+  is at both cores too; the lists of where the tests run.
+
+### Measured here
+
+With Ubuntu 24.04's packages: `gcc-arm-none-eabi` 15:13.2.rel1-2 (GCC
+13.2.1 20231009), `picolibc-arm-none-eabi` 1.8.6-2 and `qemu-system-arm`
+1:8.2.2+ds-0ubuntu1.18 (QEMU 8.2.2); `libnewlib-arm-none-eabi` is
+installed here too, and the job does not install it (below).
+
+- **QEMU 8.2.2** lists `cortex-r5`, `cortex-r5f` and `cortex-r52` among its
+  CPUs. Its empty machine refuses `-kernel`: "The -kernel parameter is not
+  supported (use the generic 'loader' device instead)". GCC links
+  picolibc's `thumb/v7+fp/hard` multilib at both cores.
+- **The probes**, word for word: "cortex-r probe: __ARM_ARCH 7, profile R,
+  __ARM_FP 0xc, Advanced SIMD no, LDREXD yes, long 4, pointer 4, long
+  double 8, char unsigned, mode 0x13 (Supervisor), SCTLR M 0 A 0, an
+  unaligned load 0x04030201" at `r5`; "cortex-r probe: __ARM_ARCH 8,
+  profile R, __ARM_FP 0xe, Advanced SIMD yes, LDREXD yes, long 4, pointer
+  4, long double 8, char unsigned, mode 0x1a (Hyp, EL2), HSCTLR M 0 A 0, an
+  unaligned load 0x04030201" at `r52`: the R52 runs the tests at EL2, where
+  it starts, and picolibc's start file leaves it.
+- **The eight legs**, the pins enforced, with the script as committed:
+  "61 tests, 58 passed, 0 failed, 3 not built (impl_defined_test,
+  file_test, time_test); as pinned" at Debug and Release, and "61 tests,
+  57 passed, 1 failed (option_test 1), 3 not built (impl_defined_test,
+  file_test, time_test); as pinned" at RelWithDebInfo and MinSizeRel, at
+  each core; 46 s for `r5`'s four, 53 s for `r52`'s. The first built test,
+  `bits_test`: "ELF32, 2's complement, little endian, ARM; v7, Realtime,
+  floating-point arguments in VFP registers" at `r5`, "v8-R" at `r52`.
+- **The three not built** are picolibc's, as on Cortex-M and bare-metal
+  AArch64: `file_test` and `impl_defined_test` do not link ("undefined
+  reference to `rename'"), and `time_test` does not compile ("implicit
+  declaration of function 'clock_gettime'").
+- **`option_test` at `-O2` and `-Os`: GCC 13.2's wrong code**, which
+  VERIFY-089 found on Cortex-M: "FAIL .../option_test.c:495  v.x == 6 &&
+  v.y == 8", `option_Point_combine_with` of Some({3,4}) and Some({3,4})
+  with `point_add`. The R5's RelWithDebInfo binary fails alike on QEMU's
+  `cortex-r52`, `cortex-a15`, `cortex-a7` and `max`: the binary, not
+  QEMU's model of the core. The short program of the call, built with the
+  R5's flags: at `-O2` and `-Os` GCC 13.2.1 compiles `main` to a `printf`
+  of 1, 3 and 4 and a return of 1, at `-O1` and `-O3` right; at `-O2` it
+  is right with `-fno-ipa-cp`, `-fno-ipa-sra`, `-fno-tree-sra` or
+  `-fno-early-inlining` (the last new to VERIFY-089's three), and wrong
+  with each of `-fno-ipa-modref`, `-fno-ipa-pure-const`, `-fno-ipa-icf`,
+  `-fno-ipa-vrp`, `-fno-tree-fre`, `-fno-tree-pre`, `-fno-tree-dse` and
+  `-fno-strict-aliasing`, among others. GCC 13.3.0 (Ubuntu's
+  `arm-linux-gnueabihf-gcc`), with the R5's flags, folds it to 6 and 8
+  at `-O2`, `-Os` and `-O3`, and builds a right `option_test` at `-O2`
+  and `-Os` for 32-bit Arm Linux; x86-64's GCC 13.3 and 14.2 run the short
+  program right. Not matched to a GCC report here.
+- **What the tests read**: the 504 objects' dependency files name headers
+  of the library, of picolibc (`include`, `include/machine`,
+  `include/sys`) and of GCC 13.2.1 (`include`), and none of newlib's; the
+  464 links, each relinked with `-Wl,-t`, read picolibc's
+  `crt0-semihost.o`, `libc.a` and `libsemihost.a`, and GCC's `libgcc.a`,
+  of `thumb/v7+fp/hard`, and nothing else. So the job installs no newlib.
+- **The run fails when it should**, each in a copy: `r5` compiled with
+  `-mfloat-abi=softfp`, "r5 Debug: bits_test is not the r5's: its
+  Tag_ABI_VFP_args is None, not VFP registers"; `option_test`'s pin
+  removed, at `r52` RelWithDebInfo, "1 difference(s): option_test (pinned
+  passes, fails 1)" and "1 difference(s) from tools/cortexr/pins.txt";
+  exit status 1 at each.
+- `cortexr.py check`: "cortex-r check: 4 pins, 61 tests in
+  CMakeLists.txt; 0 problem(s)". pyflakes and shellcheck report nothing.
+  `tools/which_workflows.py`: 1 to 6, 8 and 17.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| R1 | **1 to 6, 8 and 17 run**, and no other. | another set | H |
+| R2 | **`cortex-r (r5)` and `cortex-r (r52)` are green at their first attempt**: each probe's notice word for word as measured here, and the eight legs' "as pinned", with the outcomes measured here: 58 passed and 3 not built at Debug and Release, 57 passed, `option_test` failing 1, and 3 not built at RelWithDebInfo and MinSizeRel, at each core. | a failure, another outcome, or another word | M–H: measured here with the same packages, not on a runner |
+| R3 | **The install**: nothing left to apt in each job, each within its 30 minutes; the entry saved by one job, the other told that another job may be creating it. | a file left to apt, a step over its limit, or no entry saved | M: the archive's speed from GitHub's runners and the two jobs' race to save are not measured here |
+| R4 | **`8 · Records`' new step** prints "cortex-r check: 4 pins, 61 tests in CMakeLists.txt; 0 problem(s)". | another line, or a failure | H |
+| R5 | **Nothing else changes**: every other job of the eight green, and every notice the project prints its last run's, word for word, the times, `embedded`'s slowest header's name and GitHub's own notices aside: 1 and 3 to 6 #97's, 2's #132's, 8 #155's, 17 #4's. | another notice, or a failure | H: no other job reads `tools/cortexr/` or the job, and `17` reads the README, whose change is in no example |
+
+**Not predicted**: the times, and how many package files the install
+lists.
+
+### What follows
+
+R1 to R5 scored, and the record closes. With it, AArch32's three are
+done: 32-bit Arm Linux, and Cortex-R5F and Cortex-R52 on bare metal. Then
+item 9, the CompCert matrix; the upstream reports' drafts wait on the
+author.
