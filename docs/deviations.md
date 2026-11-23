@@ -44243,3 +44243,120 @@ What it shows:
 - **A preprocessor option is part of the ABI.** Configure's `__REDIRECT`
   at ARM selects the 32-bit time functions on a system whose `time_t` is
   64 bits: no diagnostic, and a wrong clock.
+
+---
+
+## VERIFY-115: Pre-registration — CompCert at Its Six Targets Held to Their Pins: `-U__REDIRECT` at 32-Bit Arm, and `core/primitives` on the Quote Path
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-115 |
+| **Date**       | 2026-11-23 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 2df1d7b (VERIFY-114's change; its close, 2f60e68, a record, is pushed with this): `1` and `3` to `6` #99, `2` #134 and `8` #157, each its last run, at 2df1d7b. |
+| **Scope**      | `.github/workflows/analysis.yml`: in `compcert` and `compcert-targets`, `core/primitives` on the quote path only (`-iquote`); in `compcert-targets`, each target's options and pin, the pin held, and the job's comment. `docs/architectures.md` (two rows, and a note), `docs/verification.md` (a row). No library, test or tool file. |
+| **Category**   | Item 9's second step, as the author chose on 2026-11-23 from VERIFY-114's run: the targets held to pins, with two changes. |
+
+### What VERIFY-114's run found
+
+CompCert 3.17, built for each target, compiled and ran 61 of 61 at
+AArch64, PowerPC 32, x86 and RISC-V 64 Linux. At 32-bit Arm, `time_test`
+failed 100 of its 224 checks: configure defines `__REDIRECT` and
+`__REDIRECT_NTH` at ARM without glibc's alias, and Ubuntu 24.04's GCC for
+armhf defines `_TIME_BITS=64`, so the test called the 32-bit
+`clock_gettime` with a 64-bit `struct timespec`, and read a clock that
+went back. At RISC-V 32, 53 of 61 compiled to objects: `memory_test` and
+`autosar_test` met the trap `core/primitives/limits.h` records, under
+`-I core/primitives`; `header_combination_test`, `impl_defined_test` and
+`parse_test` picolibc's thread-local `errno`, and `compare_test` its
+statement expressions, neither of which CompCert's C has;
+`lifetime_token_test` and `time_test` what picolibc does not have.
+
+### The author's choices (2026-11-23)
+
+- At 32-bit Arm, "Add the flags, document": the job passes `-U__REDIRECT
+  -U__REDIRECT_NTH` at `arm-linux`, and the documents tell CompCert's
+  users at 32-bit Arm Linux with a 64-bit `time_t` to add them.
+- At RISC-V 32, "-iquote in CompCert jobs": `core/primitives` on the
+  quote path only, in the two CompCert jobs; the library and the tests as
+  they are.
+- Each target held to a pin from this record, as VERIFY-114 said.
+
+### What changes
+
+- **Both CompCert jobs**: `-iquote core/primitives` where `-I
+  core/primitives` was. The bare primitives are included with quotes,
+  which the quote path serves; `#include <limits.h>` no longer finds the
+  library's.
+- **`compcert-targets`**: two fields a target, `options` (ccomp's, after
+  the compcert job's flags; `-U__REDIRECT -U__REDIRECT_NTH` at
+  `arm-linux`, none elsewhere) and `pin`. ccomp passes `-D` and `-U` to
+  its preprocessor after `compcert.ini`'s options (its `Frontend.ml`:
+  configure's options, `-std`, its macros, its include folder, then the
+  command line's), so the `-U` undoes configure's `-D`. The notice is the
+  line as before, then "; as pinned", or "; not the pin", which fails the
+  job (`continue-on-error` keeps it from the workflow's result), naming
+  the pin.
+- **The pins**: "61 / 61 compiled, 61 ran" at `arm-linux`,
+  `aarch64-linux`, `ppc-linux`, `x86_32-linux` and `rv64-linux`; at
+  `rv32-linux`, "55 / 61 compiled to objects; nothing linked or run; not
+  compiled: lifetime_token_test compare_test header_combination_test
+  impl_defined_test parse_test time_test", each of the six with its reason
+  in the matrix's comment.
+- **The documents**: `docs/architectures.md`'s two rows (61 of 61 at each
+  Linux target, 55 of 61 at RISC-V 32, and why not the six), and a note:
+  with CompCert at 32-bit Arm Linux where the compiler defines
+  `_TIME_BITS=64`, add the two `-U` options; and the quote path, the trap,
+  and that the README's way, the repository's root on the path, does not
+  meet it. `docs/verification.md`'s row.
+
+### Measured here, with GCC in ccomp's place
+
+Every test preprocessed as ccomp 3.17 preprocesses it at each target
+(VERIFY-114's stand-in), with the new flags:
+
+- **`-iquote` against `-I`**: at `x86_64-linux`, `arm-linux`,
+  `aarch64-linux`, `ppc-linux` and `rv64-linux`, the code of the 63
+  sources, 61 tests and two second sources, is the same either way, line
+  markers aside: no glibc header these tests read includes `<limits.h>`
+  with `__GNUC__` undefined. At `rv32-linux`, the text of 60 changes in
+  blank lines and line breaks only, with no word added; `memory_test` and
+  `autosar_test` preprocess, and hold no statement expression and no word
+  that the 53 CompCert compiled in VERIFY-114's run do not.
+- **Then compiled, linked and run**: at `x86_64-linux`, 61 built and 61
+  ran; at `arm-linux` with `-U__REDIRECT -U__REDIRECT_NTH`, 61 and 61,
+  `time_test` calling `__clock_gettime64@GLIBC_2.34` and
+  `__nanosleep64@GLIBC_2.34`; at `aarch64-linux`, `ppc-linux` and
+  `rv64-linux`, 61 and 61; at `rv32-linux`, compiled only, 59 of 61 (not
+  `lifetime_token_test` and `time_test`), and with CompCert's four
+  refusals of VERIFY-114's run, 55. `x86_32-linux` is not measured again:
+  `gcc-multilib` and the cross compilers exclude each other here, and its
+  glibc headers are the others'.
+- **The test step**, extracted and run under bash `-eo pipefail` with
+  GCC in ccomp's place: at `arm-linux` with its pin, "61 / 61 compiled, 61
+  ran; as pinned", exit 0; with another pin, "61 / 61 compiled, 61 ran;
+  not the pin" and "FAIL: compcert arm-linux is pinned to: ...", exit 1;
+  at `rv32-linux` with its pin, GCC compiling 59, "not the pin", exit 1,
+  and with GCC's line as the pin, exit 0. shellcheck finds nothing.
+- `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| T1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| T2 | **The six `compcert (TARGET)` jobs are green**, each notice its pin and "; as pinned": "61 / 61 compiled, 61 ran; as pinned" at `arm-linux`, `aarch64-linux`, `ppc-linux`, `x86_32-linux` and `rv64-linux`; "55 / 61 compiled to objects; nothing linked or run; not compiled: lifetime_token_test compare_test header_combination_test impl_defined_test parse_test time_test; as pinned" at `rv32-linux`. | a failure, another count or another name | M: 32-bit Arm's `time_test` and RISC-V 32's two by GCC after ccomp's preprocessing, the rest as VERIFY-114's run |
+| T3 | **The caches**: each job restores its CompCert from "compcert-3.17-TARGET-build-v1", and the steps that build it are skipped; and its toolchain from its apt entry, "N from the cache, 0 fetched, 0 left to apt", N 19, 23, 19, 21, 20 and 3. | a build, or a file fetched | M: the entries are VERIFY-114's; a package Ubuntu updates since would be fetched |
+| T4 | **`compcert`'s notice "61 / 61 compiled, 61 ran"**, with `-iquote`. | another notice | H: its preprocessed code is the same |
+| T5 | **Nothing else changes**: every other job of the seven green, and every notice the project prints its last run's, word for word, the times, `embedded`'s slowest header's name and GitHub's own notices aside: 1 and 3 to 6 #99's, 2's #134's, 8 #157's. | another notice, or a failure | H: no other job reads the two jobs' flags |
+
+**Not predicted**: the times.
+
+### What follows
+
+T1 to T5 scored, and the record closes. With it, item 9 is done: CompCert
+at seven of its targets, each held to its outcome. CompCert's other
+targets wait: the big-endian `armeb-*`, `arm-eabi` and `ppc-eabi` on bare
+metal, and BSD, macOS and Cygwin. A report to CompCert of configure's
+`__REDIRECT` at ARM is the author's to want, as are the drafts to GCC and
+newlib. Then item 10's backlog.
