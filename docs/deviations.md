@@ -44397,3 +44397,187 @@ What it shows:
   change, and at RISC-V 32 two more tests compile.
 - **A notice the API returns twice is read in the log before it is
   called the project's.** `frama-c-pool` printed its notice once.
+
+---
+
+## VERIFY-116: Pre-registration — CompCert 3.17 on Bare-Metal Arm: Cortex-A9 with Both ABIs, Cortex-R5F, Cortex-M7 and ARM1176 on QEMU, with picolibc; Run 1 Measuring
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-116 |
+| **Date**       | 2026-11-23 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | ad611f7 (VERIFY-115's change; its close, 1305ec7, a record, is pushed with this): `1` and `3` to `6` #100, `2` #135 and `8` #158, each its last run, at ad611f7. |
+| **Scope**      | `.github/workflows/analysis.yml`: a job, `compcert-bare`. `docs/architectures.md`: a row in "Tested on", a note, the planned entry for CompCert's other targets, and `ppc-eabi-diab` under "Waiting for a compiler". `docs/verification.md` (a row), `docs/compcert-licensing.md` (the forks' paragraph names the third job), the workflow map. No library, test or tool file. |
+| **Category**   | Item 9b's first step, as the author chose on 2026-11-23: CompCert at its other targets, bare-metal Arm first; and the documents he asked for, the targets planned and `ppc-eabi-diab`, which waits for a commercial compiler. |
+
+### What is missing
+
+CompCert compiles and runs the tests at seven Linux targets (VERIFY-114,
+VERIFY-115), and at none without an operating system, where it is used
+most. `docs/architectures.md` names neither the CompCert targets left
+nor what keeps `ppc-eabi-diab` out.
+
+### The author's choices (2026-11-23)
+
+- **Item 9b**, CompCert at its other targets, after item 9, in this
+  order: bare-metal Arm, `ppc-eabi`, `armeb-linux`, macOS, Cygwin, BSD;
+  and `ppc-eabi-diab` documented as waiting for a compiler, "like we did
+  for others": it is CompCert with Wind River's Diab tools, which are
+  commercial.
+- **The cores**, "All, ARM11 too": `arm-eabihf` and `arm-eabi` on
+  Cortex-A9, `armv7r-eabihf` on Cortex-R5F, `armv7m-eabihf` on Cortex-M7,
+  `armv6-eabihf` on ARM1176.
+- **picolibc's `errno`**, "Small errno function": a function built by GCC
+  that returns `&errno`, and ccomp given `-D__PICOLIBC_ERRNO_FUNCTION`.
+- CI measures first, as for VERIFY-114: nothing of CompCert is built
+  here; run 1 reports against the pins predicted below, and the next
+  record holds them.
+
+### What changes
+
+- **`compcert-bare`**, in `analysis.yml`, after `compcert-targets`, under
+  the `compcert` job's licensing note, its `if:` guard and its
+  `continue-on-error`. One job a configuration:
+
+  | configuration | configure's target | core, on QEMU 8.2 | GCC's flags | picolibc's multilib |
+  |---------------|--------------------|-------------------|-------------|---------------------|
+  | `armv7a-eabihf` | `arm-eabihf` | Cortex-A9, `-M none` | `-mcpu=cortex-a9 -mfpu=vfpv3-d16 -mfloat-abi=hard -mthumb` | `thumb/v7-a+fp/hard` |
+  | `armv7a-eabi` | `arm-eabi` | Cortex-A9, `-M none` | the same, `-mfloat-abi=softfp` | `thumb/v7-a+fp/softfp` |
+  | `armv7r-eabihf` | `armv7r-eabihf` | Cortex-R5F, `-M none` | `-mcpu=cortex-r5 -mfpu=vfpv3-d16 -mfloat-abi=hard -mthumb` | `thumb/v7+fp/hard` |
+  | `armv7m-eabihf` | `armv7m-eabihf` | Cortex-M7, `mps2-an500` | `-mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb` | `thumb/v7e-m+dp/hard` |
+  | `armv6-eabihf` | `armv6-eabihf` | ARM1176, `-M none` | `-mcpu=arm1176jzf-s -mfpu=vfp -mfloat-abi=hard -marm` | `arm/v5te/hard` |
+
+  Each installs `gcc-arm-none-eabi`, `picolibc-arm-none-eabi` and
+  `qemu-system-arm` through `apt-install` (its cache name
+  `compcert-bare-CONFIG`), and takes CompCert built for the configuration
+  from the Actions cache (`compcert-3.17-bare-CONFIG-build-v1`), or builds
+  it as `compcert-targets` does: the build step writes `arm-gcc`
+  (`arm-none-eabi-gcc` with the core's flags and `--specs=picolibc.specs`)
+  and `arm-ar` into the build's folder and gives configure their prefix,
+  so that they preprocess, assemble (CompCert's runtime library too),
+  link and archive for the core.
+- **The tests**: every `*_test.c`, with `compcert`'s flags and
+  `-D__PICOLIBC_ERRNO_FUNCTION=canon_errno`, built, compiled and linked,
+  by ccomp with picolibc's semihosting start file and library
+  (`-WUl,--oslib=semihost,--crt0=semihost`), its linker script set to
+  QEMU's memory (`-Wl,--defsym=...`, as `cortex-r` and `cortex-m` set
+  it), `-lm`, and two objects GCC compiles in the step: `canon_errno`,
+  which returns `&errno` through the library's thread pointer
+  (`-mtp=soft`), and at `armv6-eabihf` `canon_armv6_start`, the program's
+  entry (`-Wl,--entry`), which opens the FPU's coprocessors (CPACR, CP10
+  and CP11) and goes on to picolibc's `_start`. Each test runs on QEMU
+  through semihosting, 120 s at most, through the generic loader or, on
+  `mps2-an500`, `-kernel`. A notice, `compcert CONFIG`: "N / M built, K
+  ran", the tests not built (compiled and linked) or not run named, then
+  "; as pinned" or "; not the pin". **Run 1 measures**: the step exits 0
+  either way; a failed fetch, configure or build fails the job.
+- **The documents**: `docs/architectures.md`'s row in "Tested on", and a
+  note: CompCert's ARM back end does every floating-point operation on
+  the VFP and has no software floating point, so it targets cores with a
+  double-precision FPU, not Cortex-M0+, M3 or M4; picolibc's `errno` and
+  the function CompCert reaches it through; ARMv6's coprocessors. The
+  planned entry for CompCert's other targets loses bare-metal Arm. Written
+  on 2026-11-23 at the author's asking, with this record: the planned
+  entry itself, and `ppc-eabi-diab` under "Waiting for a compiler", a
+  paragraph, its architecture not waiting (PowerPC is tested with GCC):
+  CompCert configured for Diab's `dcc`, `das` and `dar`, commercial, and
+  what a licence and a runner would let it check beyond `ppc-eabi`.
+  `docs/verification.md`'s row, the licensing record's paragraph on forks
+  (the third job), the workflow map.
+
+### Read, in CompCert 3.17's source and picolibc's headers
+
+- **configure's ARM targets**: `arm-eabi`, whose `Softfloat` ABI passes
+  floating-point arguments in core registers and still computes on the
+  VFP, and `arm-eabihf`; the prefixes `armv6-` ("ARMv6 + VFPv2, Thumb
+  mode not supported"), `armv6t2-`, `armv7a-` (the default), `armv7r-`
+  and `armv7m-`, each ARMv7 "+ VFPv3-d16". At every ARM target the same
+  preprocessor options, `-U__GNUC__` and the `__REDIRECT` definitions.
+- **What CompCert's ARM printer writes**: in every file `.arch`, `.fpu
+  vfpv3-d16` (ARMv7) or `vfpv2`, `Tag_ABI_VFP_args` 1 or 0, and `.arm` or
+  `.thumb`: the VFP always, ARM state but at `armv7m`, where
+  `option_mthumb` is on by default; hardware division only at `armv7r` and
+  `armv7m` in Thumb state, `__aeabi_idiv` and `__aeabi_uidiv` elsewhere.
+  Its runtime library is Thumb at `armv7m`, ARM at `armv6`.
+- **The link** (`Linker.ml`): the configured linker, `-o`, the objects and
+  the options given (`-WUl,` to the gcc that links, `-Wl,`, `-l`), then
+  `-lcompcert`.
+- **What CompCert does not take**: `__builtin_inff` and `__builtin_nanf`
+  are in `cparser/GCC.ml` alone, which nothing uses: C2C's builtins and
+  ARM's do not have them. Its extended `asm` takes operands of kinds `r`,
+  `m`, `i` and `n`; no `gnu_inline`.
+- **picolibc 1.8.6**, Ubuntu's for `arm-none-eabi`: `PICOLIBC_TLS`, so
+  `extern __thread int errno;` unless `__PICOLIBC_ERRNO_FUNCTION` names a
+  function; `errno` in `.tbss` in `libc.a`. `math.h` gives `__COMPCERT__`
+  GCC's branch, `INFINITY` as `__builtin_inff()` and `NAN` as
+  `__builtin_nanf("")`. Its ARM `machine/math.h`, with a double-precision
+  FPU, defines `sqrt`, `fabs`, `sqrtf` and `fabsf` as `extern __inline`
+  with `gnu_inline` and `always_inline`, each an `asm` of operands `w` or
+  `t`. Its start file for `arm/v5te/hard` writes FPEXC, and not CPACR.
+
+### Measured here, with GCC in ccomp's place
+
+- **Every test preprocessed as ccomp 3.17 would** at each configuration
+  (the build step's `arm-gcc`, configure's ARM options, the driver's
+  macros, its include folder, the job's flags), compiled by GCC, linked
+  with picolibc's semihosting and `canon_errno`, and run on QEMU 8.2.2: at
+  each of the five, 57 built and 57 ran; not built `lifetime_token_test`
+  (no `pthread.h`), `impl_defined_test` and `file_test` ("undefined
+  reference to `rename'"), and `time_test` ("'CLOCK_MONOTONIC'
+  undeclared").
+- **ARM1176, first**: none of the 57 ran. QEMU's log: an Undefined
+  Instruction at the start, its syndrome an access to the FPU trapped:
+  picolibc's `v5te` start file writes FPEXC but not CPACR, which an ARMv6
+  core has, and which resets with CP10 and CP11 closed. With
+  `canon_armv6_start`, 56 ran, `parse_test` failing at its line 216, an
+  overflow not seen: the `canon_errno` compiled for the ARM1176 read the
+  thread pointer from CP15 (`mrc p15, 0, r0, c13, c0, 3`), where
+  picolibc's `v5te` library keeps it in memory (`__aeabi_read_tp`,
+  `_set_tls`), so `errno` was not the library's. Compiled with
+  `-mtp=soft`, it calls `__aeabi_read_tp`, and 57 ran; at all five, with
+  `-mtp=soft`, 57.
+- **What CompCert would not take**, read against the preprocessed tests:
+  at each of the five, `__builtin_inff` and `__builtin_nanf` in
+  `compare_test` alone; `asm` in `compare_test` and `parse_test` alone,
+  `machine/math.h`'s four functions; no statement expression; with
+  `canon_errno`, no `__thread`. Every other word of the other tests is in
+  what CompCert compiled at RISC-V 32 in VERIFY-115's run, but
+  `header_combination_test`'s, which that run did not compile: the
+  library's own names, picolibc's declarations of `_sys_errlist` and
+  `_sys_nerr`, and words of string literals.
+- **The build step's tools**: `arm-gcc` preprocesses `<stdio.h>`,
+  assembles configure's CFI test, and assembles CompCert's prologue at
+  each core (`.arch armv7-a`, `armv7-m` or `armv6`; `.fpu vfpv3-d16` or
+  `vfpv2`; `Tag_ABI_VFP_args` 1, or 0 with `-mfloat-abi=softfp`); `arm-ar`
+  archives.
+- **The job's test step**, extracted, run under bash `-eo pipefail` with a
+  ccomp that is GCC with ccomp's preprocessing and its `-WUl,` mapped: at
+  `armv6-eabihf`, `armv7m-eabihf` (through `-kernel`) and `armv7r-eabihf`,
+  "57 / 61 built, 57 ran; not built: lifetime_token_test
+  impl_defined_test file_test time_test; not the pin" (GCC builds
+  `compare_test` and `parse_test`), exit 0; at `armv7r-eabihf` with that
+  line as the pin, "as pinned". shellcheck finds nothing in the build and
+  test steps.
+- `tools/which_workflows.py`: 1 to 6 and 8. Not measured: ccomp itself,
+  and CompCert's builds, as the author chose.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| V1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| V2 | **The five `compcert (CONFIG)` jobs are green at their first attempt**, each building CompCert: the archive's SHA-256 is opam's, configure accepts the target and the tools, `make` and `make install` end, and `ccomp -version` names 3.17. | a failed fetch, digest, configure, build or install | M–L: configure and its runtime library with `arm-gcc` are not run here |
+| V3 | **Each notice** "55 / 61 built, 55 ran; not built: lifetime_token_test compare_test impl_defined_test file_test parse_test time_test; as pinned": the four GCC does not build, and `compare_test` and `parse_test`, by `machine/math.h`'s `asm`. | another count or another name, at any of the five | L–M: CompCert's code for these cores, its runtime library and the base ABI are not run here; the two by reading |
+| V4 | **The installs and the caches**: each toolchain through `apt-install` under its own name, "0 left to apt", within its 30 minutes; each job restores the opam switch from `compcert`'s cache and saves its build under "compcert-3.17-bare-CONFIG-build-v1". | a file left to apt, a step over its limit, the switch installed, or a build not saved | M |
+| V5 | **Nothing else changes**: every other job of the seven green, and every notice the project prints, as its job's log prints it, its last run's, word for word, the times, `embedded`'s slowest header's name and GitHub's own notices aside: 1 and 3 to 6 #100's, 2's #135's, 8 #158's. | another notice, or a failure | H: no other job reads `compcert-bare` |
+
+**Not predicted**: the times, CompCert's build at each configuration, and
+the install's package files.
+
+### What follows
+
+V1 to V5 scored, and the record closes. Then the next record holds each
+configuration to its pin, and answers what run 1 finds; `compare_test` and
+`parse_test` by picolibc's `machine/math.h`, if so, are the author's to
+weigh: its inline `asm` is GCC's. Then item 9b's next, `ppc-eabi`.
