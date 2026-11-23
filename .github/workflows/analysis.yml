@@ -2439,10 +2439,16 @@ jobs:
           if [ "$line" = "$PIN" ]; then held="as pinned"; else held="not the pin"; fi
           echo "CompCert at $TARGET (INFORMATIONAL): $line; $held"
           echo "::notice title=compcert $TARGET::$line; $held"   # VERIFY-050
-          # head and tail read the file, not a pipe: under pipefail, sed
-          # stopped by head's early exit would fail the step.
+          # Of each log, the lines that name an error, or its first 15 if
+          # none does (VERIFY-117): warnings come first in a log, and the
+          # logs' artifact is not read where a run is scored. Read into a
+          # variable, not piped: under pipefail a grep that finds nothing,
+          # or a sed stopped by head, would fail the step.
           for n in "${failed_compile[@]}"; do
-            echo "--- $n: not compiled ---"; head -15 "ccomp-out/$n.log" | sed 's/^/    /'
+            echo "--- $n: not compiled ---"
+            errs=$(grep -m 12 -E 'error|undefined reference' "ccomp-out/$n.log" || true)
+            [ -n "$errs" ] || errs=$(head -15 "ccomp-out/$n.log")
+            printf '%s\n' "$errs" | sed 's/^/    /'
           done
           for n in "${failed_run[@]}"; do
             echo "--- $n: did not run ---"; tail -15 "ccomp-out/$n.run.log" | sed 's/^/    /'
@@ -2499,10 +2505,10 @@ jobs:
   #   armv6-eabihf the program starts at canon_armv6_start, which opens them
   #   (CPACR) and goes on to picolibc's _start.
   #
-  #   Run 1 measures (VERIFY-116): the notice says whether the outcome is the
-  #   predicted pin, and the step exits 0 either way; the next record holds
-  #   each configuration to its pin. A failed fetch, configure or build fails
-  #   the job, which continue-on-error keeps from the workflow's result.
+  #   Each configuration is held to its pin (VERIFY-117), the notice
+  #   VERIFY-116's run measured. An outcome other than the pin fails the
+  #   job, as a failed fetch, configure or build does; continue-on-error
+  #   keeps it from the workflow's result.
   # -------------------------------------------------------------------------
   compcert-bare:
     name: compcert (${{ matrix.config }})
@@ -2517,15 +2523,17 @@ jobs:
         # core; load: how QEMU takes the program, through its generic loader
         # or, on an M-profile board, -kernel. layout: picolibc's linker
         # script, its memory inside QEMU's. start: armv6, the entry above.
-        # pin: the outcome predicted (VERIFY-116): not lifetime_token_test
-        # and time_test, for what picolibc does not have (pthread.h;
-        # CLOCK_MONOTONIC, without _POSIX_TIMERS); not impl_defined_test and
-        # file_test, which call rename, which picolibc's semihosting does
-        # not give; not compare_test and parse_test, whose picolibc
+        # pin: the outcome VERIFY-116's run measured (VERIFY-117): not
+        # lifetime_token_test and time_test, for what picolibc does not
+        # have (pthread.h; CLOCK_MONOTONIC, without _POSIX_TIMERS); not
+        # impl_defined_test and file_test, which call rename, which
+        # picolibc's semihosting does not give; not compare_test and
+        # parse_test, which include <math.h>, as no header of the library
+        # does: picolibc's math.h gives CompCert INFINITY and NAN as GCC's
+        # __builtin_inff and __builtin_nanf, which CompCert 3.17 refuses
+        # ("use of unknown builtin", compare_test), and its ARM
         # machine/math.h defines sqrt and fabs as GNU inline functions of
-        # asm with VFP operands, which CompCert's extended asm does not take
-        # (and compare_test's INFINITY and NAN are GCC's builtins, which
-        # picolibc's math.h gives CompCert and CompCert 3.17 does not have).
+        # asm with VFP operands, which CompCert's extended asm does not take.
         include:
           - config: armv7a-eabihf
             target: arm-eabihf
@@ -2737,16 +2745,22 @@ jobs:
           if [ "$line" = "$PIN" ]; then held="as pinned"; else held="not the pin"; fi
           echo "CompCert at $CONFIG (INFORMATIONAL): $line; $held"
           echo "::notice title=compcert $CONFIG::$line; $held"   # VERIFY-050
-          # head and tail read the file, not a pipe: under pipefail, sed
-          # stopped by head's early exit would fail the step.
+          # Of each log, the lines that name an error, or its first 15 if
+          # none does, as in compcert-targets (VERIFY-117).
           for n in "${failed_build[@]}"; do
-            echo "--- $n: not built ---"; head -15 "ccomp-out/$n.log" | sed 's/^/    /'
+            echo "--- $n: not built ---"
+            errs=$(grep -m 12 -E 'error|undefined reference' "ccomp-out/$n.log" || true)
+            [ -n "$errs" ] || errs=$(head -15 "ccomp-out/$n.log")
+            printf '%s\n' "$errs" | sed 's/^/    /'
           done
           for n in "${failed_run[@]}"; do
             echo "--- $n: did not run ---"; tail -15 "ccomp-out/$n.run.log" | sed 's/^/    /'
           done
-          # Run 1 measures (VERIFY-116): reported, not held to the pin.
-          exit 0
+          # Held to the configuration's pin (VERIFY-117).
+          if [ "$held" != "as pinned" ]; then
+            echo "FAIL: compcert $CONFIG is pinned to: $PIN"
+            exit 1
+          fi
 
       - name: Upload the configuration's CompCert logs
         if: always()

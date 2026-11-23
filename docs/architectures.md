@@ -27,7 +27,7 @@ here for them.
 | x86-64 | Windows | MSVC; MinGW-w64 GCC | `build`, `mingw` (`ci.yml`) |
 | x86-64 | Linux, glibc | CompCert 3.17 | `compcert` (`analysis.yml`), informational: its result blocks nothing |
 | 32-bit Arm, AArch64, PowerPC 32, x86 and RISC-V 64 | Linux, glibc | CompCert 3.17, built for each with Ubuntu's cross toolchain | `compcert-targets` (`analysis.yml`), the tests under qemu-user, natively at x86: 61 of 61 at each, at 32-bit Arm with `-U__REDIRECT -U__REDIRECT_NTH` (below), each target held to that (VERIFY-115); informational, as `compcert` |
-| 32-bit Arm, bare metal: ARMv7-A (Cortex-A9; the hard-float ABI, and the base ABI), ARMv7-R (Cortex-R5F), ARMv7-M (Cortex-M7, double-precision FPU), ARMv6 (ARM1176) | bare metal: picolibc 1.8.6 | CompCert 3.17 (`arm-eabihf`, `arm-eabi`, `armv7r-eabihf`, `armv7m-eabihf`, `armv6-eabihf`), Ubuntu's `arm-none-eabi` GCC preprocessing, assembling and linking for it | `compcert-bare` (`analysis.yml`), on QEMU's models of the cores through semihosting; informational, as `compcert`; run 1 measures (VERIFY-116) |
+| 32-bit Arm, bare metal: ARMv7-A (Cortex-A9; the hard-float ABI, and the base ABI), ARMv7-R (Cortex-R5F), ARMv7-M (Cortex-M7, double-precision FPU), ARMv6 (ARM1176) | bare metal: picolibc 1.8.6 | CompCert 3.17 (`arm-eabihf`, `arm-eabi`, `armv7r-eabihf`, `armv7m-eabihf`, `armv6-eabihf`), Ubuntu's `arm-none-eabi` GCC preprocessing, assembling and linking for it | `compcert-bare` (`analysis.yml`), on QEMU's models of the cores through semihosting: 55 of the 61 tests at each, held to that (VERIFY-117); not `lifetime_token_test`, `time_test`, `impl_defined_test` and `file_test`, for what picolibc on bare metal does not give, nor `compare_test` and `parse_test`, whose `<math.h>` CompCert does not take (below); informational, as `compcert` |
 | x86, 32-bit | Linux, glibc | GCC (`-m32`) | `build-32bit` (`ci.yml`): `size_t` exactly 32 bits |
 | AArch64 | Linux, glibc | GCC, Clang | `build-arm64` (`platforms.yml`), on GitHub's Arm runner, with sanitizers; `char` is unsigned there |
 | AArch64 | macOS | Apple Clang | `build` (`ci.yml`), `macos-latest` is Apple silicon |
@@ -80,14 +80,29 @@ picolibc, whose `errno` is thread-local, CompCert, which has no
 GCC as picolibc is, through the library's thread pointer (`-mtp=soft`).
 At ARMv6, picolibc's start file enables the FPU without opening its
 coprocessors (CPACR), which the core requires: open them before it.
-`compcert-bare` does both (VERIFY-116).
+`compcert-bare` does both (VERIFY-116). And picolibc's `<math.h>` for ARM
+does not compile under CompCert: it gives CompCert `INFINITY` and `NAN` as
+GCC's `__builtin_inff` and `__builtin_nanf`, which CompCert 3.17 refuses,
+and its `machine/math.h` defines `sqrt` and `fabs` as GNU inline
+functions of `asm`, whose VFP operands CompCert's extended `asm` does not
+take. No header of the library includes `<math.h>`; two of its tests do.
 
 *Planned:*
 
 - AArch64 on Windows, MSVC's ARM64 compiler on GitHub's Windows Arm runner.
 - PowerPC 64, big-endian, Linux, under qemu-user.
-- SPARC LEON3 and MIPS under qemu, and WebAssembly under a runtime, where
-  the emulators work in CI.
+- SPARC LEON3 and LEON4 first, the cores of European spacecraft, with
+  GCC on QEMU's `leon3_generic`; then MIPS (PIC32) and Xtensa (ESP32)
+  under QEMU. And Cortex-M7 with GCC in `cortex-m`, on QEMU's
+  `mps2-an500`, which `compcert-bare` runs already.
+- TriCore (AURIX TC2xx and TC3xx) with the community port of GCC 13.3 and
+  newlib (NoMore201/tricore-gcc-toolchain), built from its sources, their
+  checksums pinned, the tests on QEMU's TriCore models: the author's
+  decision of 2026-11-23, in place of VERIFY-105's. A vendor's compiler
+  joins it when one comes with a licence that does not expire (below).
+- The targets compiled only, run: RISC-V 32 and 64 on bare metal under
+  QEMU, AVR under simavr, and ARC where a simulator CI can run turns up.
+- WebAssembly under a runtime.
 - CompCert 3.17 at its other targets, each built for it as
   `compcert-targets` builds it for Linux, in this order: bare-metal
   PowerPC (`ppc-eabi`), with GCC and newlib built from Ubuntu's source
@@ -116,10 +131,12 @@ coprocessors (CPACR), which the core requires: open them before it.
 *Planned*, each compiled as the Cortex-M entries are, with code size
 measured where the list says so:
 
-- Cortex-M7, and Armv8-M (Cortex-M33, Cortex-M55).
+- Armv8-M (Cortex-M33, Cortex-M55). Cortex-M7 is planned tested (above).
 - 32-bit Arm, big-endian.
-- TriCore (Infineon AURIX): waiting for a compiler (below).
-- PowerPC e200, big-endian (NXP MPC5xxx): waiting for a compiler (below).
+- PowerPC e200 with VLE (NXP MPC5xxx), with NXP's GCC 4.9.4 and its VLE
+  patches, built from their sources once NXP's own are found and the
+  patches checked against them; compiled only, since no emulator runs
+  VLE code.
 - Xtensa (ESP32).
 - SPARC LEON3 and LEON4.
 - MIPS (PIC32).
@@ -157,9 +174,14 @@ and the nine models of `proofs-machdeps.yml`, Coq also proves `bits.h`'s
 twelve goals the provers leave (`coq.yml`), and Eva runs the 26 programs of
 `tools/eva/` (`eva.yml`), each result pinned.
 
-*Planned:* models for bare-metal AArch64, Cortex-R52, SPARC LEON3, TriCore
-and PowerPC e200, generated from their compilers as the seven are: TriCore's
-and PowerPC e200's once CI has a compiler for them (below).
+*Planned:* proofs by data model, as the author chose on 2026-11-23. A
+16-bit model, `int` and `size_t` of 16 bits as MSP430's, where `size_t`
+arithmetic differs most from x86-64's: the ten `core/` units first, then
+every unit; and every unit at one ILP32 model. Those proofs run weekly,
+or when the layer they prove changes, not at each push. And models for
+bare-metal AArch64, Cortex-R52, SPARC LEON3, TriCore and PowerPC e200,
+generated from their compilers as the seven are: TriCore's from the
+community GCC, e200's from NXP's.
 
 ## Waiting for a compiler
 
@@ -172,7 +194,9 @@ far and those found later: one whose only C compilers are of this kind
 goes in this table, not under "Not supported", which is for architectures
 whose C implementation Canon-C cannot work with. When a compiler CI can
 use appears, or the project has a licence and a runner for one, the entry
-moves to the table its job then fills.
+moves to the table its job then fills. The licence must not expire: a
+trial's job would stop with it, and every later change to the library go
+untested on that compiler.
 
 A compiler is usable when CI can download it itself, its checksum pinned,
 as the `msp430` job fetches TI's, `cortex-m` Arm's and `dspic` Microchip's, or build it from
@@ -183,9 +207,16 @@ target compiled only, as AVR is.
 | architecture | its C compilers | what holds it back | what would let it in, and what it would check |
 |--------------|-----------------|--------------------|-----------------------------------------------|
 | NXP S12, S12X and S12Z (16-bit, MagniV) | NXP's CodeWarrior and Cosmic's, both commercial and for Windows | no free C compiler: GCC's 68HC11 and 68HC12 port, which covered HCS12, was declared obsolete in GCC 4.6 and removed; S12X and S12Z were never in GCC, and GNU binutils assembles S12Z with no compiler behind it | a licence for one of them, and a Windows runner. A 16-bit `int`; where `size_t` has 16 bits, Tier 0 only, as on AVR |
-| PowerPC e200 with VLE (NXP MPC5xxx) | NXP's GCC 4.9.4 with its VLE patches (`powerpc-eabivle-gcc`, in S32 Design Studio for Power Architecture), free to use | GCC does not generate VLE code (binutils assembles it), and NXP's compiler is downloaded behind its sign-in. QEMU has no e200 machine: nothing would run, it would be compiled only | a copy of NXP's compiler CI can fetch, or a public release. Big-endian 32-bit PowerPC's data model is tested already (`big-endian-32`); e200 would add VLE code, and the machine model planned under "Proved at" |
-| Infineon TriCore (AURIX TC2xx, TC3xx, TC4xx) | HighTec's toolchain and TASKING's VX-toolset, both commercial, each with a free version; a community port of GCC 13.3 with newlib (NoMore201/tricore-gcc-toolchain, downstream of EEESlab's tricore-gcc-toolchain-11.3.0), its releases and sources on GitHub | GCC has no TriCore port upstream. HighTec's free entry toolchain is sent, with a licence file, by e-mail after a form, for a Windows installer; TASKING's free VX-toolset only through a registration, an evaluation licence of three months, node-locked to a server it must reach. The community port is neither a vendor's nor in Ubuntu's archive, and the author chose not to take it (VERIFY-105) | a vendor's compiler CI can fetch, or the author's decision to take the community port, fetched or built with its checksum pinned. Ubuntu's archive has the emulator, `qemu-system-tricore` (QEMU 8.2.2, in `qemu-system-misc`), so the tests could run there as well as compile |
 | Analog Devices SHARC+ addressing bytes (`-char-size-8`: ADSP-SC58x, ADSP-2158x) | Analog Devices' CrossCore Embedded Studio, commercial | no free C compiler: GCC has no SHARC port | a licence for it, and a runner it installs on. Its type sizes are not yet checked; the SHARC+ built for words is not supported (below) |
+
+PowerPC e200 and TriCore left this table on 2026-11-23 (VERIFY-117).
+NXP's `powerpc-eabivle-gcc` is GCC, under the GPL, and the patches it
+carries for VLE are public, repackaged on GitHub: built from them, once
+NXP's own source is found and they are checked against it, e200 is
+planned under "Compiled for".
+For TriCore the author took the community port of GCC, planned under
+"Tested on"; HighTec's and TASKING's compilers join it when one comes
+with a licence that does not expire.
 
 CompCert's `ppc-eabi-diab` waits for a compiler too, though its
 architecture does not: PowerPC is tested with GCC and planned with
@@ -229,4 +260,8 @@ manual](https://www.analog.com/media/en/dsp-documentation/software-manuals/cces-
 "Using Byte-Addressing"); for TriCore, [HighTec's free entry
 toolchain](https://free-entry-toolchain.hightec-rt.com/), [TASKING's free
 VX-toolset](https://tasking.com/node/485) and [the community GCC
-port](https://nomore201.github.io/tricore-gcc-toolchain).
+port](https://nomore201.github.io/tricore-gcc-toolchain); for PowerPC
+e200, [the answer on NXP's forum that its VLE compiler is
+GCC](https://community.nxp.com/t5/S32-Design-Studio/S32-Design-Studio-for-Power-Architecture-GCC-Compiler-license/td-p/1414546)
+and [its VLE patches for GCC 4.9.4,
+repackaged](https://github.com/fpoussin/gcc-powerpc-eabivle).
