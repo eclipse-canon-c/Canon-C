@@ -44253,6 +44253,7 @@ What it shows:
 | **ID**         | VERIFY-115 |
 | **Date**       | 2026-11-23 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-23 — Scored: T1 to T5 MATCH. CLOSED: five of five ("Scored", below). Each CompCert target held to its pin: 61 of 61 at the five Linux targets, at 32-bit Arm with `-U__REDIRECT -U__REDIRECT_NTH`; 55 of 61 compiled at RISC-V 32. The Status above is the record as committed. |
 | **Baseline**   | 2df1d7b (VERIFY-114's change; its close, 2f60e68, a record, is pushed with this): `1` and `3` to `6` #99, `2` #134 and `8` #157, each its last run, at 2df1d7b. |
 | **Scope**      | `.github/workflows/analysis.yml`: in `compcert` and `compcert-targets`, `core/primitives` on the quote path only (`-iquote`); in `compcert-targets`, each target's options and pin, the pin held, and the job's comment. `docs/architectures.md` (two rows, and a note), `docs/verification.md` (a row). No library, test or tool file. |
 | **Category**   | Item 9's second step, as the author chose on 2026-11-23 from VERIFY-114's run: the targets held to pins, with two changes. |
@@ -44360,3 +44361,39 @@ targets wait: the big-endian `armeb-*`, `arm-eabi` and `ppc-eabi` on bare
 metal, and BSD, macOS and Cygwin. A report to CompCert of configure's
 `__REDIRECT` at ARM is the author's to want, as are the drafts to GCC and
 newlib. Then item 10's backlog.
+
+### Scored (2026-11-23)
+
+The push of 18ff895, 379356f and ad611f7 started seven workflows: `1`
+and `3` to `6` #100, `2` #135 and `8` #158, each green at its first
+attempt; the last, `6`, in 83 minutes.
+
+| # | scored |
+|---|--------|
+| T1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| T2 | **MATCH.** The six `compcert (TARGET)` jobs green at their first attempt, each notice its pin, word for word: "61 / 61 compiled, 61 ran; as pinned" at the five Linux targets, `time_test` passing at `arm-linux`; at `rv32-linux`, "55 / 61 compiled to objects; nothing linked or run; not compiled: lifetime_token_test compare_test header_combination_test impl_defined_test parse_test time_test; as pinned", `memory_test` and `autosar_test` compiled. |
+| T3 | **MATCH.** Each restored its CompCert from "compcert-3.17-TARGET-build-v1", its four steps that build skipped, and its toolchain from its apt entry, "N package file(s): N from the cache, 0 fetched, 0 left to apt", N 19, 23, 19, 21, 20 and 3; each job in about two minutes. |
+| T4 | **MATCH.** `compcert`'s notice "61 / 61 compiled, 61 ran", with `-iquote`. |
+| T5 | **MATCH.** Every other job green, and every notice of the other 109 jobs its last run's, word for word, the times aside. One came back twice from the annotations API: `frama-c-pool`'s, "wp_pool_output.txt: proved 4067 / 4101; unproved 34; failed/invalid/stepout 0", which its log shows printed once. The second is GitHub's, not the project's. |
+
+Five of five. Not predicted, and as they fell: the times.
+
+**Closed.** CompCert 3.17 at seven of its targets, each held to its
+outcome: at x86-64, 32-bit Arm, AArch64, PowerPC 32, x86 and RISC-V 64
+Linux the tests compile, run and pass, 61 of 61, at 32-bit Arm with
+`-U__REDIRECT -U__REDIRECT_NTH`, which gives back glibc's 64-bit time
+functions; at RISC-V 32, 55 of 61 compile, the six others kept from it by
+what picolibc does not have and by what of its headers CompCert's C does
+not take. Item 9 is done. The close changes nothing but this record.
+
+What it shows:
+
+- **A fix measured with a stand-in held when CompCert ran it.** GCC
+  after ccomp's preprocessing, with the two `-U` options, gave 61 of 61
+  at 32-bit Arm; CompCert's run gave the same.
+- **A quote path keeps a library's header from standing for the
+  system's.** `-iquote` serves `#include "checked.h"` and leaves
+  `<limits.h>` to the system: with glibc the preprocessed code did not
+  change, and at RISC-V 32 two more tests compile.
+- **A notice the API returns twice is read in the log before it is
+  called the project's.** `frama-c-pool` printed its notice once.
