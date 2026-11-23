@@ -44001,6 +44001,7 @@ What it shows:
 | **ID**         | VERIFY-114 |
 | **Date**       | 2026-11-23 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-23 — Scored: S1 to S6 MATCH. CLOSED: six of six ("Scored", below). CompCert 3.17, built for each target, compiles the tests at six more of its targets: at AArch64, PowerPC 32, x86 and RISC-V 64 Linux 61 of 61 run and pass, at 32-bit Arm 60, `time_test` failing on the 64-bit time that configure's `__REDIRECT` drops; at RISC-V 32, 53 of 61 compile to objects. The Status above is the record as committed. |
 | **Baseline**   | de230a5 (VERIFY-113's change; its close, 12587c6, a record, is pushed with this): `1` and `3` to `6` #98, `2` #133, `8` #156 and `17` #5, each its last run, at de230a5. |
 | **Scope**      | `.github/workflows/analysis.yml`: a job, `compcert-targets`, and the file's opening comment. `docs/architectures.md` (a row in "Tested on", one in "Compiled for", the planned entry removed), `docs/verification.md` (a row), the workflow map, `docs/compcert-licensing.md` (the forks' paragraph names both jobs) and the README (two sentences: CompCert's jobs). No library, test or tool file. |
 | **Category**   | The list's item 9, the CompCert matrix, as the author chose on 2026-11-23: CompCert at six more of its targets, and CI measuring first. |
@@ -44198,3 +44199,47 @@ comment calls a breaking change of the include path, is the author's.
 CompCert's other targets wait: the big-endian `armeb-*`, `arm-eabi` and
 `ppc-eabi` on bare metal, and BSD, macOS and Cygwin. Then item 10's
 backlog; the upstream reports' drafts wait on the author.
+
+### Scored (2026-11-23)
+
+The push of 2c8f6a7, 8c00365 and 2df1d7b started eight workflows: `1`
+and `3` to `6` #99, `2` #134, `8` #157 and `17` #6, each green at its
+first attempt; the last, `6`, in 79 minutes.
+
+| # | scored |
+|---|--------|
+| S1 | **MATCH.** 1 to 6, 8 and 17 ran, and no other. |
+| S2 | **MATCH.** The six `compcert (TARGET)` jobs green at their first attempt, each building CompCert: "compcert.tar.gz: OK" against opam's SHA-256; configure's summary of each target (`arm`, `hardfloat`, little-endian, `arm-linux-gnueabihf-gcc`, linked with `-no-pie`; `aarch64`; `powerpc`, big-endian; `x86`, `gcc -m32`; `riscV`, `-mabi=lp64d`; and `riscV`, the two scripts, `-mabi=ilp32d`, no runtime library); `make install`, and "The CompCert C verified compiler, version 3.17", the build in 143 to 211 s. Configure checks Coq by the versions it lists, up to 9.1.0, and called the switch's 9.1.1 "UNSUPPORTED": `-ignore-coq-version`, which opam's build gives too, let it through. |
+| S3 | **MATCH.** "61 / 61 compiled, 61 ran" at `aarch64-linux`, `ppc-linux`, `x86_32-linux` and `rv64-linux`, and "61 / 61 compiled, 60 ran; did not run: time_test" at `arm-linux`, word for word. `time_test` there: "124 passed, 100 failed", its last failures `curr >= prev` (line 224), a clock that goes back, as the 32-bit `clock_gettime` writes its nanoseconds where the 64-bit `tv_sec` keeps its high word; the stand-in failed 105, at line 224 and three others. |
+| S4 | **MATCH.** "53 / 61 compiled to objects; nothing linked or run; not compiled: lifetime_token_test memory_test compare_test header_combination_test impl_defined_test autosar_test parse_test time_test", word for word, each for the reason read: no `pthread.h`; `types.h`'s Tier 0 `#error`, through picolibc's `sys/_intsup.h` and the library's `limits.h` (`memory_test`, `autosar_test`); "syntax error after '(' and before '{'" at picolibc's `machine/math.h:147` (`compare_test`); "syntax error after 'extern' and before '__thread'" at `sys/errno.h:62` (`header_combination_test`, `impl_defined_test`, `parse_test`, whose statement expressions come after); "use of undeclared identifier 'CLOCK_MONOTONIC'" (`time_test`). |
+| S5 | **MATCH.** Each toolchain through `apt-install`, which found no cache: "0 from the cache, N fetched, 0 left to apt", 19, 23, 19, 21, 20 and 3 files, in 16 to 35 s; each job saved its own entry. Each restored the opam switch from "opam-Linux-ocaml-4.14.2-compcert-3.17-v1", its install skipped, and saved its build under "compcert-3.17-TARGET-build-v1". OCaml and opam came from apt, 142 MB, in 14 to 85 s. |
+| S6 | **MATCH.** `compcert`'s notice "61 / 61 compiled, 61 ran"; every other job green, and every notice of the 110 jobs its last run's, word for word, the times aside; `embedded`'s slowest header #133's, `algo/any_all/any_all.h`. |
+
+Six of six. Not predicted, and as they fell: the times, CompCert's build
+at each target in 143 to 211 s and each job in under 8 minutes, and the
+install's package files.
+
+**Closed.** CompCert 3.17 compiles the tests at six more of its targets.
+At 32-bit Arm, AArch64, PowerPC 32, x86 and RISC-V 64 Linux, built and
+run under qemu-user (natively at x86), 61 of 61 compile, and 61 pass at
+four of them; at 32-bit Arm 60 pass, `time_test` reading a clock that
+goes back, since configure's `__REDIRECT` drops the alias by which glibc
+2.39 gives a 64-bit `time_t` its functions. At RISC-V 32, with picolibc's
+headers, 53 of 61 compile to objects: two meet the trap `limits.h`
+records, three picolibc's thread-local `errno`, one its statement
+expressions, and two what picolibc does not have (`pthread.h`,
+`CLOCK_MONOTONIC`). Run 1 measured; the next record pins. The close
+changes nothing but this record.
+
+What it shows:
+
+- **A stand-in taken as far as the run shows what one taken to the
+  preprocessor does not.** Every test preprocessed at 32-bit Arm as ccomp
+  would; only compiled, linked and run after it did `time_test` show the
+  dropped alias, and CompCert's run failed it as predicted.
+- **What a compiler would refuse can be read in its source.** Four of
+  RISC-V 32's eight came from reading CompCert's lexer and parser against
+  picolibc's headers, GCC compiling them; each failed at the line read.
+- **A preprocessor option is part of the ABI.** Configure's `__REDIRECT`
+  at ARM selects the 32-bit time functions on a system whose `time_t` is
+  64 bits: no diagnostic, and a wrong clock.
