@@ -3,12 +3,13 @@ name: "2 · Platforms"
 # 32-bit Arm, big-endian s390x and 32-bit PowerPC under qemu, the
 # embedded compile checks (Cortex-M, RISC-V, AVR), the tests on Cortex-M0+
 # and Cortex-M4 under QEMU, on MSP430X under the GDB simulator, on
-# bare-metal AArch64 (Cortex-A78AE, Cortex-R82) under QEMU, and on Renesas
-# RH850 and RX under GDB's simulators, with toolchains built from Ubuntu's
-# source packages, as is ARC's, for which the headers and tests are
-# compiled; the platform tiers for dsPIC and PIC24's core, with Microchip's
-# XC-DSC, fetched from Microchip; and finite math, refused, with GCC and
-# Clang. Map: .github/workflows/README.md.
+# bare-metal AArch64 (Cortex-A78AE, Cortex-R82) and on Cortex-R5F and
+# Cortex-R52 under QEMU, and on Renesas RH850 and RX under GDB's
+# simulators, with toolchains built from Ubuntu's source packages, as is
+# ARC's, for which the headers and tests are compiled; the platform tiers
+# for dsPIC and PIC24's core, with Microchip's XC-DSC, fetched from
+# Microchip; and finite math, refused, with GCC and Clang. Map:
+# .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -615,6 +616,53 @@ jobs:
           path: |
             aarch64_out/*.json
             aarch64_out/*.build.log
+          if-no-files-found: warn
+          retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # 1k2. Cortex-R5F and Cortex-R52, bare metal, on QEMU's models (VERIFY-113)
+  #
+  #    armhf runs the tests on 32-bit Arm Linux; this job runs them on Arm's
+  #    32-bit real-time cores, with no operating system: Ubuntu's
+  #    arm-none-eabi-gcc with picolibc, each test on qemu-system-arm's model
+  #    of the core, cortex-r5f or cortex-r52, on QEMU's empty machine
+  #    (tools/cortexr/qemu.sh), through semihosting, which carries a test's
+  #    output and exit status. tools/cortexr/cortexr.py builds each core at
+  #    the four build types, after a probe that QEMU carries a program's
+  #    output and exit status, and holds the outcomes against
+  #    tools/cortexr/pins.txt, enforced from VERIFY-113's run 1: the pins
+  #    were measured before it with the packages this job installs.
+  # -------------------------------------------------------------------------
+  cortex-r:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        core: [r5, r52]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install QEMU, and Ubuntu's arm-none-eabi GCC and picolibc
+        # Without the packages apt recommends, newlib among them, and from the
+        # Actions cache first (VERIFY-093); the limit fails a stalled mirror
+        # in 30 minutes.
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-install
+        with:
+          cache-name: cortex-r
+          packages: qemu-system-arm gcc-arm-none-eabi picolibc-arm-none-eabi
+      - name: "The tests on bare-metal Cortex-R on QEMU: ${{ matrix.core }}"
+        timeout-minutes: 30
+        env:
+          CORE: ${{ matrix.core }}
+        run: python3 tools/cortexr/cortexr.py run "$CORE"
+      - name: Upload the builds' logs and summaries
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cortex-r-${{ matrix.core }}
+          path: |
+            cortexr_out/*.json
+            cortexr_out/*.build.log
           if-no-files-found: warn
           retention-days: 90
 

@@ -31,8 +31,9 @@ Clang and CompCert. CI's Windows jobs named `clang` build with MSVC
 (VERIFY-074), so Clang is not run on Windows. On Cortex-M0+ and Cortex-M4
 it runs under QEMU with newlib, where its five checks of `rename` fail
 through QEMU's semihosting, and is not built with picolibc, which has no
-`rename` (`tools/cortexm/pins.txt`), nor on bare-metal AArch64, with
-picolibc too (`tools/aarch64/pins.txt`); on Renesas RH850 it runs under
+`rename` (`tools/cortexm/pins.txt`), nor on bare-metal AArch64 and
+Cortex-R, with picolibc too (`tools/aarch64/pins.txt`,
+`tools/cortexr/pins.txt`); on Renesas RH850 it runs under
 GDB's V850 simulator and passes, `rename` among its checks, each test
 linked there with the `_open` that newlib's V850 port gets wrong
 (`tools/renesas/open.c`); on Renesas RX it runs under GDB's RX

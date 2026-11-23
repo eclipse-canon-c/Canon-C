@@ -925,7 +925,11 @@ For what Canon-C intentionally omits, established C libraries exist:
 > there, and why. On bare-metal AArch64 they are built with Ubuntu's
 > GCC 13.3 and picolibc for Cortex-A78AE and Cortex-R82, and run under
 > QEMU at the four build types (job `aarch64`, VERIFY-099);
-> `tools/aarch64/pins.txt` names those that do not pass. On Renesas
+> `tools/aarch64/pins.txt` names those that do not pass. On Cortex-R5F
+> and Cortex-R52 they are built with Ubuntu's GCC 13.2 and picolibc, and
+> run on QEMU's models of the two cores at the four build types (job
+> `cortex-r`, VERIFY-113); `tools/cortexr/pins.txt` names those that do
+> not pass. On Renesas
 > RH850 and RX they are built with GCC 13.3 and newlib 4.4, themselves
 > built from Ubuntu's source packages, and run under GDB's V850 and RX
 > simulators: RH850 with its FPU and without, the RX600 with its FPU,
@@ -937,9 +941,9 @@ For what Canon-C intentionally omits, established C libraries exist:
 > ARC simulator.
 >
 > **GCC 13.2 at `-O2` and `-Os`**
-> On Cortex-M, GCC 13.2 (Ubuntu 24.04's `arm-none-eabi-gcc`,
-> 13.2.rel1) compiles one check of `option_test` wrong at `-O2` and
-> `-Os`: `option_Point_combine_with` of `Some({3,4})` and `Some({3,4})`,
+> On Cortex-M, and on Cortex-R5F and Cortex-R52 (VERIFY-113), GCC 13.2
+> (Ubuntu 24.04's `arm-none-eabi-gcc`, 13.2.rel1) compiles one check of
+> `option_test` wrong at `-O2` and `-Os`: `option_Point_combine_with` of `Some({3,4})` and `Some({3,4})`,
 > with a function that adds two points, gives `Some({3,4})` where it is
 > `Some({6,8})`. In a short program of that call GCC folds it to the
 > wrong constant. With `-fno-ipa-sra` the test passes, and GCC 15.3

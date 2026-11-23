@@ -1,0 +1,26 @@
+# tools/cortexr/pins.txt -- the tests that do not pass on bare-metal
+# Cortex-R5F and Cortex-R52 on QEMU's models (tools/cortexr/cortexr.py,
+# VERIFY-113). Each line: the test, the cores (all, r5, r52), the build
+# types (all, or a list of Debug, Release, RelWithDebInfo and MinSizeRel),
+# and what the test does there: "not-built"; "fails N", N the lines of its
+# output that begin with FAIL; or "times-out". A test no line names must
+# pass. The lines are measures, taken here with the packages the job
+# installs before its run 1.
+#
+# TEST              CORES  BUILDS  OUTCOME
+
+# util/time.h needs clock_gettime and CLOCK_MONOTONIC, and the test
+# nanosleep: picolibc has neither (the README's Tier 2), as on Cortex-M
+# and bare-metal AArch64.
+time_test           all    all     not-built
+# File I/O (Tier 2) through semihosting: picolibc's has no rename, as on
+# Cortex-M (tools/cortexm/pins.txt) and bare-metal AArch64.
+file_test           all    all     not-built
+impl_defined_test   all    all     not-built
+# GCC 13.2 folds option_Point_combine_with(some({3,4}), some({3,4}),
+# point_add) to Some({3,4}) at -O2 and -Os, where it is Some({6,8}): the
+# wrong code VERIFY-089 found on Cortex-M, at both cores here, gone with
+# -fno-ipa-sra, -fno-ipa-cp, -fno-tree-sra or -fno-early-inlining. GCC
+# 13.3 (Ubuntu's arm-linux-gnueabihf-gcc, for the R5's flags) compiles it
+# right.
+option_test         all    RelWithDebInfo,MinSizeRel  fails 1

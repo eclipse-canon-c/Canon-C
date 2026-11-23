@@ -35,13 +35,14 @@ here for them.
 | Cortex-M0+ (Armv6-M, soft float) | bare metal: newlib; picolibc | GCC 13.2 (Ubuntu's `arm-none-eabi`), with newlib and picolibc; GCC 15.3 (the Arm GNU Toolchain 15.3.Rel2), with its newlib | `cortex-m` (`platforms.yml`, `tools/cortexm/`), under QEMU's micro:bit, whose Cortex-M0 runs Armv6-M code, its memory enlarged; at `-O0`, `-O2`, `-O3` and `-Os`; the tests that do not pass pinned with the reason |
 | Cortex-M4 (Armv7E-M, hard float) | bare metal: newlib; picolibc | the same | `cortex-m`, under QEMU's mps2-an386 |
 | MSP430X, 16-bit `int` | bare metal: newlib 2.4 (TI's) | GCC 9.3.1 (TI's MSP430-GCC-OPENSOURCE 9.3.1.2, Mitto Systems' build) | `msp430` (`platforms.yml`, `tools/msp430/`), under the GDB simulator the toolchain ships; the small memory model (16-bit `size_t`) and the large (20-bit); at `-O0`, `-O2`, `-O3` and `-Os`; the tests below Tier 1 only, which refuses both `size_t`s; the tests that do not pass pinned with the reason (VERIFY-097) |
+| Cortex-R5F (Armv7-R) and Cortex-R52 (Armv8-R AArch32), hard float | bare metal: picolibc 1.8.6 | GCC 13.2 (Ubuntu's `arm-none-eabi`, with picolibc's specs) | `cortex-r` (`platforms.yml`, `tools/cortexr/`), on QEMU 8.2's models of both cores, on its empty machine, the MPU off; the R5F's tests in Supervisor mode, the R52's at EL2, where it starts; at `-O0`, `-O2`, `-O3` and `-Os`; the tests that do not pass pinned with the reason, GCC 13.2's wrong code among them (VERIFY-113) |
 | AArch64, bare metal: Cortex-A78AE (Armv8.2-A) and Cortex-R82 (Armv8-R) | bare metal: picolibc 1.8.6 | GCC 13.3 (Ubuntu's `aarch64-linux-gnu`, with picolibc's specs) | `aarch64` (`platforms.yml`, `tools/aarch64/`), under QEMU 8.2's virt board; QEMU models neither core, so each is compiled for with its `-mcpu` and run on QEMU's `max` CPU, which has the instructions of both, at EL1 with the MMU off; at `-O0`, `-O2`, `-O3` and `-Os`; the tests that do not pass pinned with the reason (VERIFY-099) |
 | Renesas RH850 (V850E3V5), with its FPU and without | bare metal: newlib 4.4 | GCC 13.3.0, built from Ubuntu's source packages (`tools/renesas/build.sh`) | `renesas` (`platforms.yml`, `tools/renesas/`), under GDB 15.1's V850 simulator, built from the same packages; Renesas' RH850 ABI, where an 8-byte object is aligned to 4; at `-O0`, `-O2`, `-O3` and `-Os`; each test linked with the `_open` newlib's V850 port gets wrong (`open.c`); the tests that do not pass pinned with the reason (VERIFY-101) |
 | Renesas RX (RX600), with its FPU, without it, and without it with big-endian data | bare metal: newlib 4.4 | GCC 13.3.0, built from Ubuntu's source packages (`tools/renesas/build.sh`), with `-m64bit-doubles` (GCC's `double` for RX has 32 bits otherwise, which `types.h` refuses) | `renesas`, under GDB 15.1's RX simulator, built from the same packages; plain `char` unsigned, an 8-byte object aligned to 4; at `-O0` (without `-g`, at which GCC 13.3's RX port stops with an internal error), `-O2`, `-O3` and `-Os`; each test linked with the MSP430 job's `tmpfile()` (`tools/msp430/tmpfile.c`), since the simulator has no `lseek`, and the big-endian ones with crt files whose arrays are data; with the FPU, GCC compiles with finite math, and the checks of NaN and infinity fail; without it, linked with the libraries built without it, which GCC's driver does not pick, each binary checked to hold none of its instructions (VERIFY-111); the tests that do not pass pinned with the reason (VERIFY-102) |
 
-On Cortex-M, GCC 13.2 compiles one check of `option_test` wrong at `-O2`
-and `-Os`, and GCC 15.3 compiles it right (the README's bare-metal
-section); Ubuntu's newlib has no C99 printf formats, which the Arm GNU
+On Cortex-M, and on Cortex-R5F and Cortex-R52, GCC 13.2 compiles one
+check of `option_test` wrong at `-O2` and `-Os`, and GCC 15.3 compiles it
+right on Cortex-M (the README's bare-metal section); Ubuntu's newlib has no C99 printf formats, which the Arm GNU
 Toolchain's has, and which the library's own format strings do not use
 since VERIFY-091.
 On RX, GCC compiles with `-ffinite-math-only` wherever it uses the FPU,
@@ -79,7 +80,6 @@ without the FPU link those built without it.
 measured where the list says so:
 
 - Cortex-M7, and Armv8-M (Cortex-M33, Cortex-M55).
-- Cortex-R5 and Cortex-R52.
 - 32-bit Arm, big-endian.
 - TriCore (Infineon AURIX): waiting for a compiler (below).
 - PowerPC e200, big-endian (NXP MPC5xxx): waiting for a compiler (below).

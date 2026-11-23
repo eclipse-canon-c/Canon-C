@@ -819,7 +819,10 @@ pinned with the reason (`tools/msp430/pins.txt`, VERIFY-097). Run under
 QEMU on bare-metal AArch64 (`aarch64`, VERIFY-099): the tests with
 picolibc, compiled for Cortex-A78AE and Cortex-R82 and run on QEMU's
 `max` CPU, each that does not pass pinned with the reason
-(`tools/aarch64/pins.txt`). Run under GDB's V850 and RX simulators
+(`tools/aarch64/pins.txt`). Run on QEMU's models of Cortex-R5F and
+Cortex-R52 (`cortex-r`, VERIFY-113): the tests with picolibc, each that
+does not pass pinned with the reason (`tools/cortexr/pins.txt`). Run under
+GDB's V850 and RX simulators
 (`renesas`, VERIFY-101, VERIFY-102): the tests on Renesas RH850, with
 the FPU and without, and on the RX600, with the FPU, without it, and
 without it with big-endian data, with GCC and newlib built from Ubuntu's
@@ -847,6 +850,7 @@ enforced since VERIFY-108.
 | `cortex-m` | Cortex-M0+ and Cortex-M4 under QEMU: Ubuntu's GCC 13.2 with newlib and picolibc, the Arm GNU Toolchain's GCC 15.3 with newlib; CMake's four build types | the tests on those cores; each that does not pass pinned with the reason |
 | `msp430` | MSP430X under the GDB simulator: TI's GCC 9.3.1 with its newlib; the small and large memory models; CMake's four build types | the tests below Tier 1 at a 16-bit `int`, and 16- and 20-bit `size_t`s; each that does not pass pinned with the reason |
 | `aarch64` | bare-metal AArch64 under QEMU: Ubuntu's GCC 13.3 with picolibc, compiled for Cortex-A78AE and Cortex-R82 and run on QEMU's `max` CPU (QEMU models neither core); CMake's four build types | the tests with no operating system, of the code GCC generates for each core; each that does not pass pinned with the reason |
+| `cortex-r` | bare-metal Cortex-R5F and Cortex-R52 on QEMU 8.2's models of both, on its empty machine: Ubuntu's GCC 13.2 with picolibc, Thumb-2 and the hard-float ABI; CMake's four build types | the tests with no operating system on Arm's 32-bit real-time cores, Armv7-R and Armv8-R AArch32, the R52's at EL2; each that does not pass pinned with the reason (`tools/cortexr/pins.txt`, VERIFY-113) |
 | `renesas` | RH850 and RX under GDB's V850 and RX simulators: GCC 13.3 and newlib 4.4 built from Ubuntu's source packages; RH850 under Renesas' RH850 ABI, with the FPU and without; the RX600 with `-m64bit-doubles`, with the FPU (and so finite math), without it, and without it with big-endian data, those two linked with the libraries built without the FPU (VERIFY-111); CMake's four build types, RX's Debug without `-g` | the tests where an 8-byte object is aligned to 4, with plain `char` signed (RH850) and unsigned (RX), on big-endian data with no operating system (RX); that the binaries without the FPU hold none of its instructions, and their libraries none, where GCC's own hold some; each that does not pass pinned with the reason |
 | `c-standards` | C11, C17 and C23 with GCC 14 and Clang, Debug, sanitizers on | the tests at those standards, where the C11 arms are compiled (`_Alignof(max_align_t)`, `_Static_assert`) |
 | `embedded` | Cortex-M, RV32, RV64 and AVR, bare metal | that the headers and tests compile there; nothing runs |

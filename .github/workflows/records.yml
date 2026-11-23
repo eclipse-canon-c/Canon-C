@@ -9,8 +9,9 @@ name: "8 · Records"
 # (VERIFY-086), the smoke tests' pins checked against the units
 # (VERIFY-088), the Cortex-M pins against the tests (VERIFY-089), the
 # MSP430 pins against the tests (VERIFY-096), the bare-metal AArch64 pins
-# against the tests (VERIFY-099), the Renesas pins against the tests
-# (VERIFY-101) and the workflow-size guard.
+# against the tests (VERIFY-099), the Cortex-R pins against the tests
+# (VERIFY-113), the Renesas pins against the tests (VERIFY-101) and the
+# workflow-size guard.
 # Map: .github/workflows/README.md.
 on:
   push:
@@ -32,6 +33,7 @@ on:
       - 'tools/cortexm/**'
       - 'tools/msp430/**'
       - 'tools/aarch64/**'
+      - 'tools/cortexr/**'
       - 'tools/renesas/**'
   pull_request:
     branches: [ "master" ]
@@ -124,6 +126,12 @@ jobs:
         # test of CMakeLists.txt, and no two for the same test, core and
         # build type.
         run: python3 tools/aarch64/aarch64.py check
+      - name: "The Cortex-R pins name the suite's tests (VERIFY-113)"
+        # tools/cortexr/pins.txt holds the tests that do not pass on
+        # bare-metal Cortex-R5F and Cortex-R52 on QEMU: each line well
+        # formed and naming a test of CMakeLists.txt, and no two for the
+        # same test, core and build type.
+        run: python3 tools/cortexr/cortexr.py check
       - name: "The Renesas pins name the suite's tests (VERIFY-101)"
         # tools/renesas/pins.txt holds the tests that do not pass on the
         # Renesas variants, RH850 and RX (VERIFY-102), under GDB's
