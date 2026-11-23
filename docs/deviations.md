@@ -43817,6 +43817,7 @@ What it shows:
 | **ID**         | VERIFY-113 |
 | **Date**       | 2026-11-23 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-23 — Scored: R1 to R5 MATCH. CLOSED: five of five ("Scored", below). The tests run on bare-metal Cortex-R5F and Cortex-R52 on QEMU's models of the two cores, at the four build types: 58 of 61 at `-O0` and `-O3`, 57 at `-O2` and `-Os`, as pinned; the R52's at EL2. The Status above is the record as committed. |
 | **Baseline**   | 813198b (VERIFY-112's change; its close, 05d1212, a record, is pushed with this): `1` and `3` to `6` #97, `2` #132, `8` #155 and `17` #4, each its last run, at 813198b. |
 | **Scope**      | `tools/cortexr/`: `cortexr.py`, `qemu.sh`, `toolchain.cmake`, `pins.txt` and `README.md`, new. `.github/workflows/platforms.yml`: a job, `cortex-r`, and the workflow's opening comment; `records.yml`: the pins' check, and its path. `docs/architectures.md`: a row in "Tested on", the planned entry for Cortex-R5 and Cortex-R52 removed, and the note on GCC 13.2. The README's bare-metal section (the job, and the note on GCC 13.2), `docs/verification.md` (a row, and what runs where), `docs/implementation-defined.md`, `docs/autosar-classic.md`, the workflow map. |
 | **Category**   | The second and third of AArch32's three, which the author asked for on 2026-11-22: Cortex-R5 and Cortex-R52 on bare metal; run, not only compiled, since QEMU 8.2 models both. |
@@ -43949,3 +43950,44 @@ R1 to R5 scored, and the record closes. With it, AArch32's three are
 done: 32-bit Arm Linux, and Cortex-R5F and Cortex-R52 on bare metal. Then
 item 9, the CompCert matrix; the upstream reports' drafts wait on the
 author.
+
+### Scored (2026-11-23)
+
+The push of 355edc8, cdf6c6e and de230a5 started eight workflows: `1`
+and `3` to `6` #98, `2` #133, `8` #156 and `17` #5, each green at its
+first attempt; the last, `6`, in 79 minutes.
+
+| # | scored |
+|---|--------|
+| R1 | **MATCH.** 1 to 6, 8 and 17 ran, and no other. |
+| R2 | **MATCH.** `cortex-r (r5)` and `cortex-r (r52)` green at their first attempt, their ten notices those measured here, word for word, the minutes aside: the two probes, and the eight legs "as pinned", 58 passed and 3 not built at Debug and Release, and 57 passed, `option_test` failing 1, and 3 not built at RelWithDebInfo and MinSizeRel, at each core; with "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009", "QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.18)" and "picolibc-arm-none-eabi 1.8.6-2". |
+| R3 | **MATCH.** Each job listed 16 package files, 104 MB, and found no cache: "0 from the cache, 16 fetched, 0 left to apt"; each was done in under 3 minutes. `cortex-r (r52)` saved the entry, and `cortex-r (r5)` was told "Unable to reserve cache with key apt-cortex-r-Linux-X64-356d0d1884d8746a, another job may be creating this cache". |
+| R4 | **MATCH.** `8 · Records`' record-coverage ran "The Cortex-R pins name the suite's tests (VERIFY-113)", which printed "cortex-r check: 4 pins, 61 tests in CMakeLists.txt; 0 problem(s)". |
+| R5 | **MATCH.** Every other job green, and every notice of the 108 jobs its last run's, word for word, the times aside; `embedded`'s slowest header was #132's, `algo/any_all/any_all.h`. |
+
+Five of five. Not predicted, and as they fell: the times, and 16 package
+files, 104 MB, for the install.
+
+**Closed.** The tests run on Arm's 32-bit real-time cores with no
+operating system, Cortex-R5F (Armv7-R) and Cortex-R52 (Armv8-R AArch32),
+on QEMU 8.2's models of them, at the four build types. Of 61, 58 pass at
+`-O0` and `-O3` and 57 at `-O2` and `-Os`, at both cores: picolibc's three
+are not built, as on Cortex-M and bare-metal AArch64, and `option_test`
+meets GCC 13.2's wrong code, which VERIFY-089 found on Cortex-M. The
+close changes nothing but this record.
+
+What it shows:
+
+- **QEMU's own model of a core, where it has one.** The bare-metal AArch64
+  job runs on QEMU's `max`, which models neither of its cores; QEMU 8.2
+  models both 32-bit R-profile cores, and its empty machine with the
+  generic loader runs a test on them with no board: the code each core's
+  flags generate, on that core's model, in its modes, under its control
+  registers.
+- **A compiler's wrong code follows the compiler, not the core.** GCC
+  13.2's `option_test` check fails on the R5F and the R52 as on Cortex-M0+
+  and Cortex-M4, and the binary fails alike on four other QEMU CPUs; GCC
+  13.3 compiles it right.
+- **A measure of what a job reads lets it install less.** The headers and
+  links traced showed nothing of newlib's, so the job installs none, and
+  its outcomes were those measured here with newlib present.
