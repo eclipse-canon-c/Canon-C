@@ -44623,3 +44623,106 @@ What it shows:
 - **CompCert reaches cores GCC's tests do not cover.** Cortex-M7, ARMv7-A
   and ARM1176 joined the cores the tests run on, each with its own
   configuration of CompCert.
+
+---
+
+## VERIFY-117: Pre-registration — CompCert on Bare-Metal Arm Held to Its Pins, Each Log's Errors Printed; the Plans of 2026-11-23 Written Down
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-117 |
+| **Date**       | 2026-11-24 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 927742c (VERIFY-116's change; its close, 50acd3d, a record, is pushed with this): `1` and `3` to `6` #101, `2` #136 and `8` #159, each its last run, at 927742c. |
+| **Scope**      | `.github/workflows/analysis.yml`: `compcert-bare` held to its pins, its comments; in `compcert-bare` and `compcert-targets`, a test not built shown by its log's error lines. `docs/architectures.md`: `compcert-bare`'s row and the `<math.h>` note; the plans the author made on 2026-11-23, under "Tested on", "Compiled for" and "Proved at"; PowerPC e200 and TriCore out of "Waiting for a compiler", and its rule on licences. `docs/verification.md`: `compcert-bare`'s row. No library, test or tool file. |
+| **Category**   | Item 9b's first step, held, as VERIFY-116 said; with the author's choice of 2026-11-24 for `compare_test` and `parse_test`, and the plans of 2026-11-23 in the documents. |
+
+### What VERIFY-116's run found
+
+CompCert 3.17 built 55 of the 61 tests at each of its five bare-metal
+Arm configurations, and the 55 passed, as predicted, word for word. Of
+the six not built, `compare_test` stopped at "use of unknown builtin
+'__builtin_inff'", the `INFINITY` and `NAN` picolibc's `math.h` gives
+CompCert, before the `asm` the record named. `parse_test`'s error lay past
+the first 15 lines of its log, all warnings, which are what the job
+prints; the logs' artifact is not readable where the run is scored.
+
+### The author's choices
+
+- **2026-11-24**, for `compare_test` and `parse_test`, "Pin + report to
+  picolibc": both held as not built, and why written down; a report to
+  picolibc, whose `math.h` gives CompCert builtins CompCert does not have,
+  joins the drafts for upstream. No header of the library includes
+  `<math.h>`: the two tests do.
+- **2026-11-23**, the plans, "add it to list", each to its document:
+  SPARC LEON first in item 11, the aerospace cores, and Cortex-M7 with GCC
+  in `cortex-m`; TriCore with the community port of GCC, in place of
+  VERIFY-105's choice, a vendor's compiler joining it only with a licence
+  that does not expire ("i am scared of trial usage"); PowerPC e200 with
+  NXP's GCC, compiled only; the targets compiled only, run (RISC-V bare
+  metal, AVR, ARC); proofs by data model, a 16-bit model first, then every
+  unit at one ILP32 model.
+
+### What changes
+
+- **`compcert-bare`**: each configuration held to its pin, the notice
+  VERIFY-116's run measured, as `compcert-targets` is: "; not the pin"
+  fails the job, which `continue-on-error` keeps from the workflow's
+  result. The pins are unchanged; the matrix's comment gives each of the
+  six its reason as the run found it.
+- **Both jobs' listings**: of each test not built, the lines of its log
+  that name an error (`grep -m 12 -E 'error|undefined reference'`), or
+  its first 15 if none does; read into a variable, not piped, so that
+  under pipefail a grep that finds nothing does not fail the step. The
+  notices do not change.
+- **`docs/architectures.md`**: `compcert-bare`'s row (55 of 61, held, and
+  why not the six); the note on CompCert at ARM gains `<math.h>`:
+  picolibc's for ARM does not compile under CompCert, and no header of
+  the library includes it. "Tested on", planned: SPARC LEON3 and LEON4
+  first, then MIPS and Xtensa; Cortex-M7 with GCC in `cortex-m`; TriCore
+  with the community GCC on QEMU; the targets compiled only, run;
+  WebAssembly. "Compiled for", planned: PowerPC e200 with VLE, with NXP's
+  GCC; Cortex-M7 and TriCore move to "Tested on". "Proved at", planned:
+  proofs by data model. "Waiting for a compiler": PowerPC e200 and TriCore
+  leave the table, a paragraph says why, and the rule gains that a
+  licence must not expire. Sources: the answer on NXP's forum, the VLE
+  patches repackaged. `docs/verification.md`: `compcert-bare`'s row.
+
+### Measured here
+
+- **The step**, extracted, run under bash `-eo pipefail` with the ccomp
+  that is GCC with ccomp's preprocessing (VERIFY-116's), at
+  `armv7r-eabihf` with the pin: "57 / 61 built, 57 ran; not built:
+  lifetime_token_test impl_defined_test file_test time_test; not the
+  pin", each of the four shown by its error lines ("error: unknown type
+  name 'pthread_barrier_t'"; "undefined reference to `rename'", twice and
+  once; "'CLOCK_MONOTONIC' undeclared"), then "FAIL: compcert
+  armv7r-eabihf is pinned to: ...", exit 1. GCC here finds a `pthread.h`
+  in newlib's headers, which this machine has and the runner does not.
+  shellcheck finds nothing in either job's step.
+- **What CompCert gives `parse_test`**, read: picolibc's ARM
+  `machine/math.h` defines `sqrt` with `__asm__ volatile ("vsqrt.f64
+  %P0, %P1" : "=w" (result) : "w" (x))`, `extern` and so kept by
+  CompCert's clean-up; its extended `asm` reports "unsupported feature:
+  asm result of kind '%s'" for an output neither `r` nor `m`, an error.
+  `parse_test` holds no `__builtin_` CompCert lacks.
+- `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| W1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| W2 | **The five `compcert (CONFIG)` jobs green**, each notice "55 / 61 built, 55 ran; not built: lifetime_token_test compare_test impl_defined_test file_test parse_test time_test; as pinned", each from its caches: CompCert from "compcert-3.17-bare-CONFIG-build-v1", the steps that build it skipped, and "16 package file(s): 16 from the cache, 0 fetched, 0 left to apt". | a failure, another word, a build, or a file fetched | H–M: a package Ubuntu updates since would be fetched |
+| W3 | **Each test not built shown by its error**, at each of the five: `lifetime_token_test` "pthread.h: No such file or directory"; `compare_test` "use of unknown builtin '__builtin_inff'"; `impl_defined_test` and `file_test` "undefined reference to `rename'"; `time_test` an undeclared `CLOCK_MONOTONIC`; `parse_test` "unsupported feature: asm result of kind", at picolibc's `machine/math.h`. | another error for any, or none shown | M: `parse_test`'s by reading |
+| W4 | **`compcert-targets` unchanged but for its listing**: every notice as at #101, "as pinned"; at `rv32-linux`, the six shown by their errors, `compare_test` "syntax error after '(' and before '{'", `header_combination_test`, `impl_defined_test` and `parse_test` "syntax error after 'extern' and before '__thread'", `lifetime_token_test` no `pthread.h`, `time_test` `CLOCK_MONOTONIC`. | another notice, or another error | H |
+| W5 | **Nothing else changes**: every other job green, and every notice the project prints, as its job's log prints it, its last run's, word for word, the times, `embedded`'s slowest header's name and GitHub's own notices aside: 1 and 3 to 6 #101's, 2's #136's, 8 #159's. | another notice, or a failure | H |
+
+**Not predicted**: the times.
+
+### What follows
+
+W1 to W5 scored, and the record closes; with it, item 9b's first step.
+Then item 19, the one-page status matrix, as the author placed it; then
+item 9b's next, `ppc-eabi`, and the drafts for upstream, picolibc's among
+them.
