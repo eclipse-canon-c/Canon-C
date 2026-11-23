@@ -2107,12 +2107,19 @@ jobs:
           # The last two -I directories are the AUTOSAR adapter's and its
           # test's stand-in AUTOSAR headers (VERIFY-075); no other test
           # includes from them.
+          #
+          # core/primitives is on the quote path only (-iquote, VERIFY-115):
+          # the bare primitives are included with quotes, and with -I its
+          # limits.h would stand for the system's <limits.h>, which
+          # picolibc's <stdint.h> includes where __GNUC__ is undefined, as
+          # under ccomp (the trap core/primitives/limits.h records). With
+          # glibc the tests' preprocessed code is the same either way.
           CCOMP_FLAGS=(
             -fall
             -DCANON_NO_GNU_EXTENSIONS
             -DCANON_CHECKED_FORCE_FALLBACK
             -DCANON_BITS_FORCE_FALLBACK
-            -I core/primitives -I core -I semantics -I .
+            -iquote core/primitives -I core -I semantics -I .
             -I integrations/autosar -I test/integrations/autosar/stubs
           )
           # The include set is deliberately NARROW. Tests reference library
@@ -2221,9 +2228,16 @@ jobs:
   #   picolibc's headers, its GCC (riscv64-unknown-elf-gcc -march=rv32gc)
   #   standing in for a riscv32 toolchain, and no runtime library.
   #
-  #   Run 1 measures (VERIFY-114, as the author chose on 2026-11-23): the
-  #   outcomes are reported, not held to pins, and the step exits 0 whatever
-  #   they are. A failed fetch, configure or build fails the job.
+  #   Each target is held to its pin (VERIFY-115): the notice VERIFY-114's
+  #   run measured, with what the author chose on 2026-11-23 from it. At
+  #   arm-linux, -U__REDIRECT -U__REDIRECT_NTH: configure defines both, at
+  #   ARM, without the alias by which glibc gives a 64-bit time_t its
+  #   functions, and Ubuntu 24.04's GCC for armhf defines _TIME_BITS=64, so
+  #   time_test called the 32-bit clock_gettime and read a clock that went
+  #   back. core/primitives on the quote path, as in the compcert job. An
+  #   outcome other than the pin fails the job, as a failed fetch,
+  #   configure or build does; continue-on-error keeps it from the
+  #   workflow's result.
   # -------------------------------------------------------------------------
   compcert-targets:
     name: compcert (${{ matrix.target }})
@@ -2234,30 +2248,50 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # options: ccomp's, after the compcert job's flags. pin: the
+          # notice the target is held to (VERIFY-115).
           - target: arm-linux
             packages: gcc-arm-linux-gnueabihf libc6-dev-armhf-cross qemu-user
             toolprefix: arm-linux-gnueabihf-
             emulator: qemu-arm -L /usr/arm-linux-gnueabihf
+            options: -U__REDIRECT -U__REDIRECT_NTH
+            pin: "61 / 61 compiled, 61 ran"
           - target: aarch64-linux
             packages: gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user
             toolprefix: aarch64-linux-gnu-
             emulator: qemu-aarch64 -L /usr/aarch64-linux-gnu
+            options: ""
+            pin: "61 / 61 compiled, 61 ran"
           - target: ppc-linux
             packages: gcc-powerpc-linux-gnu libc6-dev-powerpc-cross qemu-user
             toolprefix: powerpc-linux-gnu-
             emulator: qemu-ppc -L /usr/powerpc-linux-gnu
+            options: ""
+            pin: "61 / 61 compiled, 61 ran"
           - target: x86_32-linux
             packages: gcc-multilib
             toolprefix: ""
             emulator: ""
+            options: ""
+            pin: "61 / 61 compiled, 61 ran"
           - target: rv64-linux
             packages: gcc-riscv64-linux-gnu libc6-dev-riscv64-cross qemu-user
             toolprefix: riscv64-linux-gnu-
             emulator: qemu-riscv64 -L /usr/riscv64-linux-gnu
+            options: ""
+            pin: "61 / 61 compiled, 61 ran"
+          # rv32-linux: not lifetime_token_test and time_test, for what
+          # picolibc does not have (pthread.h; CLOCK_MONOTONIC, without
+          # _POSIX_TIMERS); not header_combination_test, impl_defined_test
+          # and parse_test, whose sys/errno.h declares a thread-local errno
+          # (__thread), nor compare_test, whose RISC-V machine/math.h holds
+          # statement expressions: CompCert's C has neither.
           - target: rv32-linux
             packages: gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
             toolprefix: ""       # the build step writes riscv32-gcc and riscv32-ar
             emulator: ""         # compiled only
+            options: ""
+            pin: "55 / 61 compiled to objects; nothing linked or run; not compiled: lifetime_token_test compare_test header_combination_test impl_defined_test parse_test time_test"
     steps:
       - uses: actions/checkout@v6
 
@@ -2345,21 +2379,27 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           EMULATOR: ${{ matrix.emulator }}
+          OPTIONS: ${{ matrix.options }}
+          PIN: ${{ matrix.pin }}
         run: |
           ccomp="$HOME/compcert-$TARGET/bin/ccomp"
           "$ccomp" -version
           if ! "$ccomp" -version | grep -q "version 3.17"; then
             echo "FAIL: ccomp is not the pinned 3.17"; exit 1
           fi
-          # The compcert job's flags, and its reasons.
+          # The compcert job's flags, and its reasons; then the target's
+          # options. ccomp passes -D and -U to the preprocessor after
+          # compcert.ini's, so -U__REDIRECT undoes configure's -D.
           CCOMP_FLAGS=(
             -fall
             -DCANON_NO_GNU_EXTENSIONS
             -DCANON_CHECKED_FORCE_FALLBACK
             -DCANON_BITS_FORCE_FALLBACK
-            -I core/primitives -I core -I semantics -I .
+            -iquote core/primitives -I core -I semantics -I .
             -I integrations/autosar -I test/integrations/autosar/stubs
           )
+          read -r -a opts <<< "$OPTIONS"
+          CCOMP_FLAGS+=("${opts[@]}")
           read -r -a run <<< "$EMULATOR"
           mkdir -p ccomp-out
           total=0; compiled=0; ran=0; failed_compile=(); failed_run=()
@@ -2396,8 +2436,9 @@ jobs:
           fi
           [ ${#failed_compile[@]} -gt 0 ] && line="$line; not compiled: ${failed_compile[*]}"
           [ ${#failed_run[@]} -gt 0 ] && line="$line; did not run: ${failed_run[*]}"
-          echo "CompCert at $TARGET (INFORMATIONAL): $line"
-          echo "::notice title=compcert $TARGET::$line"   # VERIFY-050
+          if [ "$line" = "$PIN" ]; then held="as pinned"; else held="not the pin"; fi
+          echo "CompCert at $TARGET (INFORMATIONAL): $line; $held"
+          echo "::notice title=compcert $TARGET::$line; $held"   # VERIFY-050
           # head and tail read the file, not a pipe: under pipefail, sed
           # stopped by head's early exit would fail the step.
           for n in "${failed_compile[@]}"; do
@@ -2406,8 +2447,11 @@ jobs:
           for n in "${failed_run[@]}"; do
             echo "--- $n: did not run ---"; tail -15 "ccomp-out/$n.run.log" | sed 's/^/    /'
           done
-          # Run 1 measures (VERIFY-114): reported, not held to pins.
-          exit 0
+          # Held to the target's pin (VERIFY-115).
+          if [ "$held" != "as pinned" ]; then
+            echo "FAIL: compcert $TARGET is pinned to: $PIN"
+            exit 1
+          fi
 
       - name: Upload the target's CompCert logs
         if: always()
