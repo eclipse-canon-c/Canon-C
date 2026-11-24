@@ -2790,12 +2790,14 @@ jobs:
   #   (tools/renesas/renesas.py link ppc: -msim, tmpfile.c's tmpfile(),
   #   psim_start.S's start file, the linker's script with each section of
   #   data ending on a word), and run under psim. newlib's errno is a
-  #   function, so nothing of canon_errno's is needed here.
+  #   function, so nothing of canon_errno's is needed here; its
+  #   <sys/cdefs.h> defines __func__ as NULL for ccomp, which a header
+  #   given with -include undoes (VERIFY-120).
   #
-  #   Run 1 measures (VERIFY-119): the notice says what was built and ran,
-  #   and whether that is the pin, VERIFY-119's prediction, which is not
-  #   held yet. A failed fetch, configure or build fails the job;
-  #   continue-on-error keeps it from the workflow's result.
+  #   The notice says what was built and ran, and whether that is the
+  #   pin, which is held since VERIFY-120: another outcome fails the job,
+  #   as does a failed fetch, configure or build; continue-on-error keeps
+  #   it from the workflow's result.
   #   The job reads tools/renesas/ and tools/msp430/tmpfile.c, which this
   #   workflow's paths-ignore skips: a push of those alone runs the powerpc
   #   job, not this one.
@@ -2901,17 +2903,16 @@ jobs:
       - name: Build and run the test suite with ccomp
         shell: bash
         env:
-          # Run 1's outcome as VERIFY-119 predicts it, from GCC in ccomp's
-          # place: not lifetime_token_test (pthread_barrier_t, which newlib
-          # gives only with _POSIX_BARRIERS) and time_test (CLOCK_MONOTONIC,
-          # only with _POSIX_TIMERS); not impl_defined_test and file_test,
-          # whose rename() newlib builds on link, which psim's system calls
-          # do not have; contract_test and diag_test failing, newlib's
-          # sys/cdefs.h defining __func__ as NULL where __GNUC__ is not
-          # defined, as CompCert's preprocessing leaves it; stringbuf_test
-          # failing as at the powerpc job, its %ls on big-endian data. Not
-          # yet held: the notice says whether the run is it.
-          PIN: "57 / 61 built, 54 ran; not built: lifetime_token_test impl_defined_test file_test time_test; did not run: contract_test stringbuf_test diag_test"
+          # Held since VERIFY-120: not lifetime_token_test
+          # (pthread_barrier_t, which newlib gives only with
+          # _POSIX_BARRIERS) and time_test (CLOCK_MONOTONIC, only with
+          # _POSIX_TIMERS); not impl_defined_test and file_test, whose
+          # rename() newlib builds on link, which psim's system calls do
+          # not have; stringbuf_test failing as at the powerpc job, its %ls
+          # on big-endian data. VERIFY-119's run 1 gave this with
+          # contract_test and diag_test failing too, which canon_func.h
+          # (below) corrects.
+          PIN: "57 / 61 built, 56 ran; not built: lifetime_token_test impl_defined_test file_test time_test; did not run: stringbuf_test"
         run: |
           export PATH="$HOME/gcc-toolchain/$TARGET/bin:$PATH"
           ccomp="$HOME/compcert-ppc-eabi/bin/ccomp"
@@ -2934,7 +2935,16 @@ jobs:
           done <<< "$gcc_link"
           LINK+=(-lm)
           echo "Linked with: ${LINK[*]}"
-          # The compcert job's flags, and its reasons.
+          mkdir -p ccomp-out
+          # newlib's <sys/cdefs.h> defines __func__ as NULL where __GNUC__
+          # is not defined (its lines 410 and 411), as CompCert's
+          # preprocessing leaves it, so that contract.h and diag.h are
+          # given a null name (VERIFY-119). Included first, through
+          # -include, then undefined: its later inclusions change nothing,
+          # its guard set, and ccomp's own __func__, C99's, names the
+          # function (VERIFY-120, the author's choice).
+          printf '#include <sys/cdefs.h>\n#undef __func__\n' > ccomp-out/canon_func.h
+          # The compcert job's flags, and its reasons; then canon_func.h.
           CCOMP_FLAGS=(
             -fall
             -DCANON_NO_GNU_EXTENSIONS
@@ -2942,8 +2952,8 @@ jobs:
             -DCANON_BITS_FORCE_FALLBACK
             -iquote core/primitives -I core -I semantics -I .
             -I integrations/autosar -I test/integrations/autosar/stubs
+            -include "$PWD/ccomp-out/canon_func.h"
           )
-          mkdir -p ccomp-out
           total=0; built=0; ran=0; failed_build=(); failed_run=()
           while IFS= read -r t; do
             total=$((total + 1))
@@ -2980,8 +2990,11 @@ jobs:
           for n in "${failed_run[@]}"; do
             echo "--- $n: did not run ---"; tail -15 "ccomp-out/$n.run.log" | sed 's/^/    /'
           done
-          # Run 1 measures (VERIFY-119): the pin is not held yet, and a run
-          # other than it fails nothing.
+          # Held to the pin (VERIFY-120).
+          if [ "$held" != "as pinned" ]; then
+            echo "FAIL: compcert ppc-eabi is pinned to: $PIN"
+            exit 1
+          fi
 
       - name: Upload CompCert's logs at ppc-eabi
         if: always()
