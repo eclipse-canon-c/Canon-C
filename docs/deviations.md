@@ -45555,3 +45555,67 @@ What it shows:
   faults, glibc taking the build machine's `g++` and `MAKEINFO=true`
   overriding glibc's word for no makeinfo, showed in the builds here; the
   first run built it five times without one.
+
+---
+
+## VERIFY-122: Pre-registration — CompCert at `armeb-linux` Held to Its Pin
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-122 |
+| **Date**       | 2026-11-25 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | f109c1e (VERIFY-121's change; its close, a record, is pushed with this): `1` and `3` to `6` #105, `2` #140 and `8` #164, at f109c1e. |
+| **Scope**      | `.github/workflows/analysis.yml`'s `compcert-armeb`: its pin, held, and its comments. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `tools/armeb/README.md`. No library or test file; of `tools/`, a README alone. |
+| **Category**   | VERIFY-121's "What follows": the pin held, as VERIFY-117 held `compcert-bare`'s and VERIFY-120 `compcert-ppc`'s. |
+
+### What is missing
+
+`compcert (armeb-linux)` printed its pin at run 1, "61 / 61 compiled, 61
+ran; as pinned" (VERIFY-121, A3), but a run other than it fails nothing:
+the job measures, as `compcert-targets`, `compcert-bare` and
+`compcert-ppc` did before their pins were held (VERIFY-115, VERIFY-117,
+VERIFY-120).
+
+### What changes
+
+- **`compcert-armeb`'s step**, after its listing: where the run is not
+  the pin, "FAIL: compcert armeb-linux is pinned to: PIN" and exit 1,
+  `compcert-ppc`'s lines word for word but the name. The pin's comment
+  names its source, VERIFY-121's prediction and run 1's outcome; the
+  job's comment says "held since VERIFY-122", in `compcert-ppc`'s words.
+  `continue-on-error` and the `if:` guard are as they were: a run off the
+  pin fails the job, not the workflow.
+- **The documents**: `compcert-armeb`'s rows in `docs/architectures.md`
+  and `docs/verification.md`, "61 of 61 run, held to that (VERIFY-122)",
+  as `compcert-ppc`'s say it; in `docs/status.md`, its row "run, 61 of
+  61" and the line that dates the page; in `tools/armeb/README.md`, the
+  paragraph on CompCert.
+
+### Measured here
+
+- The step, extracted from `analysis.yml` and run from a copy of the
+  tree, with the toolchain VERIFY-121 built here and a ccomp that is GCC
+  with ccomp's preprocessing: "61 / 61 compiled, 61 ran; as pinned", exit
+  0; given another pin, "not the pin", then "FAIL: compcert armeb-linux
+  is pinned to: 60 / 61 compiled, 60 ran", exit 1.
+- ShellCheck on the step: nothing. `tools/which_workflows.py`: 1 to 6
+  and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| B1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| B2 | **`compcert (armeb-linux)` holds**: green, its notice "61 / 61 compiled, 61 ran; as pinned". | a failure, or another notice | H: CompCert, the toolchain and the tests are run 1's |
+| B3 | **The caches serve**: the four `armeb` legs and `compcert (armeb-linux)` restore the toolchain from the entry #140 saved, and `compcert (armeb-linux)` its CompCert from #105's, by their keys; no build step runs. | a build step run, or a key missed | H: no input of either key changed |
+| B4 | **Nothing else changes**: the other jobs green, every notice as their last runs printed it, word for word, the times aside: 1 and 3 to 6 #105's, 2 #140's, 8 #164's. | another notice, or a failure | H |
+
+**Not predicted**: the times.
+
+### What follows
+
+B1 to B4 scored, and the record closes. Then item 9b's fourth step,
+macOS: CompCert at `aarch64-macos` on GitHub's macOS runner, and at
+`x86_64-macos` where an Intel runner or Rosetta allows, as
+`docs/architectures.md` plans it, the author's choices asked first.
