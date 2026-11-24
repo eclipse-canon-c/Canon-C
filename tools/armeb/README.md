@@ -74,7 +74,8 @@ says how many binaries hold the atomic inline.
 its `armeb-linux` configuration (Armv7-A, big-endian, the hard-float
 ABI) with this toolchain, which preprocesses, assembles and links for
 it, compiles each test with ccomp, and runs it under `qemu-armeb` in the
-same sysroot; informational, as every CompCert job
+same sysroot: every test passes, and the job is held to that
+(VERIFY-121, VERIFY-122); informational, as every CompCert job
 (`docs/compcert-licensing.md`).
 
 **Here.** On Ubuntu 24.04, with the job's packages installed (the four

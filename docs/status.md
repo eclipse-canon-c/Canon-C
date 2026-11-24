@@ -9,7 +9,7 @@ and those files differ, they are right and this page is wrong; please say
 so in an issue. A record that changes a fact stated here updates this
 page with it.
 
-*Written for VERIFY-118, 2026-11-24; brought up to date by VERIFY-119 to VERIFY-121.*
+*Written for VERIFY-118, 2026-11-24; brought up to date by VERIFY-119 to VERIFY-122.*
 
 ## The words used
 
@@ -58,7 +58,7 @@ With CompCert 3.17, the formally verified compiler (informational):
 | bare-metal Arm: Cortex-A9 (both floating-point ABIs), Cortex-R5F, Cortex-M7, ARM1176, with picolibc | run, 55 of 61 at each, pinned: the six use what picolibc on bare metal does not have, or its `<math.h>`, which CompCert cannot compile and which no header of the library includes |
 | RISC-V 32, picolibc's headers | build, 55 of 61, pinned |
 | bare-metal PowerPC 32 (`ppc-eabi`), with newlib | run, 56 of 61, pinned: the five use what newlib on bare metal or GDB's simulator does not have, or print `%ls` on big-endian data |
-| big-endian 32-bit Arm Linux (`armeb-linux`), with glibc | run; its first run measures, against a prediction of 61 of 61 (VERIFY-121) |
+| big-endian 32-bit Arm Linux (`armeb-linux`), with glibc | run, 61 of 61 |
 
 In the GCC jobs on bare metal, each test runs at four levels of
 optimization (`-O0`, `-O2`, `-O3`, `-Os`). Each pinned exception, and

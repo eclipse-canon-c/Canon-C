@@ -3026,10 +3026,10 @@ jobs:
   #   Ubuntu's for armhf does: time_t has 32 bits, and configure's
   #   -D__REDIRECT is left as it is.
   #
-  #   Run 1 measures (VERIFY-121): the notice says what was compiled and
-  #   ran, and whether that is the pin, VERIFY-121's prediction, which is
-  #   not held yet. A failed fetch, configure or build fails the job;
-  #   continue-on-error keeps it from the workflow's result.
+  #   The notice says what was compiled and ran, and whether that is the
+  #   pin, which is held since VERIFY-122: another outcome fails the job,
+  #   as does a failed fetch, configure or build; continue-on-error keeps
+  #   it from the workflow's result.
   #   The job reads tools/armeb/build.sh, which this workflow's paths-ignore
   #   skips: a push of it alone runs the armeb job, not this one.
   # -------------------------------------------------------------------------
@@ -3134,9 +3134,8 @@ jobs:
       - name: Compile and run the test suite with ccomp
         shell: bash
         env:
-          # Run 1's outcome as VERIFY-121 predicts it, from GCC in ccomp's
-          # place: every test, as at arm-linux. Not yet held: the notice
-          # says whether the run is it.
+          # Every test, as at arm-linux: VERIFY-121's prediction, from GCC
+          # in ccomp's place, and its run 1's outcome; held since VERIFY-122.
           PIN: "61 / 61 compiled, 61 ran"
         run: |
           export PATH="$HOME/gcc-toolchain/$TARGET/bin:$PATH"
@@ -3194,8 +3193,11 @@ jobs:
           for n in "${failed_run[@]}"; do
             echo "--- $n: did not run ---"; tail -15 "ccomp-out/$n.run.log" | sed 's/^/    /'
           done
-          # Run 1 measures (VERIFY-121): the pin is not held yet, and a run
-          # other than it fails nothing.
+          # Held to the pin (VERIFY-122).
+          if [ "$held" != "as pinned" ]; then
+            echo "FAIL: compcert armeb-linux is pinned to: $PIN"
+            exit 1
+          fi
 
       - name: Upload CompCert's logs at armeb-linux
         if: always()
