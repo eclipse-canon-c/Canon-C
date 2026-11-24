@@ -45272,3 +45272,246 @@ What it shows:
   a null `__func__`. Undone in one line, given to ccomp before anything
   else, the two tests that failed on it pass, and the report to newlib
   (item 9c, the sixth) carries the fix its own comment asked for.
+
+---
+
+## VERIFY-121: Pre-registration — Big-Endian 32-Bit Arm Linux: GCC's Tests under qemu-user, with a Toolchain Built from Ubuntu's Source Packages, and CompCert's `armeb-linux`, Run 1 Measuring
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-121 |
+| **Date**       | 2026-11-24 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | baf01cf (VERIFY-120's change; its close, a record, is pushed with this): `1` and `3` to `6` #104, `2` #139 and `8` #163, at baf01cf; `17` #8 at 340a5d8. |
+| **Scope**      | `tools/armeb/` (new): `build.sh`, `README.md`. `.github/workflows/platforms.yml`: a job, `armeb`, and its header. `.github/workflows/analysis.yml`: a job, `compcert-armeb`, and its header. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `docs/compcert-licensing.md`, the workflow map, the README's note on atomics. No library or test file. |
+| **Category**   | Item 9b's third step, as the author chose on 2026-11-24: big-endian Arm Linux, with GCC and with CompCert, glibc its C library, one toolchain and one cache entry for both. |
+
+### What is missing
+
+32-bit Arm is tested at Linux with its data little-endian only
+(`armhf`, VERIFY-112), and big-endian data at 32 bits on PowerPC
+(`big-endian-32`, `powerpc`) and RX (`rx-be`) only. Armv7-A runs
+big-endian too, as BE8: its data big-endian, its instructions
+little-endian. CompCert's `armeb-*` configurations, next among its other
+targets in the order VERIFY-116 set, wait for a toolchain: Ubuntu
+packages no compiler and no C library for big-endian Arm.
+
+### The author's choice (2026-11-24)
+
+"GCC and CompCert, glibc": GCC's own runs of the tests on big-endian Arm
+Linux at `armhf`'s four legs, held to their outcome, and CompCert's
+`armeb-linux`, its run 1 measuring, as for VERIFY-114, VERIFY-116 and
+VERIFY-119; one toolchain, built from Ubuntu's source packages with glibc
+as its C library, and one cache entry, for both. Nothing of CompCert is
+built here.
+
+### What changes
+
+- **The toolchain**: `tools/armeb/build.sh`, new, builds
+  `armeb-linux-gnueabihf` from the release tarballs of three of Ubuntu's
+  source packages, `binutils-source` (binutils 2.42), `gcc-13-source`
+  (GCC 13.3.0) and `glibc-source` (glibc 2.39), with the kernel's headers
+  of `linux-libc-dev-armhf-cross` (Linux 6.8), which serve either byte
+  order and are copied as they are. In the usual order: binutils; GCC's
+  first stage, C with no C library; the headers; glibc, compiled by that
+  GCC; GCC's second stage, against glibc, its libgcc shared too. GCC's
+  defaults are Ubuntu's armhf's: Armv7-A, Thumb-2, VFPv3-D16, the
+  hard-float ABI. glibc is configured with the target's `g++` named as its
+  C++ compiler, which there is none of, so that it builds no C++, and
+  with `MAKEINFO=:`, so that it neither builds nor installs its manual
+  (below). Ubuntu's own patches are not applied, as at
+  `tools/renesas/build.sh`.
+  Kept in the Actions cache under `gcc-armeb-linux-gnueabihf-VERSIONS-HASH`,
+  at `~/gcc-toolchain/armeb-linux-gnueabihf`; both new jobs restore that
+  entry, and a job that misses it builds it.
+- **`armeb`**, in `platforms.yml`, after `armhf`, at `armhf`'s legs:
+  Release and Debug, each with `CANON_LIFETIME` off and `debug`. The
+  packages through `apt-install` (their own entry, `armeb`), the
+  toolchain from the cache or built (120 minutes at most), CMake with its
+  gcc and `qemu-armeb -L SYSROOT` as the emulator, and `armhf`'s checks,
+  with the byte order: `file` says "ELF 32-bit MSB ... ARM, EABI5";
+  `readelf -h`'s flags hold `BE8`; `readelf -A` gives Armv7-A, the
+  application profile and VFP's registers for arguments; `main` is Thumb
+  code; each test binary needs `libc.so.6`, none libatomic, and
+  `lifetime_test` holds LDREXD. A notice per leg, "armeb BUILD LIFETIME:
+  Armv7-A, Thumb-2, hard float, big-endian (BE8); N of M test binaries
+  linked with libatomic, K with the 64-bit atomic inline (LDREXD)"; then
+  `ctest --no-tests=error`. Enforced from run 1, as `armhf`: every test
+  passes, measured below. The header of `platforms.yml` names it.
+- **`compcert-armeb`** ("compcert (armeb-linux)"), in `analysis.yml`,
+  after `compcert-ppc`, under the `compcert` job's licensing note, its
+  `if:` guard and its `continue-on-error`: CompCert 3.17 built for
+  `armeb-linux` (Armv7-A, big-endian, the hard-float ABI, Linux) as
+  `compcert-ppc` builds it, opam's archive and digest, configure given the
+  toolchain's `armeb-linux-gnueabihf-` as `-toolprefix`, its cache entry
+  `compcert-3.17-armeb-linux-VERSIONS-HASH-build-v1`. Every `*_test.c`
+  compiled by ccomp with `compcert`'s flags, as `compcert-targets`
+  compiles them, each binary checked for `BE8`, and run under
+  `qemu-armeb` in the toolchain's sysroot, 600 s at most. A notice,
+  `compcert armeb-linux`: "N / M compiled, K ran", the tests not compiled
+  or not run named, and any binary not BE8, then "; as pinned" or "; not
+  the pin", against the pin predicted below. **Run 1 measures**: the step
+  exits 0 either way; a failed fetch, configure or build fails the job.
+  No `-U__REDIRECT` (VERIFY-115's at `arm-linux`): this GCC does not
+  define `_TIME_BITS=64` (below). The job reads `tools/armeb/build.sh`,
+  which `analysis.yml`'s paths-ignore skips: a push of it alone starts
+  `armeb`, not `compcert-armeb` (item 14's kind).
+- **The header of `analysis.yml`**, "CompCert at x86-64 and at six other
+  targets", has been short since VERIFY-116: "at thirteen other
+  configurations, at Linux and on bare metal" (`compcert-targets`' six,
+  `compcert-bare`'s five, `ppc-eabi` and `armeb-linux`).
+- **The documents**: `docs/architectures.md`, a row for each job in
+  "Tested on", a sentence on `_TIME_BITS` at `armeb-linux`, the planned
+  entry for CompCert's other targets without `armeb-linux`, and the
+  planned compile check for "32-bit Arm, big-endian" gone, the tests
+  running there now; `docs/verification.md`, `armeb` among the platforms
+  tested and proved for `core/`, and a row for `compcert-armeb`;
+  `docs/status.md`, a row in each table; `docs/compcert-licensing.md`,
+  the forks' paragraph naming the fifth job; the workflow map; the
+  README's note on atomics; `tools/armeb/README.md`, new.
+
+### Read, in the sources
+
+- **GCC 13.3** (`gcc/config.gcc`): a target `arm*b-*-linux*` is
+  big-endian by default (`TARGET_BIG_ENDIAN_DEFAULT=1`), and one whose
+  name ends in `hf` takes the hard-float ABI; `bpabi.h`'s `BE8_LINK_SPEC`
+  calls `arm_be8_option` (`common/config/arm/arm-common.cc`), which gives
+  the linker `--be8` for a big-endian link at an architecture that has
+  BE8, Armv6 and later; `linux-eabi.h` names the dynamic linker
+  `/lib/ld-linux-armhf.so.3` for the hard-float ABI, whatever the byte
+  order.
+- **The kernel's headers** (`linux-libc-dev-armhf-cross`, 958 of them):
+  those for 32-bit Arm that differ by byte order test it as they are
+  compiled, `asm/byteorder.h` and `asm/stat.h` by `__ARMEB__`, the others
+  by `__BYTE_ORDER`, so one set serves both.
+- **glibc 2.39**: on 32-bit Arm, `time_t` and `off_t` have 64 bits only
+  where `_TIME_BITS=64` and `_FILE_OFFSET_BITS=64` are defined; Ubuntu
+  24.04's GCC for armhf defines both in its specs (`-dumpspecs`), with
+  `_FORTIFY_SOURCE=3` where it optimizes, and GCC as released defines
+  none. Its configure takes a C++ compiler "only for testing"
+  (`configure.ac`), yet its `make` builds `support/`'s programs,
+  `links-dso-program` among them, from C++ with `-lstdc++` where `CXX` is
+  set, and from C where it is empty (`support/Makefile`); configure empties
+  it where the compiler it has cannot link. Its manual is built and
+  installed only where `MAKEINFO` is not `:` (`manual/Makefile`). Its
+  static programs link `elf/static-stubs.o` and ARM's `libgcc-stubs.a`,
+  not `libgcc_eh.a`, which GCC's first stage, without shared libraries,
+  does not build (`Makeconfig`, `sysdeps/arm/Makefile`).
+- **CompCert 3.17** (`configure`): `armeb-linux` is "ARM, EABI using
+  hardware FP registers, big endian": `arm`, `armv7a`, big-endian, the
+  `hardfloat` ABI, system `linux`, with every ARM configuration's
+  preprocessing, `-U__GNUC__` and `__REDIRECT` and `__REDIRECT_NTH`
+  defined to drop their alias. Its runtime library gives a 64-bit
+  integer's halves the registers of the byte order (`runtime/arm/sysdeps.h`,
+  `ENDIANNESS_big`); its ARM back end orders a 64-bit value's words, in
+  registers, in memory and in literal pools, by `Archi.big_endian`
+  (`Conventions1.v`, `Asmexpand.ml`, `TargetPrinter.ml`). It emits ARM
+  code, not Thumb, unless given `-mthumb`; the gcc that links passes the
+  linker `--be8` as for GCC's own objects. With 32-bit `time_t`, glibc's
+  `<time.h>` declares the functions of time by their own names, so
+  configure's `__REDIRECT` changes none of them here; nor does it change a
+  function the library or its tests call: glibc redirects `strtol` and
+  its kind only for C2X or `_GNU_SOURCE`, and the 64-bit file functions
+  only with `_FILE_OFFSET_BITS=64`.
+
+### Measured here
+
+With the four packages' contents here (Ubuntu 24.04's: `binutils-source`
+2.42-4ubuntu2.10, `gcc-13-source` 13.3.0-6ubuntu2~24.04.1, `glibc-source`
+2.39-0ubuntu8.12, `linux-libc-dev-armhf-cross` 6.8.0-25.25cross1) and
+`qemu-user` 8.2.2:
+
+- **The toolchain, built three times.** The first, glibc configured
+  without `CXX`: its configure took the build machine's `g++` ("using
+  cross tools not prefixed with host triplet"; `CXX = g++` in its
+  `config.make`). Stopped in glibc's `make`, before `support/`, and
+  `build.sh` given `CXX`; with it, `config.make` reads `CXX =`. The
+  second, from nothing: binutils in 2 minutes, GCC's first stage in 13,
+  glibc's configure and `make` in 5, its `support/` building
+  `links-dso-program-c`, the C program; then its `make install` stopped,
+  "cannot stat '.../manual/libc.info*'": configure had found no makeinfo
+  (`MAKEINFO = :` in `config.make`), and `MAKEINFO=true`, given to its
+  `make` as to binutils' and GCC's, overrode that, so that the install
+  looked for a manual not built. `build.sh` gives glibc's configure
+  `MAKEINFO=:` and its `make` none; so finished by hand, glibc installed
+  and GCC's second stage built in 21 minutes, the measures below were
+  first taken. The third, `build.sh` as committed, from nothing, in 36
+  minutes on two CPUs: binutils 2, GCC's first stage 13, glibc 6, GCC's
+  second stage 15; `CXX =` and `MAKEINFO = :` in glibc's `config.make`,
+  no manual installed; the toolchain 166 MB. On it, the compiler's
+  predefined macros are the second's, and the four legs, the stand-in and
+  the job's step gave what they gave on the second, word for word.
+- **The compiler**: "armeb-linux-gnueabihf-gcc (GCC) 13.3.0", thread
+  model `posix`. Its predefined macros at `-std=c99 -O2`, beside Ubuntu's
+  `arm-linux-gnueabihf-gcc`'s, differ in the byte order's (`__ARMEB__`
+  for `__ARMEL__`, `__THUMBEB__` for `__THUMBEL__`, `__ARM_BIG_ENDIAN`,
+  `__BYTE_ORDER__` and `__FLOAT_WORD_ORDER__` big-endian, the wide
+  execution character set UTF-32BE) and in Ubuntu's defaults, which it
+  has not (`_TIME_BITS` and `_FILE_OFFSET_BITS` 64, `_FORTIFY_SOURCE` 3,
+  `__PIE__`, `__SSP_STRONG__`): in nothing else, each type's size and
+  `__ARM_ARCH`, `__ARM_FP` and `__ARM_PCS_VFP` among them. It links with
+  `--be8` (`-v`), and glibc's `libc.so.6` is "ELF 32-bit MSB shared
+  object, ARM, EABI5 BE8", its flags "Version5 EABI, hard-float ABI, BE8".
+- **A probe**, printing the type sizes and alignments, under `qemu-armeb`:
+  "int 4, long 4, long long 8, pointer 4, size_t 4 (SIZE_MAX 4294967295),
+  double 8, long double 8; aligned: long long 8, double 8, long double 8,
+  pointer 4; char unsigned; time_t 4, off_t 4; 0x01020304's first byte
+  1". Built with Ubuntu's GCC for armhf and run under `qemu-arm`, the same
+  but "time_t 8, off_t 8" and "first byte 4".
+- **The four legs**, the job's steps 5 to 9 as extracted from
+  `platforms.yml`, in a copy of the tree, the toolchain at
+  `$HOME/gcc-toolchain` (the build at `-j2`, two CPUs here, where the job's
+  takes no limit): each green, CMake's check `CANON_C_ATOMIC64_LINKS`
+  passing; `file` "ELF 32-bit MSB executable, ARM, EABI5 BE8 version 1
+  (SYSV), dynamically linked, interpreter /lib/ld-linux-armhf.so.3";
+  `readelf -A`'s `Tag_CPU_arch: v7`, `Application`, `Tag_FP_arch:
+  VFPv3-D16`, `Tag_ABI_VFP_args: VFP registers`; `main` at an odd address
+  at each; each of the 61 binaries BE8 and needing `libc.so.6`; and the
+  notices "armeb Release off: Armv7-A, Thumb-2, hard float, big-endian
+  (BE8); 0 of 61 test binaries linked with libatomic, 1 with the 64-bit
+  atomic inline (LDREXD)", the same at `Debug off`, and "... 24 with the
+  64-bit atomic inline (LDREXD)" at `Release debug` and `Debug debug`, as
+  at `armhf`; CTest "100% tests passed, 0 tests failed out of 61" at
+  each, in 2.3 to 2.6 s; no warning. Each leg 11 to 17 s.
+- **CompCert, by GCC in ccomp's place** (as for VERIFY-114, VERIFY-116
+  and VERIFY-119): each test preprocessed as ccomp 3.17 preprocesses it at
+  `armeb-linux` (configure's `-U__GNUC__` and `__REDIRECT`s, the driver's
+  macros, its include folder, `-std=c99`, the job's flags), compiled by
+  GCC in ARM mode, linked by the toolchain's gcc and run under
+  `qemu-armeb`: "61 / 61 built, 61 ran". Every preprocessed file scanned
+  for what CompCert 3.17 does not take: no builtin outside its 39 at ARM
+  (`__builtin_offsetof` its parser's keyword), no statement expression, no
+  `__thread` or `_Thread_local`, no `asm`, no 128-bit type, no
+  `__extension__` or `__attribute__`; no implicit declaration. With
+  `-U__REDIRECT -U__REDIRECT_NTH` added, the same 61; the preprocessed
+  files differ in the declarations of the `scanf` family alone,
+  `<stdio.h>`'s six in each and `<wchar.h>`'s six in `stringbuf_test`'s,
+  named `__isoc99_` by macro without the definitions; nothing of the
+  library or its tests calls one.
+- **The job's step**, run here from a copy of the tree with a ccomp that
+  is GCC with ccomp's preprocessing: the notice "61 / 61 compiled, 61 ran;
+  as pinned", exit 0; given another pin, "not the pin", exit 0, as run 1
+  should; with a ccomp that links BE32 (`-mbe32`), every binary named
+  after "not BE8:", and none ran under `qemu-armeb` (signal 11).
+- ShellCheck on every new step of both jobs, and on `build.sh`: nothing.
+  `tools/readme/examples.py`: #8's line, word for word.
+  `tools/which_workflows.py`: 1 to 6, 8 and 17.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| A1 | **1 to 6, 8 and 17 run**, and no other. | another set | H |
+| A2 | **The four `armeb` legs green at their first attempt**, each building the toolchain within its 120 minutes, the cache having no entry yet; at each, the notice "armeb BUILD LIFETIME: Armv7-A, Thumb-2, hard float, big-endian (BE8); 0 of 61 test binaries linked with libatomic, K with the 64-bit atomic inline (LDREXD)", K 1 with `CANON_LIFETIME` off and 24 with `debug`, as at `armhf`; and every test passing. | a failure, another notice or count, or a build over its limit | M–H: the script, the toolchain and the four legs measured here; CI's runner is not this machine |
+| A3 | **`compcert (armeb-linux)` builds CompCert and runs the tests**: the archive's SHA-256 is opam's, configure takes `armeb-linux` ("arm", "armv7a", "hardfloat", "big") and the toolchain, `make` and `make install` end, `ccomp -version` names 3.17; and its notice is "61 / 61 compiled, 61 ran; as pinned", each binary BE8. | a failed fetch, configure or build; another count or name; a binary not BE8 | L–M: CompCert's code for big-endian Arm, its runtime library and its link are not run here; the line is GCC's in ccomp's place |
+| A4 | **Nothing else changes**: every other job of the eight workflows green, and every notice the project prints its last run's, word for word, the times aside: 1 and 4 to 6 #104's; 3 #104's, with `compcert (armeb-linux)` added; 2 #139's, with the four `armeb` legs added; 8 #163's; 17 #8's. | another notice, or a failure | H: no other job reads what changed; `tools/readme/examples.py` here gives #8's line, word for word |
+
+**Not predicted**: the times; the toolchain's cache entry, which five
+jobs, missing it at once, each build and try to save; CompCert's build
+at `armeb-linux`; GitHub's own notices.
+
+### What follows
+
+A1 to A4 scored, and the record closes. The next record holds
+`compcert (armeb-linux)` to its pin, run 1's, and answers what run 1
+finds. Then the rest of item 9b: macOS, Cygwin, BSD.
