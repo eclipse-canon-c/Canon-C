@@ -44850,3 +44850,267 @@ What it shows:
 - **A summary is kept true by the rule that changes it.** The page
   names the files it sums up as right where they differ, and a record
   that changes a fact on it updates it, as `architectures.md` is updated.
+
+---
+
+## VERIFY-119: Pre-registration — Bare-Metal 32-Bit PowerPC: GCC's Tests under GDB's Simulator, Held to Pins, and CompCert's `ppc-eabi`, Run 1 Measuring
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-119 |
+| **Date**       | 2026-11-24 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 16c1ae4 (VERIFY-118's change; its close, 4d1e3f6, a record, is pushed with this): `1` and `3` to `6` #102 and `2` #137, each its last run, at f18d6c8; `8` #161 and `17` #7 at 16c1ae4. |
+| **Scope**      | `tools/renesas/`: `renesas.py` (two PowerPC variants, the simulator's support, a binary's floating-point ABI and sections checked, notices titled by the variant's family, a command `link`), `psim_start.S` (new), `pins.txt`, `README.md`, `toolchain.cmake`'s comment; `tools/msp430/tmpfile.c`'s comment. `.github/workflows/platforms.yml`: a job, `powerpc`. `.github/workflows/analysis.yml`: a job, `compcert-ppc`. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `docs/compcert-licensing.md`, the workflow map, the README's bare-metal note and its note on atomics. No library or test file. |
+| **Category**   | Item 9b's second step, as the author chose on 2026-11-24: CompCert's `ppc-eabi` and GCC's own runs on bare-metal PowerPC in one record, one toolchain and one cache entry for both. |
+
+### What is missing
+
+PowerPC is tested at Linux only: with GCC under qemu-user
+(`big-endian-32`) and with CompCert (`ppc-linux`). With no operating
+system, where its embedded cores run, nothing of Canon-C is built or run
+for it; and CompCert's `ppc-eabi`, planned first among CompCert's other
+targets after bare-metal Arm (VERIFY-116), waits for a bare-metal
+toolchain and something to run on. QEMU 8.2 has no semihosting for
+PowerPC; GDB's simulator of PowerPC, psim, carries a program's system
+calls.
+
+### The author's choice (2026-11-24)
+
+"Both in one step": CompCert's `ppc-eabi`, and GCC's own runs of the
+tests on bare-metal PowerPC, in one record, sharing one toolchain build
+and its cache. CI measures CompCert first, as for VERIFY-114 and
+VERIFY-116: nothing of CompCert is built here, and run 1 reports against
+the pin predicted below, which the next record holds.
+
+### What changes
+
+- **The toolchain**: `tools/renesas/build.sh`, unchanged, builds
+  `powerpc-eabi`: binutils 2.42, GCC 13.3.0 (C), newlib 4.4.0 for its
+  PowerPC multilibs, `nof` (soft float) among them, and GDB 15.1's
+  simulator of PowerPC, psim (`powerpc-eabi-run`, a 604 by default), from
+  the same four source packages of Ubuntu's as RH850's, RX's and ARC's.
+  It is kept in the Actions cache under
+  `gcc-powerpc-eabi-VERSIONS-HASH`, at `~/gcc-toolchain/powerpc-eabi`,
+  as `arc` keeps `arc-elf32`; both new jobs restore that entry, and a
+  job that misses it builds it.
+- **`tools/renesas/renesas.py`**: two variants, `ppc` (`-mhard-float`:
+  the FPU, GCC's default) and `ppc-soft` (`-msoft-float`), linked with
+  `-msim`, libgloss's system calls for psim, with
+  `tools/msp430/tmpfile.c`'s `tmpfile()` wrapped in place of newlib's, as
+  at RX, and with the simulator's support (`psim`):
+  - **the start file** of `psim_start.S`, new, assembled for the variant
+    as `sim-crt0.o` into its multilib folder under a folder that `-B`
+    puts before GCC's: libgloss's own defines an `__atexit` that newlib
+    4.4 defines too, and no program links (below);
+  - **the linker's own script** for `-msim` (`ld --verbose -m
+    elf32ppcsim`), each of `.rodata`, `.rodata1`, `.sdata2`, `.sbss2`,
+    `.data`, `.data1`, `.sdata` and `.sbss` ending on a multiple of 4
+    (`. = ALIGN(4);` before its closing brace), given with `-Wl,-T`: psim
+    maps a program section by section, each its exact size, and stops a
+    load that passes a section's end (below).
+
+  A binary's checks add, where the variant names one, PowerPC's
+  floating-point ABI (its GNU attribute, `Tag_GNU_Power_ABI_FP`, "hard
+  float" or "soft float"), and, under psim, that every section in memory
+  begins and ends on a multiple of 4. The notices are titled by the
+  variant's family, `renesas` as before or `powerpc`, and the probe's
+  line begins with it. `CANON_LIFETIME_NO_ATOMICS` is defined there as
+  for the Renesas variants: 32-bit PowerPC's GCC calls
+  `__atomic_fetch_add_8`, which its libgcc does not have. A command,
+  `link VARIANT`, builds the variant's support in `renesas_out/` and
+  prints the arguments a test is linked with, one a line.
+- **`tools/renesas/pins.txt`**: `file_test` and `impl_defined_test` not
+  built at `ppc` and `ppc-soft`, psim's system calls having no `link`,
+  which newlib's `rename()` calls; `stringbuf_test`'s line extended to
+  them, its `%ls` on big-endian data, as at `rx-be`; `time_test`'s `all`
+  covers them as written, newlib's reason the same.
+- **`powerpc`**, in `platforms.yml`, after `finite-math`, a leg a
+  variant: the four source packages through `apt-install` (the renesas
+  jobs' cache entry and list), the toolchain from the cache or built
+  (120 minutes at most), `renesas.py run VARIANT`, enforced from run 1:
+  its pins are measured, below.
+- **`compcert-ppc`** ("compcert (ppc-eabi)"), in `analysis.yml`, after
+  `compcert-bare`, under the `compcert` job's licensing note, its `if:`
+  guard and its `continue-on-error`: CompCert 3.17 built for `ppc-eabi`
+  as `compcert-bare` builds it, opam's archive and digest, configure given
+  the toolchain's `powerpc-eabi-` as `-toolprefix`, its cache entry
+  `compcert-3.17-ppc-eabi-VERSIONS-HASH-build-v1`. Every `*_test.c`, with
+  `compcert`'s flags, built by ccomp, linked as `powerpc` links its tests
+  at `ppc`: `renesas.py link ppc`'s arguments, an `-Wl,` option as it is,
+  a file as it is, any other option through `-WUl,` to the gcc that
+  links; then `-lm`. Each runs under psim in `ccomp-out/`, 120 s at most.
+  A notice, `compcert ppc-eabi`: "N / M built, K ran", the tests not built
+  or not run named, then "; as pinned" or "; not the pin", against the
+  pin predicted below. **Run 1 measures**: the step exits 0 either way; a
+  failed fetch, configure or build fails the job. newlib's `errno` is a
+  function (`*__errno()`), so no `canon_errno` is needed. The job reads
+  `tools/renesas/` and `tools/msp430/tmpfile.c`, which `analysis.yml`'s
+  paths-ignore skips: a push of those alone starts `powerpc`, not it
+  (item 14's kind).
+- **The documents**: `docs/architectures.md`, a row for each job in
+  "Tested on", a note on psim's three things, the planned entry for
+  CompCert's other targets without `ppc-eabi`, "Waiting for a compiler"'s
+  two mentions; `docs/verification.md`, a row for each and a sentence;
+  `docs/status.md`, a row in each table and "What is missing";
+  `docs/compcert-licensing.md`, the forks' paragraph naming the fourth
+  job; the workflow map; the README's bare-metal note and its note on
+  atomics; `tools/renesas/README.md`, a section.
+- **A caveat to VERIFY-115's note**, found drafting CompCert's report for
+  item 9c: with `-U__REDIRECT -U__REDIRECT_NTH`, glibc 2.39's `<time.h>`
+  names the 64-bit functions by macro, `#define clock_gettime
+  __clock_gettime64`, and declares no prototype for them, so ccomp
+  compiles each call as an implicit declaration, as it does at PowerPC 32
+  Linux, where configure defines neither macro. That is right for
+  `clock_gettime` and `nanosleep`, which return `int`, the only functions
+  of time the library and its tests call, and would be wrong for `time`,
+  `mktime` and `difftime`, whose `time_t` and `double` an implicit
+  declaration takes for `int`. `docs/architectures.md`'s note says so.
+  Read, and the preprocessing measured; nothing of it runs differently.
+
+### Read, in the sources
+
+- **libgloss's start file for psim** (`libgloss/rs6000/sim-crt0.S`, the
+  same in newlib 4.4.0 and in newlib's master as mirrored on GitHub,
+  2024-09-19): `_start` clears the back chain, opens a 64-byte frame,
+  calls `main` and then `exit`; and it defines a global `__atexit` in
+  `.sdata`, "to tell C's eabi-ctor's we have an atexit function", a word
+  holding `atexit`'s address. newlib 4.4 defines `__atexit` too, the head
+  of its list of `atexit` functions (`sys/reent.h`:900, defined in
+  `__call_atexit.c`). Nothing in GCC 13.3's `libgcc/config/rs6000/` or
+  `gcc/config/rs6000/` names `__atexit`.
+- **psim's memory** (`sim/ppc/hw_init.c`, `update_for_binary_section`):
+  the NetBSD emulation maps the binary by its sections, each one that is
+  allocated attached at its address with its exact size; the stack and
+  the heap are a region of their own (`/openprom/vm`).
+- **libgloss's system calls for psim** (`libsim.a`): `sim-print.o`,
+  `sim-inbyte.o`, `sim-sbrk.o`, `sim-abort.o`, `sim-errno.o`,
+  `simulator.o`, `sim-getrusage.o`, `sim-times.o`, `fstat.o`, `getpid.o`,
+  `isatty.o`, `kill.o`, `putnum.o`, `stat.o`, `unlink.o`, `mcount.o`: no
+  `link`, which newlib's `_link_r` calls (`reent/linkr.c`), and newlib's
+  `rename()` through it.
+- **CompCert 3.17 at `ppc-eabi`** (`configure`, `driver/`, `cparser/`,
+  `common/Sections.ml`): `-U__GNUC__ -E` to preprocess, the toolchain's
+  gcc to assemble (`-Wa,-mregnames` for the runtime library) and to link;
+  no small data where the system is not Diab
+  (`Clflags.option_small_data` 0), so no code of ccomp's needs r13, which
+  only GCC's `__eabi`, called from GCC's `main`, sets; a `section`
+  attribute, as newlib gives `_impure_ptr` (`.sdata`), a section of the
+  user's, reached by its address; `__extension__` ignored by the lexer,
+  `__builtin_offsetof` a keyword of its parser; `-T FILE` passed to the
+  linking gcc as `-T FILE`, an `-Wl,` option as it is, a `-WUl,` option
+  split at its commas (`Linker.ml`); `-no-pie` added only if configure's
+  test link takes it.
+- **newlib's `<sys/cdefs.h>`**, line 410: `#if !__GNUC_PREREQ__(2, 7)`
+  `#define __func__ NULL`, "XXX: should use `#if __STDC_VERSION__ <
+  199901'". CompCert's preprocessing undefines `__GNUC__`, so `__func__`
+  is a null pointer under ccomp with newlib: `contract.h`'s handlers and
+  `diag.h`'s frames take it as the function's name. picolibc excepts
+  CompCert (`&& !defined(__COMPCERT__)`, in 1.8.6 as on its main), which
+  is why `compcert-bare` did not meet it.
+
+### Measured here
+
+With the toolchain `build.sh` built here from the four packages (23
+minutes on two CPUs: binutils 2, GCC 12, newlib 7, the simulator 2):
+
+- **The start file.** Every program linked as GCC links it at `-msim`
+  fails: "multiple definition of `__atexit'; ...sim-crt0.o:sim-crt0.S:
+  (.sdata+0x0): first defined here", at each multilib. With
+  `psim_start.S`'s `sim-crt0.o` in its multilib folder under a `-B`
+  folder (put at its top level, the driver took GCC's own for `nof`
+  first), a program that prints `sqrt(2)`, writes a file and reads it
+  back exits with the status it returns, at both variants.
+- **The simulator's files**: `fseek` -1, `lseek` -1 (`errno` 22),
+  `unlink` -1 (`errno` 5); `ftell` 1 after writing five bytes and
+  seeking. So the tests link `tmpfile.c`: the file probe gives "file
+  probe, newlib's tmpfile: fopen w a stream; fclose 0; fopen r a stream;
+  read "canon"; remove -1; tmpfile a stream; fseek -1; tmpfile read back
+  ""; exit 0" and "file probe, tmpfile.c's tmpfile: ...; fseek 0;
+  tmpfile read back "canon"; exit 0". Without it, `diag_test` and
+  `log_test` fail (Release: 3 and 15 `FAIL` lines, their file read back
+  empty).
+- **The sections.** With the start file and `tmpfile.c` alone, three
+  tests stopped with "Caught signal 11", which no pin could hold:
+  `header_combination_test` at Debug and MinSizeRel, `types_test` at
+  MinSizeRel (at Release, `types_test`'s segments the same sizes, it
+  passed). Each in newlib's `strlen`, its `lwzu` on the word after the
+  last that held the string: in `types_test`, the last string of
+  `.rodata`, "OK  types_test  (all assertions passed)", its 0 at
+  0x10004c55, `.rodata` ending at 0x10004c56: the last load psim traced
+  (`-t load-store`) was the word at 0x10004c50, and the next, at
+  0x10004c54, stopped it. Linked
+  with a `strlen` that reads bytes, it passes; with an 8-byte section of
+  its own after `.rodata`, it stops still (a load across two sections);
+  with the padded script, it passes, and no section of its binary or
+  `header_combination_test`'s begins or ends off a word.
+- **The two variants, all four build types**, with the script and pins
+  as committed: the probe "powerpc probe: int 4, long 4, long long 8,
+  pointer 4, size_t 4 (SIZE_MAX 4294967295), double 8, long double 8;
+  aligned: long long 8, double 8, long double 8, pointer 4; char
+  unsigned", the file probe's two lines above, and at each "powerpc
+  VARIANT BUILD: 61 tests, 57 passed, 1 failed (stringbuf_test 1), 3 not
+  built (impl_defined_test, file_test, time_test)", each leg in 0.1 to
+  0.3 minutes. The binaries: "ELF32, 2's complement, big endian,
+  PowerPC; flags 0x0; floating-point ABI hard float, 64-bit long double"
+  at `ppc`, "soft float, 64-bit long double" at `ppc-soft`. The reasons:
+  `stringbuf_test.c:545`, as at `rx-be`; "undefined reference to
+  `link'"; `time_test`'s `clock_gettime` undeclared.
+- **The Renesas variants, unchanged**: `rh850` and `rx-be` at Release
+  with the script as committed, each "as pinned", their probe, file
+  probe and libraries' lines and their legs' as #137 gave them, the
+  minutes aside, titled `renesas`.
+- **CompCert, by GCC in ccomp's place** (as for VERIFY-114 and
+  VERIFY-116): each test preprocessed as ccomp 3.17 preprocesses it at
+  `ppc-eabi` (`-U__GNUC__`, the driver's macros, its include folder,
+  `-std=c99`, the job's flags), compiled by GCC, linked as the job links
+  it, run under psim: "57 / 61 built, 54 ran; not built:
+  lifetime_token_test impl_defined_test file_test time_test; did not
+  run: contract_test stringbuf_test diag_test". The reasons:
+  `pthread_barrier_t` unknown (newlib gives it only with
+  `_POSIX_BARRIERS`); "undefined reference to `link'" twice;
+  `CLOCK_MONOTONIC` undeclared; `contract_test` "55 passed, 3 failed",
+  `_cap_func[0] != '\0'` at its lines 197, 392 and 479, `__func__` being
+  `NULL`; `stringbuf_test.c:545`; `diag_test` "Caught signal 11", in
+  newlib's `strcmp`, given the frame's `NULL` name. Every preprocessed
+  file scanned for what CompCert 3.17 does not take: no builtin outside
+  its 81 (`__builtin_offsetof`, in six, is its parser's keyword), no
+  statement expression, no `__thread` or `_Thread_local`, no `asm`, no
+  128-bit type; `__extension__` (126) it ignores, and of `__attribute__`
+  only `__alloc_size__` and `__section__`.
+- **The job's step**, run here from a copy of the tree with a ccomp that
+  is GCC with ccomp's preprocessing, the toolchain at
+  `$HOME/gcc-toolchain`: "Linked with: -WUl,-msim -Wl,--wrap=tmpfile
+  .../tmpfile.o -WUl,-B.../start/ -Wl,-T,.../psim.ld -lm", and the notice
+  "57 / 61 built, 54 ran; ...; as pinned". ShellCheck on every new step
+  of both jobs: nothing.
+- `renesas.py check`: "renesas check: 11 pins, 61 tests in
+  CMakeLists.txt; 0 problem(s)". `tools/readme/examples.py`: #7's line,
+  word for word. `tools/which_workflows.py`: 1 to 6, 8 and 17.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Y1 | **1 to 6, 8 and 17 run**, and no other. | another set | H |
+| Y2 | **Both `powerpc` legs green at their first attempt**, each building the toolchain within its 120 minutes, the cache having no entry yet, and printing: the probe's line, "powerpc probe: int 4, long 4, long long 8, pointer 4, size_t 4 (SIZE_MAX 4294967295), double 8, long double 8; aligned: long long 8, double 8, long double 8, pointer 4; char unsigned"; the file probe's two, as measured here; and at each build type "powerpc VARIANT BUILD: 61 tests, 57 passed, 1 failed (stringbuf_test 1), 3 not built (impl_defined_test, file_test, time_test); as pinned", the minutes aside. | a failure, another notice or word, or a build over its limit | M–H: the script, toolchain and pins measured here; CI's runner is not this machine |
+| Y3 | **`compcert (ppc-eabi)` builds CompCert and runs the tests**: the archive's SHA-256 is opam's, configure accepts `ppc-eabi` and the toolchain, `make` and `make install` end, `ccomp -version` names 3.17; and its notice is "57 / 61 built, 54 ran; not built: lifetime_token_test impl_defined_test file_test time_test; did not run: contract_test stringbuf_test diag_test; as pinned". | a failed fetch, configure or build; another count or name | L–M: CompCert's code for PowerPC, its runtime library, its link through gcc and newlib's headers under ccomp are not run here; the line is GCC's in ccomp's place |
+| Y4 | **Its listing gives the reasons measured here**: `lifetime_token_test` at `pthread_barrier_t`; `impl_defined_test` and `file_test` "undefined reference to `link'"; `time_test` at `CLOCK_MONOTONIC`; `contract_test` three `FAIL` lines, `_cap_func[0] != '\0'` at its lines 197, 392 and 479; `stringbuf_test` a `FAIL` at its line 545; `diag_test` stopped by psim with "Caught signal 11". | another reason for any | M: ccomp's wording of the two compile errors is not known here; the run's by GCC's code |
+| Y5 | **Nothing else changes**: every other job of the eight workflows green, and every notice the project prints its last run's, word for word, the times aside: 1 and 4 to 6 #102's; 3 #102's, with `compcert (ppc-eabi)` added; 2 #137's, with the two `powerpc` legs added, the five `renesas` legs' notices titled and worded as they were; 8 #161's; 17 #7's. | another notice, or a failure | H: the Renesas variants measured here with the changed script gave #137's lines; no other job reads what changed |
+
+**Not predicted**: the times; the toolchain's cache entry, which three
+jobs, missing it at once, each build and try to save; CompCert's build
+at `ppc-eabi`; GitHub's own notices.
+
+### What follows
+
+Y1 to Y5 scored, and the record closes. The next record holds
+`compcert (ppc-eabi)` to its pin, run 1's, as VERIFY-117 held
+`compcert-bare`'s, and answers what run 1 finds; newlib's `__func__`
+under ccomp is the author's to choose: pinned with its reason, or undone
+for ccomp by a header given with `-include` that includes
+`<sys/cdefs.h>` and then undefines `__func__` (ccomp takes `-include`).
+Item 9c gains three findings to report: libgloss's `sim-crt0.S` and
+newlib's `__atexit`, newlib's `__func__` where C99 has one, both to
+newlib; and psim's map of sections, byte for byte, to GDB's simulators.
+Then the rest of item 9b: `armeb-linux`, macOS, Cygwin, BSD.
