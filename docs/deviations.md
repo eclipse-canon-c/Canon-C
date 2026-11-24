@@ -44633,6 +44633,7 @@ What it shows:
 | **ID**         | VERIFY-117 |
 | **Date**       | 2026-11-24 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-24 — Scored: W1 to W5 MATCH. CLOSED: five of five ("Scored", below). The five bare-metal Arm configurations held to their pins, each test not built shown by its error, `parse_test`'s the `asm` the record read. Item 9b's first step is done. The Status above is the record as committed. |
 | **Baseline**   | 927742c (VERIFY-116's change; its close, 50acd3d, a record, is pushed with this): `1` and `3` to `6` #101, `2` #136 and `8` #159, each its last run, at 927742c. |
 | **Scope**      | `.github/workflows/analysis.yml`: `compcert-bare` held to its pins, its comments; in `compcert-bare` and `compcert-targets`, a test not built shown by its log's error lines. `docs/architectures.md`: `compcert-bare`'s row and the `<math.h>` note; the plans the author made on 2026-11-23, under "Tested on", "Compiled for" and "Proved at"; PowerPC e200 and TriCore out of "Waiting for a compiler", and its rule on licences. `docs/verification.md`: `compcert-bare`'s row. No library, test or tool file. |
 | **Category**   | Item 9b's first step, held, as VERIFY-116 said; with the author's choice of 2026-11-24 for `compare_test` and `parse_test`, and the plans of 2026-11-23 in the documents. |
@@ -44726,3 +44727,36 @@ W1 to W5 scored, and the record closes; with it, item 9b's first step.
 Then item 19, the one-page status matrix, as the author placed it; then
 item 9b's next, `ppc-eabi`, and the drafts for upstream, picolibc's among
 them.
+
+### Scored (2026-11-24)
+
+The push of bd657cd, e37fd96 and f18d6c8 started seven workflows: `1`
+and `3` to `6` #102, `2` #137 and `8` #160, each green at its first
+attempt; the last, `6`, in 84 minutes.
+
+| # | scored |
+|---|--------|
+| W1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| W2 | **MATCH.** The five `compcert (CONFIG)` jobs green, each notice "55 / 61 built, 55 ran; not built: lifetime_token_test compare_test impl_defined_test file_test parse_test time_test; as pinned", word for word; each "Cache restored from key: compcert-3.17-bare-CONFIG-build-v1", its four steps that build skipped, and "16 package file(s): 16 from the cache, 0 fetched, 0 left to apt". |
+| W3 | **MATCH.** At each of the five, each test not built shown by its error: "fatal error: pthread.h: No such file or directory"; ten "use of unknown builtin" at `compare_test`'s lines 305 to 418, six `__builtin_inff` and four `__builtin_nanf`; "undefined reference to `rename'", twice at `impl_defined_test` and four times at `file_test`; "use of undeclared identifier 'CLOCK_MONOTONIC'"; and at `parse_test`, "machine/math.h:70: error: unsupported feature: asm result of kind '=w'", then its argument of kind `w`, and the same at lines 82 and 171, and `=t` and `t` at 183: `sqrt`, `fabs`, and their `float` versions, eight errors. |
+| W4 | **MATCH.** Every `compcert-targets` notice as at #101, "as pinned"; at `rv32-linux`, "syntax error after '(' and before '{'" at picolibc's RISC-V `machine/math.h:147` (`compare_test`), "syntax error after 'extern' and before '__thread'" at `sys/errno.h:62` (`header_combination_test`, `impl_defined_test`, `parse_test`), no `pthread.h`, and `CLOCK_MONOTONIC`. |
+| W5 | **MATCH.** Every other job green, and every notice of the 120 jobs its last run's, word for word, the times aside. |
+
+Five of five. Not predicted, and as they fell: the times.
+
+**Closed.** CompCert 3.17 on bare-metal Arm, held: at Cortex-A9 with
+both ABIs, Cortex-R5F, Cortex-M7 and ARM1176, 55 of the 61 tests build
+and pass, and each of the six others is shown by its own error in the
+job's log. Item 9b's first step is done, and with it CompCert runs the
+tests at twelve configurations. The close changes nothing but this
+record.
+
+What it shows:
+
+- **A reason read in the source held where the log could show it.**
+  `parse_test`'s error, hidden at VERIFY-116's run, is the `asm` of kind
+  `=w` the record read in picolibc's header and CompCert's extended
+  `asm`.
+- **A job's log is the evidence that can be read where a run is
+  scored.** Its errors now are, in both jobs; the artifacts stay for
+  those who can fetch them.
