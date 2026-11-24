@@ -45165,6 +45165,7 @@ What it shows:
 | **ID**         | VERIFY-120 |
 | **Date**       | 2026-11-24 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-24 — Scored: Z1 to Z4 MATCH. CLOSED: four of four ("Scored", below). `compcert (ppc-eabi)` held to its pin, 57 of 61 built and 56 run, `contract_test` and `diag_test` passing under ccomp once newlib's `__func__` is undone. The Status above is the record as committed. |
 | **Baseline**   | 340a5d8 (VERIFY-119's change; its close, dd4016d, a record, is pushed with this): `1` and `3` to `6` #103, `2` #138 and `8` #162, at 340a5d8. |
 | **Scope**      | `.github/workflows/analysis.yml`'s `compcert-ppc`: a header given to ccomp with `-include`, its pin, held. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`. No library, test or tool file. |
 | **Category**   | VERIFY-119's "What follows": the pin held, as VERIFY-117 held `compcert-bare`'s; newlib's `__func__` under ccomp undone, the author's choice of 2026-11-24. |
@@ -45241,3 +45242,33 @@ the report to newlib is drafted (item 9c).
 Z1 to Z4 scored, and the record closes. Item 9c's three new findings,
 newlib's `__func__` among them, drafted for the author to file. Then the
 rest of item 9b: `armeb-linux`, macOS, Cygwin, BSD.
+
+### Scored (2026-11-24)
+
+The push of abfb314, e92fa45 and baf01cf started seven workflows, `1` to
+`6` and `8`, each green at its first attempt: `3` #104 in 5 minutes, `2`
+#139 in 8, `6` #104 the last, in 88.
+
+| # | scored |
+|---|--------|
+| Z1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| Z2 | **MATCH.** `compcert (ppc-eabi)` green, its notice "57 / 61 built, 56 ran; not built: lifetime_token_test impl_defined_test file_test time_test; did not run: stringbuf_test; as pinned", and its listing VERIFY-119's without `contract_test` and `diag_test`: `pthread_barrier_t`'s syntax error, "undefined reference to `link'" twice, `CLOCK_MONOTONIC` undeclared, `stringbuf_test.c:545`. |
+| Z3 | **MATCH.** The two `powerpc` legs and `compcert (ppc-eabi)` restored the toolchain from the entry #138 saved, and `compcert (ppc-eabi)` its CompCert, by their keys; no build step ran. |
+| Z4 | **MATCH.** The 122 other jobs green, every notice as their last runs printed it, word for word, the times aside. |
+
+Four of four. Not predicted, and as they fell: the times.
+
+**Closed.** CompCert at bare-metal PowerPC is held to its pin, as at the
+other twelve configurations; with newlib, ccomp names a function as C99
+says once newlib's definition of `__func__` is undone, which
+`docs/architectures.md` gives as a recipe. The close changes nothing but
+this record.
+
+What it shows:
+
+- **A header's guess about the compiler is the compiler's problem
+  only in part.** newlib took every compiler that is not GCC for one
+  before C99, and CompCert, which preprocesses as if it were not GCC, got
+  a null `__func__`. Undone in one line, given to ccomp before anything
+  else, the two tests that failed on it pass, and the report to newlib
+  (item 9c, the sixth) carries the fix its own comment asked for.
