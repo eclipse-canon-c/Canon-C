@@ -44860,6 +44860,7 @@ What it shows:
 | **ID**         | VERIFY-119 |
 | **Date**       | 2026-11-24 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-24 — Scored: Y1 to Y5 MATCH. CLOSED: five of five ("Scored", below). The tests run on bare-metal 32-bit PowerPC under GDB's simulator, with the FPU and without, at four build types, held to their pins; CompCert 3.17 built for `ppc-eabi` builds 57 of the 61 and runs 54, as GCC in its place predicted, not yet held. The Status above is the record as committed. |
 | **Baseline**   | 16c1ae4 (VERIFY-118's change; its close, 4d1e3f6, a record, is pushed with this): `1` and `3` to `6` #102 and `2` #137, each its last run, at f18d6c8; `8` #161 and `17` #7 at 16c1ae4. |
 | **Scope**      | `tools/renesas/`: `renesas.py` (two PowerPC variants, the simulator's support, a binary's floating-point ABI and sections checked, notices titled by the variant's family, a command `link`), `psim_start.S` (new), `pins.txt`, `README.md`, `toolchain.cmake`'s comment; `tools/msp430/tmpfile.c`'s comment. `.github/workflows/platforms.yml`: a job, `powerpc`. `.github/workflows/analysis.yml`: a job, `compcert-ppc`. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `docs/compcert-licensing.md`, the workflow map, the README's bare-metal note and its note on atomics. No library or test file. |
 | **Category**   | Item 9b's second step, as the author chose on 2026-11-24: CompCert's `ppc-eabi` and GCC's own runs on bare-metal PowerPC in one record, one toolchain and one cache entry for both. |
@@ -45114,3 +45115,43 @@ Item 9c gains three findings to report: libgloss's `sim-crt0.S` and
 newlib's `__atexit`, newlib's `__func__` where C99 has one, both to
 newlib; and psim's map of sections, byte for byte, to GDB's simulators.
 Then the rest of item 9b: `armeb-linux`, macOS, Cygwin, BSD.
+
+### Scored (2026-11-24)
+
+The push of df59ede, 3c70368 and 340a5d8 started eight workflows, `1` to
+`6`, `8` and `17`, each green at its first attempt: `2` #138 in 15
+minutes, `3` #103 in 21, `6` #103 the last, in 89.
+
+| # | scored |
+|---|--------|
+| Y1 | **MATCH.** 1 to 6, 8 and 17 ran, and no other. |
+| Y2 | **MATCH.** Both `powerpc` legs green at their first attempt. Each missed the cache and built the toolchain, `ppc-soft` in 12 minutes and `ppc` in 14 (binutils 1, GCC 6 and 8, newlib 4, the simulator 1), and printed the probe's line, the file probe's two and, at each build type, "powerpc VARIANT BUILD: 61 tests, 57 passed, 1 failed (stringbuf_test 1), 3 not built (impl_defined_test, file_test, time_test); as pinned", word for word, each in 0.1 minutes. |
+| Y3 | **MATCH.** `compcert (ppc-eabi)`: the archive "OK"; configure took `ppc-eabi` ("powerpc", "ppc32", "eabi", "big") and the toolchain, "-no-pie" from its test link and CFI from its assembler; Coq's 139 files, the extraction, ccomp and the runtime library built and installed in 3 minutes; `ccomp -version` "version 3.17"; and the notice "57 / 61 built, 54 ran; not built: lifetime_token_test impl_defined_test file_test time_test; did not run: contract_test stringbuf_test diag_test; as pinned". |
+| Y4 | **MATCH.** The listing: `lifetime_token_test.c:78:8`, "syntax error after 'static' and before 'pthread_barrier_t'"; `impl_defined_test` and `file_test`, newlib's `reent/linkr.c:53`, "undefined reference to `link'"; `./util/time.h:147`, "use of undeclared identifier 'CLOCK_MONOTONIC'"; `contract_test` "55 passed, 3 failed", `_cap_func[0] != '\0'` at its lines 197, 392 and 479; `stringbuf_test.c:545`; `diag_test`, "Caught signal 11 at address 0x1008eb7c". |
+| Y5 | **MATCH.** The 121 other jobs green, every notice as their last runs printed it, word for word, the times aside: 1 and 4 to 6 #102's; 3 #102's beside `compcert (ppc-eabi)`; 2 #137's beside the two `powerpc` legs, the five `renesas` legs' titled and worded as they were; 8 #161's; 17 #7's. |
+
+Five of five. Not predicted, and as they fell: the times; the
+toolchain's cache entry, which all three jobs built, missing it, and
+which `powerpc (ppc-soft)`, the first to end, saved, the other two's
+saves refused ("Unable to reserve cache with key ..., another job may
+be creating this cache"); CompCert's entry, saved; configure's warning
+on Coq 9.1.1, "UNSUPPORTED", as at every CompCert job.
+
+**Closed.** Item 9b's second step is done: Canon-C's tests run on
+bare-metal 32-bit PowerPC with GCC 13.3 and newlib 4.4 under GDB's
+simulator, with the FPU and without, at the four build types, each that
+does not pass pinned with its reason; and CompCert's `ppc-eabi` builds 57
+of them and runs 54, which the next record holds. The close changes
+nothing but this record.
+
+What it shows:
+
+- **A simulator's fault can be told from the code's.** psim stopped
+  three tests by where a string happened to end, a fault no hardware
+  gives, and a pin would have moved with every change of layout. Traced
+  to psim's map of sections, the remedy is in the layout alone, each
+  section ending on a word, checked in each binary; the tests' code and
+  newlib's run as built.
+- **GCC in CompCert's place predicted its run exactly**, as at VERIFY-114
+  and VERIFY-116: what CompCert does not take is mostly in the headers,
+  and newlib's `__func__` is one of those things.
