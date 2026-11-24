@@ -9,7 +9,7 @@ and those files differ, they are right and this page is wrong; please say
 so in an issue. A record that changes a fact stated here updates this
 page with it.
 
-*Written for VERIFY-118, 2026-11-24.*
+*Written for VERIFY-118, 2026-11-24; brought up to date by VERIFY-119.*
 
 ## The words used
 
@@ -39,6 +39,7 @@ With GCC, Clang, MSVC or a vendor's compiler:
 | Arm Cortex-R, bare metal | Cortex-R5F, Cortex-R52 | GCC, picolibc | run, exceptions pinned | planned (R52) |
 | Arm Cortex-M, bare metal | Cortex-M0+, Cortex-M4 | GCC 13.2 and 15.3, newlib, picolibc | run, exceptions pinned | `core/` (Cortex-M4) |
 | PowerPC 32, big-endian | Linux | GCC | run, all pass | `core/` |
+| PowerPC 32, big-endian, bare metal | with its FPU and without | GCC 13.3, newlib | run, exceptions pinned | — |
 | s390x, big-endian | Linux | GCC | run, all pass | — |
 | RISC-V 32 and 64, bare metal | — | GCC, picolibc | build | `core/` |
 | MSP430X, 16-bit `int` | bare metal | TI's GCC, newlib | run where a 16-bit `size_t` allows (below Tier 1), every one that builds passes | planned (a 16-bit model) |
@@ -55,6 +56,7 @@ With CompCert 3.17, the formally verified compiler (informational):
 | x86-64, x86, 32-bit Arm, AArch64, PowerPC 32 and RISC-V 64 Linux | run, 61 of 61 at each (at 32-bit Arm with two options, `architectures.md` says which and why) |
 | bare-metal Arm: Cortex-A9 (both floating-point ABIs), Cortex-R5F, Cortex-M7, ARM1176, with picolibc | run, 55 of 61 at each, pinned: the six use what picolibc on bare metal does not have, or its `<math.h>`, which CompCert cannot compile and which no header of the library includes |
 | RISC-V 32, picolibc's headers | build, 55 of 61, pinned |
+| bare-metal PowerPC 32 (`ppc-eabi`), with newlib | run; measured by VERIFY-119's run, not yet pinned |
 
 In the GCC jobs on bare metal, each test runs at four levels of
 optimization (`-O0`, `-O2`, `-O3`, `-Os`). Each pinned exception, and
@@ -88,7 +90,7 @@ or a test that starts passing, is seen at once.
   community port of GCC on QEMU, and NXP's PowerPC e200 with VLE, to be
   built with NXP's GCC. Planned, in `architectures.md`.
 - **Aerospace**: SPARC LEON, to be tested on QEMU first among the targets
-  planned next; CompCert at bare-metal PowerPC (`ppc-eabi`).
+  planned next.
 - **Proofs beyond `core/`** at a 32-bit model, and at a 16-bit model,
   which there is none of yet.
 - **Commercial compilers** (TriCore's, Wind River's Diab, S12's, SHARC+'s):

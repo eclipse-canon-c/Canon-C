@@ -1,4 +1,4 @@
-# The tests on Renesas RH850 and RX under GDB's simulators: `renesas`
+# The tests under GDB's simulators: Renesas RH850 and RX (`renesas`), 32-bit PowerPC (`powerpc`)
 
 No Ubuntu package ships a compiler for Renesas' cores, but Ubuntu ships
 the sources of one. The job `renesas` of `2 · Platforms` builds a
@@ -206,11 +206,14 @@ first byte is the character's low byte, and the test passes.
     python3 tools/renesas/renesas.py run VARIANT [BUILD...] [--report-only]
     python3 tools/renesas/renesas.py check
     python3 tools/renesas/renesas.py target VARIANT
+    python3 tools/renesas/renesas.py link VARIANT
 
 `build.sh` builds in the current directory and installs into PREFIX;
 `run` needs `PREFIX/bin` on the `PATH`, and builds into `renesas_out/`;
 `check` is `8 · Records'`; `target` prints a variant's target, which the
-workflow builds. The steps the script shares with
+workflow builds; `link` builds the variant's support and prints the
+arguments a test is linked with, one a line, which the CompCert job
+`compcert-ppc` gives ccomp (below). The steps the script shares with
 `tools/msp430/msp430.py` (a test's run, why a test is not built, and
 `tmpfile.c`) and `tools/cortexm/cortexm.py` (CTest's list of the tests
 and their `FAIL` lines) are those scripts'.
@@ -223,8 +226,9 @@ give; the test was fixed, as the author chose. RX is enforced from
 VERIFY-102's run 1, its pins measured before it in the same way, with
 `build.sh` unchanged. `rx-nofpu` and `rx-be` link `no-fpu-libs` from
 VERIFY-111, the pins unchanged: measured with them before its run 1,
-the outcomes were the pins'. The predictions and their scores are in
-`docs/deviations.md`.
+the outcomes were the pins'. PowerPC is enforced from VERIFY-119's run 1,
+its pins measured before it in the same way. The predictions and their
+scores are in `docs/deviations.md`.
 
 **ARC.** The job `arc`, in the same workflow, builds `arc-elf32` with
 `build.sh`, unchanged, and only compiles with it (VERIFY-106): GDB has no
@@ -232,3 +236,47 @@ ARC simulator, so the simulator's step builds none and installs nothing,
 and `tools/embedded_compile_check.sh` compiles the headers and the tests,
 as it does for RISC-V. Its toolchain has an entry of its own in the
 Actions cache.
+
+**32-bit PowerPC: `powerpc`.** The job `powerpc`, in the same workflow,
+builds `powerpc-eabi` with `build.sh`, unchanged: GCC 13.3.0, newlib and
+libgcc built for PowerPC's multilibs, among them `nof` (soft float), and
+psim, GDB's simulator of PowerPC (`powerpc-eabi-run`), which models a 604
+and carries a program's output and exit status through libgloss's system
+calls for it, which `-msim` links. Its toolchain has an entry of its own
+in the Actions cache, which the CompCert job `compcert-ppc` of
+`3 · Static analysis` shares (VERIFY-119). The variants are `ppc`
+(`-mhard-float`: the FPU, GCC's default) and `ppc-soft` (`-msoft-float`):
+`int`, `long`, pointers and `size_t` of 32 bits, `double` and
+`long double` of 64, an 8-byte object aligned to 8, plain `char`
+unsigned, and big-endian data. `CANON_LIFETIME_NO_ATOMICS` is defined
+there too: 32-bit PowerPC's GCC calls `__atomic_fetch_add_8`, which its
+libgcc does not have. The script checks that the binaries are PowerPC's,
+big-endian, of the variant's floating-point ABI by their GNU attribute
+(`hard float` or `soft float`). Three things are the simulator's:
+
+- **The start file.** At `-msim` GCC links libgloss's `sim-crt0.o`, which
+  defines `__atexit`, a word for an old EABI convention that nothing of
+  GCC 13 reads; newlib 4.4 defines `__atexit` too, the head of its list of
+  `atexit` functions, and no program links ("multiple definition of
+  `__atexit'"). `psim_start.S` does what libgloss's does, without that
+  word: the script assembles it for the variant as `sim-crt0.o`, in the
+  variant's multilib folder under a folder that `-B` puts before GCC's.
+- **The sections.** psim maps a program section by section, each its
+  exact size, and stops it with signal 11 on a load that passes a
+  section's end or spans two sections. newlib's `strlen` reads the aligned
+  word that holds a string's end, so a test whose last string ended
+  `.rodata` within a word stopped: `types_test` at MinSizeRel,
+  `header_combination_test` at Debug and MinSizeRel, as the layout fell.
+  The tests are linked with the linker's own script for `-msim`
+  (`ld --verbose -m elf32ppcsim`), each section of data ending on a
+  multiple of 4, and the script checks that every section of a test's
+  binary begins and ends on one.
+- **Files.** libgloss's system calls for psim have no `link`, and their
+  `unlink` and `lseek` fail: `remove()` returns -1, and a file's stream
+  does not rewind. The tests link `tmpfile.c`, as at RX; `file_test` and
+  `impl_defined_test`, which call `rename()`, which newlib builds on
+  `link`, do not link, pinned.
+
+At both variants and each build type, 57 of the 61 tests pass:
+`stringbuf_test`'s `%ls` fails as at `rx-be`, the data being big-endian,
+and `time_test` is not built, as everywhere here.

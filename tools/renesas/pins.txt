@@ -1,7 +1,8 @@
-# tools/renesas/pins.txt -- the tests that do not pass on the Renesas
-# variants under GDB's simulators (tools/renesas/renesas.py, VERIFY-101,
-# VERIFY-102). Each line: the test, the variants (all, or a list of
-# rh850, rh850-soft, rx, rx-nofpu and rx-be), the build types (all, or a
+# tools/renesas/pins.txt -- the tests that do not pass on the variants of
+# tools/renesas/renesas.py under GDB's simulators: Renesas' (VERIFY-101,
+# VERIFY-102) and 32-bit PowerPC's (VERIFY-119). Each line: the test, the
+# variants (all, or a list of rh850, rh850-soft, rx, rx-nofpu, rx-be, ppc
+# and ppc-soft), the build types (all, or a
 # list of Debug, Release, RelWithDebInfo and MinSizeRel), and what the
 # test does there: "not-built"; "fails N", N the lines of its output that
 # begin with FAIL; or "times-out". A test no line names must pass. The
@@ -9,13 +10,14 @@
 # variant and build type, with the support each variant links: the RH850
 # lines before VERIFY-101's run 1, the RX lines before VERIFY-102's; and
 # rx-nofpu's and rx-be's again before VERIFY-111's, with the libraries
-# built without the FPU, which they link since, and the same.
+# built without the FPU, which they link since, and the same; and the
+# PowerPC lines before VERIFY-119's run 1.
 #
 # TEST              VARIANTS  BUILDS  OUTCOME
 
 # util/time.h calls clock_gettime and the test nanosleep, which newlib
-# declares only where _POSIX_TIMERS is defined, which it is not here (as
-# on Cortex-M and MSP430).
+# declares only where _POSIX_TIMERS is defined, which it is not here, at
+# PowerPC either (as on Cortex-M and MSP430).
 time_test           all       all     not-built
 
 # rx, the RX600's FPU: GCC's RX port compiles with -ffinite-math-only
@@ -50,12 +52,21 @@ random_test         rx        Release,RelWithDebInfo,MinSizeRel  times-out
 file_test           rx,rx-nofpu,rx-be  all  fails 3
 impl_defined_test   rx-nofpu,rx-be     all  fails 4
 
-# rx-be: newlib built without multibyte support (_MB_CAPABLE undefined,
-# its default) reads the wide string of %ls as a string of char. With
-# big-endian data the first byte of a wide character below 2^24 is 0, so
-# stringbuf_append_fmt's "%ls" of a one-character wide string succeeds
-# and appends nothing, where the test takes a success to have appended a
-# byte at least (stringbuf_test.c:545). With little-endian data the
-# first byte is the character's low byte, one byte appended, and the
-# test passes.
-stringbuf_test      rx-be     all     fails 1
+# ppc and ppc-soft: libgloss's system calls for psim have no link, which
+# newlib's rename() calls (reent/linkr.c), and their unlink and lseek
+# fail: remove() returns -1, and a file's stream does not rewind (the
+# tests link tmpfile.c's tmpfile(), as at RX). file_test and
+# impl_defined_test, which call rename(), do not link: "undefined
+# reference to `link'".
+file_test           ppc,ppc-soft       all  not-built
+impl_defined_test   ppc,ppc-soft       all  not-built
+
+# rx-be, ppc and ppc-soft: newlib built without multibyte support
+# (_MB_CAPABLE undefined, its default) reads the wide string of %ls as a
+# string of char. With big-endian data the first byte of a wide character
+# below 2^24 is 0, so stringbuf_append_fmt's "%ls" of a one-character wide
+# string succeeds and appends nothing, where the test takes a success to
+# have appended a byte at least (stringbuf_test.c:545). With little-endian
+# data the first byte is the character's low byte, one byte appended, and
+# the test passes.
+stringbuf_test      rx-be,ppc,ppc-soft  all  fails 1

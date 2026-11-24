@@ -6,7 +6,9 @@
  * temporary file, and which fclose() frees. NULL when it cannot be made,
  * as tmpfile() may return. The renesas job's RX variants link it too
  * (tools/renesas/renesas.py, VERIFY-102): GDB's RX simulator has no lseek,
- * so a file's stream does not rewind there. Nothing else links it. */
+ * so a file's stream does not rewind there; and the powerpc job's
+ * variants, and the tests compcert-ppc compiles (VERIFY-119), as lseek
+ * fails under GDB's PowerPC simulator. Nothing else links it. */
 #include <stddef.h>
 #include <stdio.h>
 

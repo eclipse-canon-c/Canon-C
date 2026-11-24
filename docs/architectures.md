@@ -28,6 +28,7 @@ here for them.
 | x86-64 | Linux, glibc | CompCert 3.17 | `compcert` (`analysis.yml`), informational: its result blocks nothing |
 | 32-bit Arm, AArch64, PowerPC 32, x86 and RISC-V 64 | Linux, glibc | CompCert 3.17, built for each with Ubuntu's cross toolchain | `compcert-targets` (`analysis.yml`), the tests under qemu-user, natively at x86: 61 of 61 at each, at 32-bit Arm with `-U__REDIRECT -U__REDIRECT_NTH` (below), each target held to that (VERIFY-115); informational, as `compcert` |
 | 32-bit Arm, bare metal: ARMv7-A (Cortex-A9; the hard-float ABI, and the base ABI), ARMv7-R (Cortex-R5F), ARMv7-M (Cortex-M7, double-precision FPU), ARMv6 (ARM1176) | bare metal: picolibc 1.8.6 | CompCert 3.17 (`arm-eabihf`, `arm-eabi`, `armv7r-eabihf`, `armv7m-eabihf`, `armv6-eabihf`), Ubuntu's `arm-none-eabi` GCC preprocessing, assembling and linking for it | `compcert-bare` (`analysis.yml`), on QEMU's models of the cores through semihosting: 55 of the 61 tests at each, held to that (VERIFY-117); not `lifetime_token_test`, `time_test`, `impl_defined_test` and `file_test`, for what picolibc on bare metal does not give, nor `compare_test` and `parse_test`, whose `<math.h>` CompCert does not take (below); informational, as `compcert` |
+| PowerPC 32, big-endian, bare metal: the embedded ABI, with the FPU | bare metal: newlib 4.4 | CompCert 3.17 (`ppc-eabi`), the `powerpc` job's toolchain preprocessing, assembling and linking for it | `compcert-ppc` (`analysis.yml`), under psim, GDB 15.1's PowerPC simulator, each test linked as `powerpc` links its tests at `ppc` (below): run 1 measures, nothing held to a pin yet (VERIFY-119); informational, as `compcert` |
 | x86, 32-bit | Linux, glibc | GCC (`-m32`) | `build-32bit` (`ci.yml`): `size_t` exactly 32 bits |
 | AArch64 | Linux, glibc | GCC, Clang | `build-arm64` (`platforms.yml`), on GitHub's Arm runner, with sanitizers; `char` is unsigned there |
 | AArch64 | macOS | Apple Clang | `build` (`ci.yml`), `macos-latest` is Apple silicon |
@@ -41,6 +42,7 @@ here for them.
 | AArch64, bare metal: Cortex-A78AE (Armv8.2-A) and Cortex-R82 (Armv8-R) | bare metal: picolibc 1.8.6 | GCC 13.3 (Ubuntu's `aarch64-linux-gnu`, with picolibc's specs) | `aarch64` (`platforms.yml`, `tools/aarch64/`), under QEMU 8.2's virt board; QEMU models neither core, so each is compiled for with its `-mcpu` and run on QEMU's `max` CPU, which has the instructions of both, at EL1 with the MMU off; at `-O0`, `-O2`, `-O3` and `-Os`; the tests that do not pass pinned with the reason (VERIFY-099) |
 | Renesas RH850 (V850E3V5), with its FPU and without | bare metal: newlib 4.4 | GCC 13.3.0, built from Ubuntu's source packages (`tools/renesas/build.sh`) | `renesas` (`platforms.yml`, `tools/renesas/`), under GDB 15.1's V850 simulator, built from the same packages; Renesas' RH850 ABI, where an 8-byte object is aligned to 4; at `-O0`, `-O2`, `-O3` and `-Os`; each test linked with the `_open` newlib's V850 port gets wrong (`open.c`); the tests that do not pass pinned with the reason (VERIFY-101) |
 | Renesas RX (RX600), with its FPU, without it, and without it with big-endian data | bare metal: newlib 4.4 | GCC 13.3.0, built from Ubuntu's source packages (`tools/renesas/build.sh`), with `-m64bit-doubles` (GCC's `double` for RX has 32 bits otherwise, which `types.h` refuses) | `renesas`, under GDB 15.1's RX simulator, built from the same packages; plain `char` unsigned, an 8-byte object aligned to 4; at `-O0` (without `-g`, at which GCC 13.3's RX port stops with an internal error), `-O2`, `-O3` and `-Os`; each test linked with the MSP430 job's `tmpfile()` (`tools/msp430/tmpfile.c`), since the simulator has no `lseek`, and the big-endian ones with crt files whose arrays are data; with the FPU, GCC compiles with finite math, and the checks of NaN and infinity fail; without it, linked with the libraries built without it, which GCC's driver does not pick, each binary checked to hold none of its instructions (VERIFY-111); the tests that do not pass pinned with the reason (VERIFY-102) |
+| PowerPC 32, big-endian, bare metal, with its FPU and without | bare metal: newlib 4.4 | GCC 13.3.0, built from Ubuntu's source packages (`tools/renesas/build.sh`) | `powerpc` (`platforms.yml`, `tools/renesas/`), under psim, GDB 15.1's PowerPC simulator, built from the same packages, which models a 604; plain `char` unsigned, an 8-byte object aligned to 8; at `-O0`, `-O2`, `-O3` and `-Os`; each test linked with the MSP430 job's `tmpfile()`, psim's `lseek` failing, with a start file of its own (`psim_start.S`), libgloss's defining an `__atexit` that newlib 4.4 defines too, and with the linker's script ending each section of data on a word, as psim maps a program section by section (below); the tests that do not pass pinned with the reason (VERIFY-119) |
 
 On Cortex-M, and on Cortex-R5F and Cortex-R52, GCC 13.2 compiles one
 check of `option_test` wrong at `-O2` and `-Os`, and GCC 15.3 compiles it
@@ -56,6 +58,13 @@ VERIFY-110 `compare.h` and `random.h` refuse finite math unless
 GCC 13.3 links the libraries built for the FPU, with finite math and the
 FPU's instructions, whatever the flags; since VERIFY-111 the variants
 without the FPU link those built without it.
+On 32-bit PowerPC under psim, three things are the simulator's
+(`tools/renesas/README.md`): libgloss's start file for it defines an
+`__atexit` that newlib 4.4 defines too, so that no program links; psim
+maps a program section by section, each its exact size, and stops a load
+that passes a section's end, which newlib's `strlen` makes when a string
+ends a section within a word; and its system calls have no `link`, which
+newlib's `rename()` needs, and their `lseek` fails.
 With CompCert at 32-bit Arm Linux, where the compiler defines
 `_TIME_BITS=64` (Ubuntu 24.04's for `arm-linux-gnueabihf` does), add
 `-U__REDIRECT -U__REDIRECT_NTH` to ccomp's options. CompCert's configure
@@ -63,6 +72,14 @@ defines both macros at ARM without the alias by which glibc gives a
 64-bit `time_t` its functions, so that `clock_gettime` and the other
 functions of time are the 32-bit ones, and `util/time.h` reads a clock
 that goes back (VERIFY-114); `compcert-targets` adds them (VERIFY-115).
+Undefined, they leave glibc 2.39 naming the 64-bit functions by macro,
+`#define clock_gettime __clock_gettime64`, with no prototype for them:
+ccomp compiles each call as an implicit declaration, as it does at
+PowerPC 32, where configure defines neither. That is right for
+`clock_gettime` and `nanosleep`, the only functions of time the library
+and its tests call, which return `int`; for `time`, `mktime` and
+`difftime`, whose `time_t` and `double` an implicit declaration takes for
+`int`, it would not be (VERIFY-119, read in glibc's `<time.h>`).
 The CompCert jobs put `core/primitives` on the quote path only
 (`-iquote`): with `-I`, its `limits.h` stands for the system's, which
 picolibc's `<stdint.h>` includes where `__GNUC__` is undefined, and two
@@ -104,11 +121,9 @@ take. No header of the library includes `<math.h>`; two of its tests do.
   QEMU, AVR under simavr, and ARC where a simulator CI can run turns up.
 - WebAssembly under a runtime.
 - CompCert 3.17 at its other targets, each built for it as
-  `compcert-targets` builds it for Linux, in this order: bare-metal
-  PowerPC (`ppc-eabi`), with GCC and newlib built from Ubuntu's source
-  packages, as `renesas` builds its toolchains, the tests on GDB's PowerPC
-  simulator, since QEMU 8.2 has no semihosting for PowerPC; big-endian Arm
-  (`armeb-linux`), with a toolchain built the same way, under qemu-user;
+  `compcert-targets` builds it for Linux, in this order: big-endian Arm
+  (`armeb-linux`), with a toolchain built from Ubuntu's source packages,
+  as `powerpc` builds its own, under qemu-user;
   macOS (`aarch64-macos` on GitHub's macOS runner, and `x86_64-macos`,
   where an Intel runner or Rosetta allows); Cygwin (`x86_64-cygwin`) on
   GitHub's Windows runner; BSD (`x86_64-bsd`, `x86_32-bsd`) in a FreeBSD
@@ -200,7 +215,8 @@ untested on that compiler.
 
 A compiler is usable when CI can download it itself, its checksum pinned,
 as the `msp430` job fetches TI's, `cortex-m` Arm's and `dspic` Microchip's, or build it from
-sources in Ubuntu's archive, as `renesas` builds GCC for RH850 and RX; a
+sources in Ubuntu's archive, as `renesas` builds GCC for RH850 and RX,
+and `powerpc` for PowerPC; a
 free compiler with no emulator for its target is usable too, and its
 target compiled only, as AVR is.
 
@@ -219,8 +235,8 @@ For TriCore the author took the community port of GCC, planned under
 with a licence that does not expire.
 
 CompCert's `ppc-eabi-diab` waits for a compiler too, though its
-architecture does not: PowerPC is tested with GCC and planned with
-CompCert's `ppc-eabi` (above). It is CompCert configured to use Wind
+architecture does not: PowerPC is tested with GCC, at Linux and on bare
+metal, and with CompCert's `ppc-eabi` (above). It is CompCert configured to use Wind
 River's Diab tools in place of GNU's: `dcc` to preprocess and to link,
 `das` to assemble, `dar` to archive (CompCert 3.17's `configure`). Diab
 is Wind River's commercial compiler, which CI cannot fetch or install

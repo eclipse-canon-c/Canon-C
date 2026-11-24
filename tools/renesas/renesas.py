@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-renesas.py -- the test suite on Renesas cores under GDB's simulators, with
-GCC and newlib built from Ubuntu's source packages (VERIFY-101, VERIFY-102).
+renesas.py -- the test suite under GDB's simulators, with GCC and newlib
+built from Ubuntu's source packages: on Renesas cores (VERIFY-101,
+VERIFY-102), and on 32-bit PowerPC (VERIFY-119), whose job is powerpc.
 
 tools/renesas/build.sh builds the toolchain of a target from the release
 tarballs of Ubuntu's binutils-source, gcc-13-source, newlib-source and
@@ -33,11 +34,23 @@ exit status through newlib's system calls. The variants:
                 instructions as ever; linked also with crtbegin.o and
                 crtend.o, no-fpu-libs', whose .init_array and .fini_array
                 are marked as data (crt_fixed, below).
+    ppc         powerpc-eabi, -mhard-float: 32-bit PowerPC, big-endian,
+                with its FPU, as GCC's default is, under psim, GDB's
+                simulator of PowerPC, which models a 604; linked with
+                -msim, libgloss's system calls for psim, tmpfile.c's
+                tmpfile() (psim's lseek fails), the start file of
+                psim_start.S in place of libgloss's, which defines an
+                __atexit that newlib 4.4 defines too, and the linker's own
+                script with the data sections ending on a word (psim,
+                below).
+    ppc-soft    the same with -msoft-float: no FPU, float and double in
+                libgcc's software, with newlib's and libgcc's nof multilib.
 
 Each is built at the four build types of CMake: Debug (-O0), Release
 (-O3), RelWithDebInfo (-O2) and MinSizeRel (-Os), with
-CANON_LIFETIME_NO_ATOMICS defined: neither GCC port has a 64-bit atomic,
-and their libgcc no __atomic_fetch_add_8 (the V850's has none at all). At
+CANON_LIFETIME_NO_ATOMICS defined: none of the three GCC ports has a 64-bit
+atomic, and their libgcc no __atomic_fetch_add_8, which 32-bit PowerPC's
+calls (the V850's has no atomic at all). At
 RX, Debug's flags are -O0 without -g: GCC 13.3's RX port stops with an
 internal compiler error on most tests at -O0 -g (VERIFY-102). A test
 passes when it exits with status 0, within TIMEOUT seconds. Before the
@@ -52,8 +65,10 @@ FAIL), or "times-out", stopped at PINNED_TIMEOUT seconds. A test the pins
 do not name must pass. An outcome other than its pin's is a difference;
 with ENFORCE, a difference fails the run, unless the run is --report-only.
 A run that cannot configure, whose probe fails, that finds no test, builds
-none, or builds a binary not of the variant's machine and flags, always
-fails; so does one, at RX, whose binaries hold an instruction of the FPU
+none, or builds a binary not of the variant's machine and flags, or at
+PowerPC of another floating-point ABI than the variant's (its GNU
+attribute), always fails; so does one, at RX, whose binaries hold an
+instruction of the FPU
 where the variant has none, or none at all where it has the FPU
 (fpu_check), and one, where the variant links no-fpu-libs, whose link
 takes a start file or a library from elsewhere, or whose libraries hold
@@ -62,6 +77,7 @@ one (nofpu_check; VERIFY-111).
     python3 tools/renesas/renesas.py run VARIANT [BUILD...] [--report-only]
     python3 tools/renesas/renesas.py check
     python3 tools/renesas/renesas.py target VARIANT
+    python3 tools/renesas/renesas.py link VARIANT
 
 "run" needs the variant's toolchain on the PATH (build.sh's PREFIX/bin),
 and writes its builds and summaries to renesas_out/. The steps it shares
@@ -71,7 +87,10 @@ tools/cortexm/cortexm.py (CTest's list, FAIL lines) are those scripts'.
 "check" is 8 · Records': each pin well formed, naming a test of
 CMakeLists.txt, no two pins for the same test and leg, and the support
 files there. "target" prints the toolchain's target of a variant, for the
-workflow.
+workflow. "link" builds the variant's support in renesas_out/ and prints
+the arguments a test is linked with, one a line, for the job that links
+the tests compiled by CompCert at ppc-eabi (analysis.yml's compcert-ppc,
+VERIFY-119).
 """
 import json
 import os
@@ -96,21 +115,30 @@ TIMEOUT = 300         # seconds a test, under the simulator
 PINNED_TIMEOUT = 60   # seconds a test pinned to time out
 SHOWN = 6             # differences named in a notice
 
-# Each variant: its toolchain's target, its flags, what it links besides
-# (link), what its binaries say (machine and data from the ELF header, an
-# e_flags word and the RH850 ABI's FPU note where it has them), its
-# support: open.c's _open (open_c), tmpfile.c's tmpfile() (tmpfile_c), the
-# corrected crt files (crt_fixed); whether it links the libraries built
-# without the FPU (nofpu_libs); what its binaries hold of the FPU's
-# instructions, where they are counted: 'some' or 'none' (fpu_insns); the
-# flags of CMake's Debug, where the variant sets them (debug); and the
-# defines of its tests besides DEFINES (defines).
-V850 = {'target': 'v850-elf', 'link': [], 'machine': 'V850', 'data': 'little endian',
-        'e_flags': None, 'open_c': True, 'tmpfile_c': False, 'crt_fixed': False,
-        'nofpu_libs': False, 'fpu_insns': None, 'debug': None, 'defines': ''}
-RX = {'target': 'rx-elf', 'link': ['-msim'], 'machine': 'Renesas RX', 'fpu': None,
-      'e_flags': '64-bit doubles', 'open_c': False, 'tmpfile_c': True, 'debug': '-O0',
-      'nofpu_libs': False, 'fpu_insns': 'some', 'defines': ''}
+# Each variant: its toolchain's target, the family its notices are titled
+# by (family), its flags, what it links besides (link), what its binaries
+# say (machine and data from the ELF header, an e_flags word, the RH850
+# ABI's FPU note and PowerPC's floating-point ABI attribute where they have
+# them), its support: open.c's _open (open_c), tmpfile.c's tmpfile()
+# (tmpfile_c), the corrected crt files (crt_fixed), psim_start.S's start
+# file and the padded linker script (psim); whether it links the libraries
+# built without the FPU
+# (nofpu_libs); what its binaries hold of the FPU's instructions, where
+# they are counted: 'some' or 'none' (fpu_insns); the flags of CMake's
+# Debug, where the variant sets them (debug); and the defines of its tests
+# besides DEFINES (defines).
+V850 = {'target': 'v850-elf', 'family': 'renesas', 'link': [], 'machine': 'V850',
+        'data': 'little endian', 'e_flags': None, 'float_abi': None, 'open_c': True,
+        'tmpfile_c': False, 'crt_fixed': False, 'psim': False, 'nofpu_libs': False,
+        'fpu_insns': None, 'debug': None, 'defines': ''}
+RX = {'target': 'rx-elf', 'family': 'renesas', 'link': ['-msim'], 'machine': 'Renesas RX',
+      'fpu': None, 'e_flags': '64-bit doubles', 'float_abi': None, 'open_c': False,
+      'tmpfile_c': True, 'psim': False, 'debug': '-O0', 'nofpu_libs': False,
+      'fpu_insns': 'some', 'defines': ''}
+PPC = {'target': 'powerpc-eabi', 'family': 'powerpc', 'link': ['-msim'], 'machine': 'PowerPC',
+       'data': 'big endian', 'fpu': None, 'e_flags': None, 'open_c': False, 'tmpfile_c': True,
+       'crt_fixed': False, 'psim': True, 'nofpu_libs': False, 'fpu_insns': None,
+       'debug': None, 'defines': ''}
 VARIANTS = {
     'rh850': {**V850, 'flags': '-mv850e3v5', 'fpu': 'FPU-3.0'},
     'rh850-soft': {**V850, 'flags': '-mv850e3v5 -msoft-float', 'fpu': 'not set'},
@@ -125,6 +153,8 @@ VARIANTS = {
     'rx-be': {**RX, 'flags': '-mcpu=rx600 -m64bit-doubles -nofpu -mbig-endian-data',
               'data': 'big endian', 'crt_fixed': True, 'nofpu_libs': True,
               'fpu_insns': 'none'},
+    'ppc': {**PPC, 'flags': '-mhard-float', 'float_abi': 'hard float'},
+    'ppc-soft': {**PPC, 'flags': '-msoft-float', 'float_abi': 'soft float'},
 }
 DEFINES = '-DCANON_LIFETIME_NO_ATOMICS'
 
@@ -134,8 +164,13 @@ def defines(variant):
     return (DEFINES + ' ' + VARIANTS[variant]['defines']).strip()
 
 BUILDS = cortexm.BUILDS
-SUPPORT = ('build.sh', 'toolchain.cmake', 'open.c', 'pins.txt', 'README.md')
+SUPPORT = ('build.sh', 'toolchain.cmake', 'open.c', 'psim_start.S', 'pins.txt', 'README.md')
 CRT_ARRAYS = ('.init_array', '.fini_array')
+# The linker's emulation at -msim (GCC's link_os_sim spec), and the sections
+# of its script that psim_script ends on a multiple of 4: those of data
+# that can end within a word.
+PSIM_EMULATION = 'elf32ppcsim'
+PSIM_PADDED = ('.rodata', '.rodata1', '.sdata2', '.sbss2', '.data', '.data1', '.sdata', '.sbss')
 # The RX FPU's instructions, as objdump names them, without a size: RXv1's,
 # RXv2's (fsqrt, ftou, utof) and RXv3's of the double-precision FPU (dcmp
 # with its condition). Not among them: MVTC and MVFC, which move a control
@@ -218,6 +253,11 @@ def tool(variant, name):
     return VARIANTS[variant]['target'] + '-' + name
 
 
+def family(variant):
+    """What the variant's notices are titled by: renesas, or powerpc."""
+    return VARIANTS[variant]['family']
+
+
 def read_pins():
     """[{line, test, variants, builds, outcome, fails}], and the problems."""
     pins, problems = [], []
@@ -286,7 +326,8 @@ def facts(variant):
            input='#include <stdio.h>\n')
     macros = dict(re.findall(r'^#define (\w+)(?: (.*))?$', r.stdout, re.M))
     version = macros.get('_NEWLIB_VERSION', '?').strip('"')
-    keys = [k for k in sorted(macros) if re.match(r'__(v850|V850|RH850|RX)\w*__$', k)]
+    keys = [k for k in sorted(macros) if re.match(r'__(v850|V850|RH850|RX)\w*__$|_ARCH_PPC\w*$'
+                                                  r'|_SOFT_FLOAT$|__NO_FPRS__$', k)]
     multi = sh([tool(variant, 'gcc'), *flags, '-print-multi-directory']).stdout.strip()
     libs = multi or '?'
     if VARIANTS[variant]['nofpu_libs']:
@@ -307,14 +348,14 @@ def probe(variant, out, link):
     os.makedirs(d, exist_ok=True)
     src, elf = os.path.join(d, 'probe.c'), os.path.join(d, 'probe')
     with open(src, 'w', encoding='utf-8') as f:
-        f.write(PROBE)
+        f.write(PROBE.replace('renesas probe:', f'{family(variant)} probe:'))
     r = sh([tool(variant, 'gcc'), *VARIANTS[variant]['flags'].split(), '-std=c99', '-O1', src,
             *link, '-o', elf])
     if r.returncode != 0:
         shown(r.stdout + r.stderr)
         raise RuntimeError(f'{variant}: the probe does not build')
     got = run_test({'command': [tool(variant, 'run'), elf], 'cwd': d}, 60)
-    lines = [line for line in got['tail'] if line.startswith('renesas probe:')]
+    lines = [line for line in got['tail'] if line.startswith(f'{family(variant)} probe:')]
     if got['outcome'] == 'times-out' or got['rc'] != PROBE_STATUS or not lines:
         shown('\n'.join(got['tail']))
         raise RuntimeError(f'{variant}: under the simulator the probe exits with '
@@ -360,7 +401,78 @@ def support(variant, out):
         link.append('-B' + crt_fixed(variant, d, nofpu) + os.sep)
     if nofpu is not None:
         link.append('-B' + nofpu + os.sep)
+    if v['psim']:
+        link += ['-B' + psim_start(variant, d) + os.sep, '-Wl,-T,' + psim_script(variant, d)]
     return link
+
+
+def psim_start(variant, d):
+    """libgloss's sim-crt0.o, which GCC links at -msim, defines __atexit,
+    which newlib 4.4 defines too, and no program links (psim_start.S).
+    psim_start.S assembled for the variant as sim-crt0.o, in a folder that
+    -B puts before GCC's, under the variant's multilib folder, where the
+    driver looks first: returns the folder."""
+    flags = VARIANTS[variant]['flags'].split()
+    multi = sh([tool(variant, 'gcc'), *flags, '-print-multi-directory']).stdout.strip()
+    folder = os.path.join(d, 'start')
+    os.makedirs(os.path.join(folder, multi), exist_ok=True)
+    obj = os.path.join(folder, multi, 'sim-crt0.o')
+    r = sh([tool(variant, 'gcc'), *flags, '-c', os.path.join(HERE, 'psim_start.S'), '-o', obj])
+    if r.returncode != 0 or not multi:
+        shown(r.stdout + r.stderr)
+        raise RuntimeError(f'{variant}: psim_start.S does not assemble')
+    return folder
+
+
+def psim_script(variant, d):
+    """psim maps a program section by section, each its exact size
+    (map-binary, sim/ppc/hw_init.c), and stops a program with signal 11 on
+    a load that passes a section's end, or spans two sections. newlib's
+    strlen reads the aligned word that holds a string's end, so a test
+    stops whose string ends a section within a word: which test depends on
+    the layout (VERIFY-119). The linker's own script for -msim (ld --verbose
+    -m elf32ppcsim), with each of PSIM_PADDED ending on a multiple of 4, in
+    the support folder: returns its path. attributes() checks that every
+    section of a test's binary begins and ends on one."""
+    r = sh([tool(variant, 'ld'), '--verbose', '-m', PSIM_EMULATION])
+    parts = r.stdout.split('=' * 50)
+    if r.returncode != 0 or len(parts) != 3:
+        shown(r.stdout + r.stderr)
+        raise RuntimeError(f'{variant}: ld gives no script of {PSIM_EMULATION}')
+    script = parts[1]
+    for name in PSIM_PADDED:
+        m = re.search(r'^\s*' + re.escape(name) + r'\s*:', script, re.M)
+        start = script.find('{', m.end()) if m else -1
+        if start < 0:
+            raise RuntimeError(f'{variant}: no {name} in the script of {PSIM_EMULATION}')
+        depth, end = 0, None
+        for i in range(start, len(script)):
+            depth += {'{': 1, '}': -1}.get(script[i], 0)
+            if depth == 0:
+                end = i
+                break
+        if end is None:
+            raise RuntimeError(f'{variant}: {name} has no end in the script')
+        script = script[:end] + ' . = ALIGN(4); ' + script[end:]
+    path = os.path.join(d, 'psim.ld')
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(script)
+    return path
+
+
+def unaligned_sections(variant, binary):
+    """The sections of a binary, loaded into memory and not empty, that
+    begin or end off a multiple of 4: psim stops a word's load across
+    them (psim_script)."""
+    r = sh([tool(variant, 'readelf'), '-S', '-W', binary])
+    found = []
+    for name, addr, size, flags in re.findall(
+            r'^\s*\[\s*\d+\]\s+(\S+)\s+\S+\s+([0-9a-f]+)\s+[0-9a-f]+\s+([0-9a-f]+)\s+\S+\s+(\S*)',
+            r.stdout, re.M):
+        a, n = int(addr, 16), int(size, 16)
+        if 'A' in flags and n and (a % 4 or (a + n) % 4):
+            found.append(f'{name} at {a:#x}, {n} bytes')
+    return found
 
 
 def nofpu_multi(variant):
@@ -517,7 +629,8 @@ def configure_and_build(variant, build, out, env):
 def attributes(b, name, binary, variant, build):
     """The binary's class, byte order, machine and flags; the notes the RH850
     ABI's binaries carry (the alignment of 8-byte objects, the FPU the code
-    needs); whether its test was compiled with the variant's flags, and at
+    needs); PowerPC's floating-point ABI, its GNU attribute (hard float or
+    soft float); whether its test was compiled with the variant's flags, and at
     Debug with the variant's Debug flags and no -g (CMake's flags.make); and
     their problems."""
     v = VARIANTS[variant]
@@ -526,6 +639,9 @@ def attributes(b, name, binary, variant, build):
     notes = dict(re.findall(r'^\s*(Alignment of 8-byte objects|Type of FPU support needed):'
                             r'\s*(.*?)\s*$', sh([tool(variant, 'readelf'), '-n', binary]).stdout,
                             re.M))
+    m = re.search(r'^\s*Tag_GNU_Power_ABI_FP:\s*(.*?)\s*$',
+                  sh([tool(variant, 'readelf'), '-A', binary]).stdout, re.M)
+    float_abi = m.group(1) if m else None
     problems = []
     if head.get('Class') != 'ELF32' or v['machine'].upper() not in head.get('Machine', '').upper() \
             or v['data'] not in head.get('Data', ''):
@@ -535,6 +651,11 @@ def attributes(b, name, binary, variant, build):
                         f'"{v["fpu"]}"')
     if v['e_flags'] is not None and v['e_flags'] not in head.get('Flags', ''):
         problems.append(f'its flags are "{head.get("Flags")}", without "{v["e_flags"]}"')
+    if v['float_abi'] is not None and not (float_abi or '').startswith(v['float_abi'] + ','):
+        problems.append(f'its floating-point ABI is "{float_abi}", not {v["float_abi"]}')
+    if v['psim']:
+        problems += [f'its section {u} begins or ends off a word: psim stops a load '
+                     f'across it' for u in unaligned_sections(variant, binary)]
     flags = os.path.join(b, 'CMakeFiles', name + '.dir', 'flags.make')
     text = open(flags, encoding='utf-8').read() if os.path.exists(flags) else ''
     if v['flags'] not in text:
@@ -552,6 +673,8 @@ def attributes(b, name, binary, variant, build):
                  f'FPU {notes.get("Type of FPU support needed")}; ')
     else:
         what += f'flags {head.get("Flags")}; '
+    if v['float_abi'] is not None:
+        what += f'floating-point ABI {float_abi}; '
     what += f'compiled with {v["flags"]}'
     return what + (f', and {v["debug"]} without -g' if debug else ''), problems
 
@@ -701,7 +824,7 @@ def leg(variant, build, out, env, pins):
     failed = [r for r in rows if r['got']['outcome'] in ('fails', 'times-out')]
     unbuilt = [r for r in rows if r['got']['outcome'] == 'not-built']
     minutes = (time.time() - t0) / 60
-    line = (f'renesas {variant} {build}: {len(rows)} tests, {len(passed)} passed, '
+    line = (f'{family(variant)} {variant} {build}: {len(rows)} tests, {len(passed)} passed, '
             f'{len(failed)} failed')
     if failed:
         line += ' (' + ', '.join(f'{r["name"]} {described(r["got"]["outcome"], r["got"]["fails"])}'
@@ -780,6 +903,14 @@ def main(argv):
     if argv[:1] == ['target'] and len(argv) == 2 and argv[1] in VARIANTS:
         print(VARIANTS[argv[1]]['target'])
         return 0
+    if argv[:1] == ['link'] and len(argv) == 2 and argv[1] in VARIANTS:
+        try:
+            link = support(argv[1], OUT)
+        except RuntimeError as e:
+            print(f'::error title={family(argv[1])} {argv[1]}::{e}')
+            return 1
+        print('\n'.join(link))
+        return 0
     report_only = '--report-only' in argv
     args = [a for a in argv if a != '--report-only']
     if len(args) < 2 or args[0] != 'run' or args[1] not in VARIANTS \
@@ -797,31 +928,31 @@ def main(argv):
     os.makedirs(OUT, exist_ok=True)
     all_diffs = list(problems)
     try:
-        for name in ('gcc', 'run', 'readelf', 'objcopy', 'objdump'):
+        for name in ('gcc', 'run', 'readelf', 'objcopy', 'objdump', 'ld'):
             if not shutil.which(tool(variant, name)):
                 raise RuntimeError(f'{tool(variant, name)} must be on the PATH: '
                                    f'tools/renesas/build.sh builds it')
         link = support(variant, OUT)
         line = probe(variant, OUT, link)
         print(line)
-        print(f'::notice title=renesas {variant} probe::{line}')
+        print(f'::notice title={family(variant)} {variant} probe::{line}')
         if VARIANTS[variant]['nofpu_libs']:
             line = nofpu_check(variant, OUT, link)
             print(line)
-            print(f'::notice title=renesas {variant} libraries::{line}')
+            print(f'::notice title={family(variant)} {variant} libraries::{line}')
         for line in file_probe(variant, OUT, link):
             print(line)
-            print(f'::notice title=renesas {variant} file probe::{line}')
+            print(f'::notice title={family(variant)} {variant} file probe::{line}')
         env = environment(variant, link)
         for build in builds:
             line, diffs, _ = leg(variant, build, OUT, env, pins)
-            print(f'::notice title=renesas {variant} {build}::{line}')
+            print(f'::notice title={family(variant)} {variant} {build}::{line}')
             all_diffs += diffs
     except RuntimeError as e:
-        print(f'::error title=renesas {variant}::{e}')
+        print(f'::error title={family(variant)} {variant}::{e}')
         return 1
     if all_diffs and ENFORCE and not report_only:
-        print(f'::error title=renesas {variant}::{len(all_diffs)} difference(s) from '
+        print(f'::error title={family(variant)} {variant}::{len(all_diffs)} difference(s) from '
               f'tools/renesas/pins.txt')
         return 1
     if all_diffs:

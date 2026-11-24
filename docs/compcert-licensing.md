@@ -37,8 +37,9 @@ In particular:
 
 - **Forks and downstream users:** if you fork Canon-C or reuse its CI
   configuration in a **commercial context**, running the CompCert jobs
-  (`compcert`, and since VERIFY-114 `compcert-targets` and since
-  VERIFY-116 `compcert-bare`, in `analysis.yml`) constitutes *your own*
+  (`compcert`, and since VERIFY-114 `compcert-targets`, since
+  VERIFY-116 `compcert-bare` and since VERIFY-119 `compcert-ppc`, in
+  `analysis.yml`) constitutes *your own*
   use of CompCert and is **not** covered by this permission. You must
   either **disable the CompCert CI jobs** or obtain an appropriate
   CompCert license from AbsInt (https://www.absint.com/).

@@ -1,13 +1,16 @@
-# toolchain.cmake -- the tests for a Renesas target with the toolchain of
-# tools/renesas/build.sh, run under GDB's simulator of the target
-# (VERIFY-101, VERIFY-102). Set by tools/renesas/renesas.py, which says
-# what each variable holds:
-#   CANON_RS_TARGET  the toolchain's target, v850-elf for RH850, rx-elf for RX
+# toolchain.cmake -- the tests for a Renesas target, or 32-bit PowerPC,
+# with the toolchain of tools/renesas/build.sh, run under GDB's simulator
+# of the target (VERIFY-101, VERIFY-102, VERIFY-119). Set by
+# tools/renesas/renesas.py, which says what each variable holds:
+#   CANON_RS_TARGET  the toolchain's target, v850-elf for RH850, rx-elf for
+#                    RX, powerpc-eabi for PowerPC
 #   CANON_RS_FLAGS   the variant's flags, and the defines of every test
 #   CANON_RS_LINK    what each test links besides its objects: the object of
 #                    tools/renesas/open.c (RH850); -msim, and the object of
-#                    tools/msp430/tmpfile.c with -Wl,--wrap=tmpfile (RX);
-#                    -B and the folder of the corrected crt files (rx-be)
+#                    tools/msp430/tmpfile.c with -Wl,--wrap=tmpfile (RX,
+#                    PowerPC); -B and the folder of the corrected crt files
+#                    (rx-be); -B and the folder of psim_start.S's start file,
+#                    and -Wl,-T and the padded linker script (PowerPC)
 #   CANON_RS_RUN     the simulator's command before the binary, ;-separated
 # renesas.py sets CMAKE_C_FLAGS_DEBUG itself where the variant has its own
 # Debug flags (RX: -O0, without -g).

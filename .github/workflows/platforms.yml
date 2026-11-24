@@ -4,9 +4,10 @@ name: "2 · Platforms"
 # embedded compile checks (Cortex-M, RISC-V, AVR), the tests on Cortex-M0+
 # and Cortex-M4 under QEMU, on MSP430X under the GDB simulator, on
 # bare-metal AArch64 (Cortex-A78AE, Cortex-R82) and on Cortex-R5F and
-# Cortex-R52 under QEMU, and on Renesas RH850 and RX under GDB's
-# simulators, with toolchains built from Ubuntu's source packages, as is
-# ARC's, for which the headers and tests are compiled; the platform tiers
+# Cortex-R52 under QEMU, and on Renesas RH850 and RX and bare-metal 32-bit
+# PowerPC under GDB's simulators, with toolchains built from Ubuntu's
+# source packages, as is ARC's, for which the headers and tests are
+# compiled; the platform tiers
 # for dsPIC and PIC24's core, with Microchip's XC-DSC, fetched from
 # Microchip; and finite math, refused, with GCC and Clang. Map:
 # .github/workflows/README.md.
@@ -893,3 +894,80 @@ jobs:
       - name: Finite math refused, with GCC and Clang
         timeout-minutes: 10
         run: python3 -I tools/finite_math_check.py
+
+  # -------------------------------------------------------------------------
+  # 1p. 32-bit PowerPC, bare metal, under GDB's simulator (VERIFY-119)
+  #
+  #    tools/renesas/build.sh, unchanged, builds binutils 2.42, GCC 13.3.0
+  #    (C), newlib 4.4.0 and GDB 15.1's simulator of PowerPC, psim, for
+  #    powerpc-eabi, from the same release tarballs of Ubuntu's source
+  #    packages as the renesas jobs' toolchains. It is kept in the Actions
+  #    cache, an entry of its own beside the renesas jobs' and arc's, which
+  #    analysis.yml's compcert-ppc shares. tools/renesas/renesas.py builds
+  #    each test at the four build types, for 32-bit PowerPC, big-endian,
+  #    with its FPU (ppc) and without (ppc-soft), and runs it under psim,
+  #    linked with -msim, libgloss's system calls for psim, with
+  #    tools/msp430/tmpfile.c's tmpfile(), psim's lseek failing; with the
+  #    start file of tools/renesas/psim_start.S, libgloss's defining an
+  #    __atexit that newlib defines too; and with the linker's own script,
+  #    each section of data ending on a word, as psim maps a program
+  #    section by section and stops a load across a section's end. The
+  #    outcomes are held against tools/renesas/pins.txt, enforced from
+  #    run 1: the pins were measured before it with the same toolchain.
+  # -------------------------------------------------------------------------
+  powerpc:
+    runs-on: ubuntu-24.04
+    env:
+      TARGET: powerpc-eabi
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [ppc, ppc-soft]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Ubuntu's sources of binutils, GCC, newlib and GDB, and GCC's libraries
+        # Without the packages apt recommends, from the Actions cache first
+        # (VERIFY-093): the renesas jobs' entry, the list being theirs. The
+        # limit fails a stalled mirror in 30 minutes.
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-install
+        with:
+          cache-name: renesas
+          packages: binutils-source gcc-13-source newlib-source gdb-source libgmp-dev libmpfr-dev libmpc-dev flex bison
+      - name: The toolchain's cache key
+        id: key
+        run: |
+          versions=$(dpkg-query -W -f='${Package} ${Version}\n' binutils-source gcc-13-source newlib-source gdb-source)
+          echo "$versions"
+          echo "versions=$(echo "$versions" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - name: Cache the toolchain
+        # The entry analysis.yml's compcert-ppc restores, by the same key.
+        id: toolchain
+        uses: actions/cache@v5
+        with:
+          path: ~/gcc-toolchain/${{ env.TARGET }}
+          key: gcc-${{ env.TARGET }}-${{ steps.key.outputs.versions }}-${{ hashFiles('tools/renesas/build.sh') }}
+      - name: Build the toolchain from the sources
+        if: steps.toolchain.outputs.cache-hit != 'true'
+        timeout-minutes: 120
+        run: |
+          mkdir -p "$RUNNER_TEMP/gcc-build"
+          cd "$RUNNER_TEMP/gcc-build"
+          sh "$GITHUB_WORKSPACE/tools/renesas/build.sh" "$TARGET" "$HOME/gcc-toolchain/$TARGET"
+      - name: "The tests on 32-bit PowerPC under GDB's simulator: ${{ matrix.variant }}"
+        timeout-minutes: 60
+        env:
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          export PATH="$HOME/gcc-toolchain/$TARGET/bin:$PATH"
+          python3 tools/renesas/renesas.py run "$VARIANT"
+      - name: Upload the builds' logs and summaries
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: powerpc-${{ matrix.variant }}
+          path: |
+            renesas_out/*.json
+            renesas_out/*.build.log
+          if-no-files-found: warn
+          retention-days: 90

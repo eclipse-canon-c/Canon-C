@@ -938,7 +938,11 @@ For what Canon-C intentionally omits, established C libraries exist:
 > simulators: RH850 with its FPU and without, the RX600 with its FPU,
 > without it, and without it with big-endian data (job `renesas`,
 > VERIFY-101, VERIFY-102); `tools/renesas/pins.txt` names those that do
-> not pass. On RISC-V they are compiled, not run, and so on ARC
+> not pass. On bare-metal 32-bit PowerPC, big-endian, they are built with
+> the same GCC and newlib, built for it, and run under GDB's PowerPC
+> simulator, with the FPU and without (job `powerpc`, VERIFY-119); the
+> same file names those that do not pass. On RISC-V they are compiled,
+> not run, and so on ARC
 > (ARCv2 EM and HS, and ARCompact), with GCC 13.3 built from Ubuntu's
 > source packages (job `arc`, VERIFY-106): neither GDB nor QEMU has an
 > ARC simulator.
@@ -993,9 +997,10 @@ For what Canon-C intentionally omits, established C libraries exist:
 > counter is then a plain increment, not race-free
 > (`CANON_LIFETIME_ATOMIC_IDS` is 0). Or provide
 > `__atomic_fetch_add_8` yourself, with interrupts masked around it.
-> The `cortex-m`, `msp430` and `renesas` jobs define
+> The `cortex-m`, `msp430`, `renesas` and `powerpc` jobs define
 > `CANON_LIFETIME_NO_ATOMICS`; GCC's V850 port, `renesas`'s, has no
-> atomic at all, and its RX port has a 4-byte one only.
+> atomic at all, its RX port has a 4-byte one only, and at 32-bit
+> PowerPC it calls `__atomic_fetch_add_8`, which its libgcc does not have.
 > The `aarch64` job defines nothing: both its cores have Armv8.1's
 > atomics, and GCC compiles the counter to one instruction (`ldadd`).
 >
