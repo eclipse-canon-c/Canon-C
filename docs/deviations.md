@@ -45155,3 +45155,89 @@ What it shows:
 - **GCC in CompCert's place predicted its run exactly**, as at VERIFY-114
   and VERIFY-116: what CompCert does not take is mostly in the headers,
   and newlib's `__func__` is one of those things.
+
+---
+
+## VERIFY-120: Pre-registration — CompCert at `ppc-eabi` Held to Its Pin, newlib's `__func__` Undone for ccomp
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-120 |
+| **Date**       | 2026-11-24 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 340a5d8 (VERIFY-119's change; its close, dd4016d, a record, is pushed with this): `1` and `3` to `6` #103, `2` #138 and `8` #162, at 340a5d8. |
+| **Scope**      | `.github/workflows/analysis.yml`'s `compcert-ppc`: a header given to ccomp with `-include`, its pin, held. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`. No library, test or tool file. |
+| **Category**   | VERIFY-119's "What follows": the pin held, as VERIFY-117 held `compcert-bare`'s; newlib's `__func__` under ccomp undone, the author's choice of 2026-11-24. |
+
+### What is missing
+
+`compcert (ppc-eabi)` measured its first run, "57 / 61 built, 54 ran",
+and holds nothing: another outcome would fail no step. Two of its tests,
+`contract_test` and `diag_test`, failed for no fault of Canon-C's or
+CompCert's: newlib's `<sys/cdefs.h>` defines `__func__` as `NULL` where
+`__GNUC__` is not defined (its lines 410 and 411, "XXX: should use `#if
+__STDC_VERSION__ < 199901'"), and CompCert's preprocessing undefines
+`__GNUC__`. So, under ccomp with newlib, `contract.h`'s handler and
+`diag.h`'s frames are given a null function name, which `contract.h`'s
+default handler prints with `%s`. picolibc excepts CompCert from that
+definition, in 1.8.6 as on its main.
+
+### The author's choice (2026-11-24)
+
+"Undo it via -include": the job gives ccomp a two-line header that
+includes `<sys/cdefs.h>` and then undefines `__func__`, so that ccomp's
+own, C99's, names the function, as `canon_errno` answered picolibc's
+`errno` at `compcert-bare`; `docs/architectures.md` gives the recipe;
+the report to newlib is drafted (item 9c).
+
+### What changes
+
+- **`compcert-ppc`'s test step** writes `ccomp-out/canon_func.h`,
+  `#include <sys/cdefs.h>` and `#undef __func__`, and adds
+  `-include "$PWD/ccomp-out/canon_func.h"` to `compcert`'s flags. ccomp
+  passes `-include FILE` to its preprocessor (`driver/Frontend.ml`:188),
+  which reads the header before the test's first line: `<sys/cdefs.h>`'s
+  guard set, its later inclusions change nothing, and no header but it
+  defines `__func__` (the installed headers, searched).
+- **Its pin**, "57 / 61 built, 56 ran; not built: lifetime_token_test
+  impl_defined_test file_test time_test; did not run: stringbuf_test",
+  **held**: another outcome prints "FAIL: compcert ppc-eabi is pinned to:
+  ..." and fails the step, as at `compcert-bare` since VERIFY-117. The job
+  stays informational (`continue-on-error`).
+- **The documents**: `docs/architectures.md`'s row for `compcert-ppc` (56
+  of 61 run, held, each other test's reason) and a note on newlib's
+  `__func__` and the header; `docs/verification.md`'s row;
+  `docs/status.md`'s row in the CompCert table.
+
+### Measured here
+
+- **The stand-in of VERIFY-119**, GCC compiling ccomp's preprocessing at
+  `ppc-eabi`, linked as the job links, run under psim, with the header
+  given with `-include`: "57 / 61 built, 56 ran; not built:
+  lifetime_token_test impl_defined_test file_test time_test; did not
+  run: stringbuf_test". `contract_test` "58 passed, 0 failed", where it
+  gave "55 passed, 3 failed"; `diag_test` "OK  diag_test  (all assertions
+  passed)", where it stopped with signal 11. `__func__` appears 29 times
+  in `contract_test`'s preprocessed text, and none without the header.
+- **The job's step**, run here from a copy of the tree with the ccomp
+  that is GCC with ccomp's preprocessing: the notice "57 / 61 built, 56
+  ran; ...; did not run: stringbuf_test; as pinned", exit 0; given
+  another pin, exit 1. ShellCheck on the step: nothing.
+- `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Z1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| Z2 | **`compcert (ppc-eabi)` green**, its notice "57 / 61 built, 56 ran; not built: lifetime_token_test impl_defined_test file_test time_test; did not run: stringbuf_test; as pinned", and its listing VERIFY-119's without `contract_test` and `diag_test`. | another count, name or reason, or a failed step | M–H: ccomp's `__func__` with the header is not run here, GCC's in its place |
+| Z3 | **No toolchain and no CompCert is built**: the two `powerpc` legs and `compcert (ppc-eabi)` restore the toolchain from the entry #138 saved, and `compcert (ppc-eabi)` its CompCert, both keys unchanged. | a build step runs | H |
+| Z4 | **Nothing else changes**: every other job of the seven workflows green, and every notice their last runs', word for word, the times aside: 1 and 3 to 6 #103's (3 with `compcert (ppc-eabi)`'s changed as Z2 says), 2 #138's, 8 #162's. | another notice, or a failure | H |
+
+**Not predicted**: the times; GitHub's own notices.
+
+### What follows
+
+Z1 to Z4 scored, and the record closes. Item 9c's three new findings,
+newlib's `__func__` among them, drafted for the author to file. Then the
+rest of item 9b: `armeb-linux`, macOS, Cygwin, BSD.
