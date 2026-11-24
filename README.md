@@ -990,7 +990,8 @@ For what Canon-C intentionally omits, established C libraries exist:
 > where its check finds the call needs it (`CMakeLists.txt`,
 > VERIFY-095), as the `big-endian-32` job shows on 32-bit PowerPC;
 > on 32-bit Arm Linux, whose Armv7-A has a lock-free one (LDREXD and
-> STREXD), the `armhf` job shows no test linked with it (VERIFY-112).
+> STREXD), the `armhf` job shows no test linked with it (VERIFY-112),
+> and the `armeb` job none with big-endian data (VERIFY-121).
 > On bare metal neither libgcc nor newlib or picolibc provides it, and
 > the link fails. Define
 > `CANON_LIFETIME_NO_ATOMICS` for a single thread of execution: the

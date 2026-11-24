@@ -29,12 +29,14 @@ here for them.
 | 32-bit Arm, AArch64, PowerPC 32, x86 and RISC-V 64 | Linux, glibc | CompCert 3.17, built for each with Ubuntu's cross toolchain | `compcert-targets` (`analysis.yml`), the tests under qemu-user, natively at x86: 61 of 61 at each, at 32-bit Arm with `-U__REDIRECT -U__REDIRECT_NTH` (below), each target held to that (VERIFY-115); informational, as `compcert` |
 | 32-bit Arm, bare metal: ARMv7-A (Cortex-A9; the hard-float ABI, and the base ABI), ARMv7-R (Cortex-R5F), ARMv7-M (Cortex-M7, double-precision FPU), ARMv6 (ARM1176) | bare metal: picolibc 1.8.6 | CompCert 3.17 (`arm-eabihf`, `arm-eabi`, `armv7r-eabihf`, `armv7m-eabihf`, `armv6-eabihf`), Ubuntu's `arm-none-eabi` GCC preprocessing, assembling and linking for it | `compcert-bare` (`analysis.yml`), on QEMU's models of the cores through semihosting: 55 of the 61 tests at each, held to that (VERIFY-117); not `lifetime_token_test`, `time_test`, `impl_defined_test` and `file_test`, for what picolibc on bare metal does not give, nor `compare_test` and `parse_test`, whose `<math.h>` CompCert does not take (below); informational, as `compcert` |
 | PowerPC 32, big-endian, bare metal: the embedded ABI, with the FPU | bare metal: newlib 4.4 | CompCert 3.17 (`ppc-eabi`), the `powerpc` job's toolchain preprocessing, assembling and linking for it | `compcert-ppc` (`analysis.yml`), under psim, GDB 15.1's PowerPC simulator, each test linked as `powerpc` links its tests at `ppc` (below): 56 of 61 run, held to that (VERIFY-120): not built, `lifetime_token_test` and `time_test`, which use what newlib gives only with `_POSIX_BARRIERS` and `_POSIX_TIMERS`, and `impl_defined_test` and `file_test`, psim's system calls having no `link`, which `rename()` needs; `stringbuf_test` failing, its `%ls` on big-endian data, as at `powerpc`; newlib's `__func__` undone for ccomp (below); informational, as `compcert` |
+| 32-bit Arm, big-endian (Armv7-A, hard float) | Linux, glibc 2.39 | CompCert 3.17 (`armeb-linux`), the `armeb` job's toolchain preprocessing, assembling and linking for it | `compcert-armeb` (`analysis.yml`), under qemu-user in that toolchain's sysroot, each binary checked BE8: run 1 measures, against VERIFY-121's prediction, 61 of 61; configure's `__REDIRECT` left as it is, this GCC not defining `_TIME_BITS=64` (below); informational, as `compcert` |
 | x86, 32-bit | Linux, glibc | GCC (`-m32`) | `build-32bit` (`ci.yml`): `size_t` exactly 32 bits |
 | AArch64 | Linux, glibc | GCC, Clang | `build-arm64` (`platforms.yml`), on GitHub's Arm runner, with sanitizers; `char` is unsigned there |
 | AArch64 | macOS | Apple Clang | `build` (`ci.yml`), `macos-latest` is Apple silicon |
 | s390x, big-endian | Linux, glibc | GCC | `big-endian` (`platforms.yml`), under qemu-user |
 | PowerPC 32, big-endian | Linux, glibc | GCC | `big-endian-32` (`platforms.yml`), under qemu-user, also with `CANON_LIFETIME=debug`; `char` is unsigned there, and the 64-bit atomic of `lifetime.h` is libatomic's |
 | 32-bit Arm (Armv7-A, Thumb-2, hard float) | Linux, glibc | GCC 13.3 (Ubuntu's `arm-linux-gnueabihf`) | `armhf` (`platforms.yml`), under qemu-user, also with `CANON_LIFETIME=debug`; `char` is unsigned there and a `uint64_t` in a struct aligned to 8, and the 64-bit atomic of `lifetime.h` is lock-free (LDREXD and STREXD), no test linked with libatomic (VERIFY-112) |
+| 32-bit Arm, big-endian (Armv7-A, Thumb-2, hard float; BE8) | Linux, glibc 2.39 | GCC 13.3.0, with binutils 2.42 and glibc 2.39, built from Ubuntu's source packages (`tools/armeb/build.sh`) | `armeb` (`platforms.yml`, `tools/armeb/`), under qemu-user (`qemu-armeb`) in the toolchain's sysroot, also with `CANON_LIFETIME=debug`; its data big-endian and its instructions little-endian (BE8), each binary checked; as at `armhf`, `char` unsigned, a `uint64_t` in a struct aligned to 8, and the 64-bit atomic of `lifetime.h` lock-free, no test linked with libatomic; `time_t` and `off_t` of 32 bits, glibc's default, where Ubuntu's GCC for armhf makes them 64 (VERIFY-121) |
 | Cortex-M0+ (Armv6-M, soft float) | bare metal: newlib; picolibc | GCC 13.2 (Ubuntu's `arm-none-eabi`), with newlib and picolibc; GCC 15.3 (the Arm GNU Toolchain 15.3.Rel2), with its newlib | `cortex-m` (`platforms.yml`, `tools/cortexm/`), under QEMU's micro:bit, whose Cortex-M0 runs Armv6-M code, its memory enlarged; at `-O0`, `-O2`, `-O3` and `-Os`; the tests that do not pass pinned with the reason |
 | Cortex-M4 (Armv7E-M, hard float) | bare metal: newlib; picolibc | the same | `cortex-m`, under QEMU's mps2-an386 |
 | MSP430X, 16-bit `int` | bare metal: newlib 2.4 (TI's) | GCC 9.3.1 (TI's MSP430-GCC-OPENSOURCE 9.3.1.2, Mitto Systems' build) | `msp430` (`platforms.yml`, `tools/msp430/`), under the GDB simulator the toolchain ships; the small memory model (16-bit `size_t`) and the large (20-bit); at `-O0`, `-O2`, `-O3` and `-Os`; the tests below Tier 1 only, which refuses both `size_t`s; the tests that do not pass pinned with the reason (VERIFY-097) |
@@ -79,7 +81,10 @@ PowerPC 32, where configure defines neither. That is right for
 `clock_gettime` and `nanosleep`, the only functions of time the library
 and its tests call, which return `int`; for `time`, `mktime` and
 `difftime`, whose `time_t` and `double` an implicit declaration takes for
-`int`, it would not be (VERIFY-119, read in glibc's `<time.h>`).
+`int`, it would not be (VERIFY-119, read in glibc's `<time.h>`). At
+big-endian 32-bit Arm, `armeb-linux`, the `armeb` job's GCC, as released,
+does not define `_TIME_BITS=64`: `time_t` has 32 bits, glibc declares the
+functions of time by their own names, and nothing is added (VERIFY-121).
 The CompCert jobs put `core/primitives` on the quote path only
 (`-iquote`): with `-I`, its `limits.h` stands for the system's, which
 picolibc's `<stdint.h>` includes where `__GNUC__` is undefined, and two
@@ -130,9 +135,7 @@ from that definition.
   QEMU, AVR under simavr, and ARC where a simulator CI can run turns up.
 - WebAssembly under a runtime.
 - CompCert 3.17 at its other targets, each built for it as
-  `compcert-targets` builds it for Linux, in this order: big-endian Arm
-  (`armeb-linux`), with a toolchain built from Ubuntu's source packages,
-  as `powerpc` builds its own, under qemu-user;
+  `compcert-targets` builds it for Linux, in this order:
   macOS (`aarch64-macos` on GitHub's macOS runner, and `x86_64-macos`,
   where an Intel runner or Rosetta allows); Cygwin (`x86_64-cygwin`) on
   GitHub's Windows runner; BSD (`x86_64-bsd`, `x86_32-bsd`) in a FreeBSD
@@ -156,7 +159,6 @@ from that definition.
 measured where the list says so:
 
 - Armv8-M (Cortex-M33, Cortex-M55). Cortex-M7 is planned tested (above).
-- 32-bit Arm, big-endian.
 - PowerPC e200 with VLE (NXP MPC5xxx), with NXP's GCC 4.9.4 and its VLE
   patches, built from their sources once NXP's own are found and the
   patches checked against them; compiled only, since no emulator runs

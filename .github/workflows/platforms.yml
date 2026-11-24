@@ -1,16 +1,16 @@
 name: "2 · Platforms"
 # Portability beyond the build matrix: musl, Linux AArch64, C11 to C23,
-# 32-bit Arm, big-endian s390x and 32-bit PowerPC under qemu, the
-# embedded compile checks (Cortex-M, RISC-V, AVR), the tests on Cortex-M0+
-# and Cortex-M4 under QEMU, on MSP430X under the GDB simulator, on
-# bare-metal AArch64 (Cortex-A78AE, Cortex-R82) and on Cortex-R5F and
-# Cortex-R52 under QEMU, and on Renesas RH850 and RX and bare-metal 32-bit
-# PowerPC under GDB's simulators, with toolchains built from Ubuntu's
-# source packages, as is ARC's, for which the headers and tests are
-# compiled; the platform tiers
-# for dsPIC and PIC24's core, with Microchip's XC-DSC, fetched from
-# Microchip; and finite math, refused, with GCC and Clang. Map:
-# .github/workflows/README.md.
+# 32-bit Arm, big-endian s390x and 32-bit PowerPC under qemu, and 32-bit
+# Arm with big-endian data, its toolchain built from Ubuntu's source
+# packages; the embedded compile checks (Cortex-M, RISC-V, AVR), the tests
+# on Cortex-M0+ and Cortex-M4 under QEMU, on MSP430X under the GDB
+# simulator, on bare-metal AArch64 (Cortex-A78AE, Cortex-R82) and on
+# Cortex-R5F and Cortex-R52 under QEMU, and on Renesas RH850 and RX and
+# bare-metal 32-bit PowerPC under GDB's simulators, with toolchains built
+# from Ubuntu's source packages, as is ARC's, for which the headers and
+# tests are compiled; the platform tiers for dsPIC and PIC24's core, with
+# Microchip's XC-DSC, fetched from Microchip; and finite math, refused,
+# with GCC and Clang. Map: .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -333,6 +333,124 @@ jobs:
           echo "the 64-bit atomic inline (LDREXD):$inline"
           # No title, as big-endian-32's: the leg is in the message.
           echo "::notice::armhf ${{ matrix.build_type }} ${{ matrix.lifetime }}: Armv7-A, Thumb-2, hard float; $(echo "$need" | wc -w) of $all test binaries linked with libatomic, $(echo "$inline" | wc -w) with the 64-bit atomic inline (LDREXD)"
+          if [ -n "$need" ]; then echo "::error::linked with libatomic:$need"; exit 1; fi
+          case " $inline " in
+            *" lifetime_test "*) ;;
+            *) echo "::error::lifetime_test holds no LDREXD"; exit 1 ;;
+          esac
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure --no-tests=error
+
+  # -------------------------------------------------------------------------
+  # 1f4. 32-bit Arm, big-endian — Linux armeb, GCC and glibc built from
+  #      Ubuntu's source packages, run under qemu-user (VERIFY-121)
+  #
+  #    armhf, above, with its data big-endian: Armv7-A, Thumb-2, VFPv3-D16
+  #    and the hard-float ABI, linked as BE8, the instructions little-endian.
+  #    Ubuntu has no toolchain for it, so tools/armeb/build.sh builds one
+  #    from the release tarballs of Ubuntu's source packages, binutils
+  #    2.42, GCC 13.3.0 and glibc 2.39, and the kernel's headers of
+  #    linux-libc-dev-armhf-cross, kept in the Actions cache, the entry
+  #    analysis.yml's compcert-armeb restores. Each test runs under
+  #    qemu-armeb in that toolchain's sysroot. That GCC is GCC as released,
+  #    without Ubuntu's defaults: no _TIME_BITS=64, so that time_t has 32
+  #    bits here and 64 at armhf, and no PIE. As at armhf: each build type
+  #    with CANON_LIFETIME=debug too; the job names the test binaries that
+  #    hold the 64-bit atomic inline, and fails if one is linked with
+  #    libatomic, lifetime_test holds no LDREXD, or a binary is not BE8.
+  #    --no-tests=error: a leg that finds no test fails.
+  # -------------------------------------------------------------------------
+  armeb:
+    runs-on: ubuntu-24.04
+    env:
+      TARGET: armeb-linux-gnueabihf
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+        lifetime: ["off", "debug"]   # quoted: YAML 1.1 reads a bare off as false
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Ubuntu's sources of binutils, GCC and glibc, the kernel's headers for Arm, and qemu-user
+        # From the Actions cache, or from Canonical's archive before Azure's
+        # mirror (VERIFY-093); the limit fails a stalled install in 30 minutes.
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-install
+        with:
+          cache-name: armeb
+          packages: binutils-source gcc-13-source glibc-source linux-libc-dev-armhf-cross libgmp-dev libmpfr-dev libmpc-dev flex bison gawk qemu-user
+      - name: The toolchain's cache key
+        id: key
+        run: |
+          versions=$(dpkg-query -W -f='${Package} ${Version}\n' binutils-source gcc-13-source glibc-source linux-libc-dev-armhf-cross)
+          echo "$versions"
+          echo "versions=$(echo "$versions" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - name: Cache the toolchain
+        # The entry analysis.yml's compcert-armeb restores, by the same key.
+        id: toolchain
+        uses: actions/cache@v5
+        with:
+          path: ~/gcc-toolchain/${{ env.TARGET }}
+          key: gcc-${{ env.TARGET }}-${{ steps.key.outputs.versions }}-${{ hashFiles('tools/armeb/build.sh') }}
+      - name: Build the toolchain from the sources
+        if: steps.toolchain.outputs.cache-hit != 'true'
+        timeout-minutes: 120
+        run: |
+          mkdir -p "$RUNNER_TEMP/gcc-build"
+          cd "$RUNNER_TEMP/gcc-build"
+          sh "$GITHUB_WORKSPACE/tools/armeb/build.sh" "$HOME/gcc-toolchain/$TARGET"
+      - name: Show the compiler's and qemu's versions
+        run: |
+          "$HOME/gcc-toolchain/$TARGET/bin/$TARGET-gcc" --version | head -1
+          qemu-armeb --version | head -1
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=arm \
+            "-DCMAKE_C_COMPILER=$HOME/gcc-toolchain/$TARGET/bin/$TARGET-gcc" \
+            "-DCMAKE_CROSSCOMPILING_EMULATOR=qemu-armeb;-L;$HOME/gcc-toolchain/$TARGET/$TARGET/libc" \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCANON_LIFETIME=${{ matrix.lifetime }} \
+            -S .
+      - name: Build
+        run: cmake --build build -j
+      - name: Check the binaries are big-endian (BE8) Armv7-A, Thumb-2 and hard float, and where the 64-bit atomic is
+        run: |
+          export PATH="$HOME/gcc-toolchain/$TARGET/bin:$PATH"
+          file build/bitset_test
+          file build/bitset_test | grep -q "ELF 32-bit MSB.*ARM, EABI5"
+          attrs=$("$TARGET-readelf" -A build/bitset_test)
+          echo "$attrs"
+          for want in "Tag_CPU_arch: v7" "Tag_CPU_arch_profile: Application" \
+                      "Tag_ABI_VFP_args: VFP registers"; do
+            grep -q "$want" <<< "$attrs" || { echo "::error::bitset_test lacks $want"; exit 1; }
+          done
+          # As at armhf: a Thumb function's address is odd.
+          syms=$("$TARGET-readelf" -s build/bitset_test)
+          main=$(awk '$4 == "FUNC" && $8 == "main" && !n++ { print $2 }' <<< "$syms")
+          case "$main" in
+            *[13579bdf]) echo "main at 0x$main: Thumb code" ;;
+            *) echo "::error::bitset_test's main, at 0x$main, is not Thumb code"; exit 1 ;;
+          esac
+          # Read whole, not piped into grep -q (armhf's reason).
+          all=0; need=""; inline=""
+          for f in $(find build -maxdepth 1 -type f -perm -u+x -name '*_test' | sort); do
+            all=$((all + 1))
+            # BE8: its data big-endian, its instructions little-endian.
+            hdr=$("$TARGET-readelf" -h "$f")
+            grep -q 'Flags:.*BE8' <<< "$hdr" || { echo "::error::${f#build/} is not BE8"; exit 1; }
+            dyn=$("$TARGET-readelf" -d "$f")
+            grep -q 'NEEDED.*libc\.so\.6' <<< "$dyn" || { echo "::error::${f#build/}: no libc.so.6 in readelf -d"; exit 1; }
+            if grep -q 'NEEDED.*libatomic' <<< "$dyn"; then need="$need ${f#build/}"; fi
+            dis=$("$TARGET-objdump" -d "$f")
+            if grep -qw ldrexd <<< "$dis"; then inline="$inline ${f#build/}"; fi
+          done
+          echo "linked with libatomic:$need"
+          echo "the 64-bit atomic inline (LDREXD):$inline"
+          # No title, as big-endian-32's: the leg is in the message.
+          echo "::notice::armeb ${{ matrix.build_type }} ${{ matrix.lifetime }}: Armv7-A, Thumb-2, hard float, big-endian (BE8); $(echo "$need" | wc -w) of $all test binaries linked with libatomic, $(echo "$inline" | wc -w) with the 64-bit atomic inline (LDREXD)"
           if [ -n "$need" ]; then echo "::error::linked with libatomic:$need"; exit 1; fi
           case " $inline " in
             *" lifetime_test "*) ;;
