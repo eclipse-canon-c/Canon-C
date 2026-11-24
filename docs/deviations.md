@@ -44770,6 +44770,7 @@ What it shows:
 | **ID**         | VERIFY-118 |
 | **Date**       | 2026-11-24 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-24 — Scored: X1 to X3 MATCH. CLOSED: three of three ("Scored", below). `docs/status.md` sums up, in plain words, what is tested, built and proved, on which targets, and what is missing; the README links it. The Status above is the record as committed. |
 | **Baseline**   | f18d6c8 (VERIFY-117's change; its close, 2befbc2, a record, is pushed with this): `8` #160 at f18d6c8, and `17` #6 at 2df1d7b, its last run. |
 | **Scope**      | `docs/status.md`, new; the README, two lines that link it. No library, test, tool or workflow file. |
 | **Category**   | Item 19, the one-page status matrix, as the author placed it on 2026-11-23: after VERIFY-116's close, before the rest of item 9b. |
@@ -44826,3 +44827,26 @@ to read the three to find it.
 
 X1 to X3 scored, and the record closes. Then item 9b's next, `ppc-eabi`,
 and the drafts for upstream (item 9c), picolibc's among them.
+
+### Scored (2026-11-24)
+
+The push of f020c45, 4844e13 and 16c1ae4 started two workflows: `8`
+#161 and `17` #7, each green at its first attempt, in under a minute.
+
+| # | scored |
+|---|--------|
+| X1 | **MATCH.** 8 and 17 ran, and no other. |
+| X2 | **MATCH.** `17 · README examples` green, its notice #6's, word for word: "Usage built with gcc and clang and run, "first even: 8" and exit 0: 2 of 2; 7 examples compiled in their scaffolds with gcc and clang at -O0 and -O2: 28 of 28; 0 failed". |
+| X3 | **MATCH.** `8 · Records` green, `record-coverage`'s and `workflow-size`'s notices #160's, word for word. |
+
+Three of three. Not predicted, and as they fell: the times.
+
+**Closed.** Item 19 is done: one page says what the three files of
+evidence hold, and the README points to it first. The close changes
+nothing but this record.
+
+What it shows:
+
+- **A summary is kept true by the rule that changes it.** The page
+  names the files it sums up as right where they differ, and a record
+  that changes a fact on it updates it, as `architectures.md` is updated.
