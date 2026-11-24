@@ -4,6 +4,9 @@
 
 # Canon-C 
 
+**At a glance:** what is tested, built and proved, and on which targets,
+on one page: [`docs/status.md`](docs/status.md).
+
 
 <!-- Language -->
 ### Language
