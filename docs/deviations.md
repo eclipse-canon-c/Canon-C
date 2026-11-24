@@ -44760,3 +44760,69 @@ What it shows:
 - **A job's log is the evidence that can be read where a run is
   scored.** Its errors now are, in both jobs; the artifacts stay for
   those who can fetch them.
+
+---
+
+## VERIFY-118: Pre-registration — A Page at a Glance: What Is Tested, Built and Proved, on Which Targets
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-118 |
+| **Date**       | 2026-11-24 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | f18d6c8 (VERIFY-117's change; its close, 2befbc2, a record, is pushed with this): `8` #160 at f18d6c8, and `17` #6 at 2df1d7b, its last run. |
+| **Scope**      | `docs/status.md`, new; the README, two lines that link it. No library, test, tool or workflow file. |
+| **Category**   | Item 19, the one-page status matrix, as the author placed it on 2026-11-23: after VERIFY-116's close, before the rest of item 9b. |
+
+### What is missing
+
+What the project checks is kept in `docs/architectures.md` (the targets),
+`docs/verification.md` (the proofs and the other checks, about 5,800
+lines) and `docs/deviations.md` (each change's record, about 44,800). No
+page says, in plain words and at once, what is tested, built and proved,
+on which targets, and what is missing: a newcomer, or an assessor, has
+to read the three to find it.
+
+### What changes
+
+- **`docs/status.md`**: the words it uses (runs, builds, proved, pinned,
+  informational); the targets, with GCC, Clang, MSVC or a vendor's
+  compiler, each row its compilers, what its tests do there and what is
+  proved at its type sizes; the targets with CompCert; the other checks
+  (the proofs, Eva, Aorai and MetAcsl, MC/DC, MISRA and CERT, the
+  sanitizers, Valgrind and fuzzing, the C standards, the README's
+  examples), each with where it is recorded; how the records keep it
+  honest; and what is missing. It states that the three files are right
+  where it differs from them, and that a record that changes a fact it
+  states updates it.
+- **The README**: under its title, a line that links the page.
+
+### Measured here
+
+- **Every cell read against its source**: each target's row against
+  `docs/architectures.md`'s "Tested on", "Compiled for" and "Proved at";
+  the other checks against `docs/verification.md` (its first table: over
+  99% of the obligations proved automatically, each unproved one filed by
+  name; "The other builds"), the README's badges and platform tiers, and
+  `docs/architectures.md`'s note on Eva (26 programs at x86-64 and nine
+  models); what is missing against the plans VERIFY-117 wrote, and "Not
+  supported".
+- `tools/readme/examples.py`: "Usage built with gcc and clang and run,
+  "first even: 8" and exit 0: 2 of 2; 7 examples compiled in their
+  scaffolds with gcc and clang at -O0 and -O2: 28 of 28; 0 failed", as at
+  #6. `tools/which_workflows.py`: 8 and 17.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| X1 | **8 and 17 run**, and no other. | another set | H |
+| X2 | **`17 · README examples` is green**, its notice #6's, word for word. | a failure, or another word | H |
+| X3 | **`8 · Records` is green**, every notice #160's, word for word. | a failure, or another notice | H |
+
+**Not predicted**: the times.
+
+### What follows
+
+X1 to X3 scored, and the record closes. Then item 9b's next, `ppc-eabi`,
+and the drafts for upstream (item 9c), picolibc's among them.
