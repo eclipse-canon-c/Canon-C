@@ -45565,6 +45565,7 @@ What it shows:
 | **ID**         | VERIFY-122 |
 | **Date**       | 2026-11-25 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-25 — Scored: B1 to B4 MATCH. CLOSED: four of four ("Scored", below). `compcert (armeb-linux)` held to its pin, 61 of 61, its toolchain and its CompCert restored from their entries; item 9b's third step is done. The Status above is the record as committed. |
 | **Baseline**   | f109c1e (VERIFY-121's change; its close, a record, is pushed with this): `1` and `3` to `6` #105, `2` #140 and `8` #164, at f109c1e. |
 | **Scope**      | `.github/workflows/analysis.yml`'s `compcert-armeb`: its pin, held, and its comments. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `tools/armeb/README.md`. No library or test file; of `tools/`, a README alone. |
 | **Category**   | VERIFY-121's "What follows": the pin held, as VERIFY-117 held `compcert-bare`'s and VERIFY-120 `compcert-ppc`'s. |
@@ -45619,3 +45620,29 @@ B1 to B4 scored, and the record closes. Then item 9b's fourth step,
 macOS: CompCert at `aarch64-macos` on GitHub's macOS runner, and at
 `x86_64-macos` where an Intel runner or Rosetta allows, as
 `docs/architectures.md` plans it, the author's choices asked first.
+
+### Scored (2026-11-25)
+
+The push of ef1a97a, ddb49d1 and b0055ba started seven workflows, `1` to
+`6` and `8`, each green at its first attempt: `3` #106 in 4 minutes, `2`
+#141 in 10, `6` #106 the last, in 79.
+
+| # | scored |
+|---|--------|
+| B1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| B2 | **MATCH.** `compcert (armeb-linux)` green, its notice "61 / 61 compiled, 61 ran; as pinned". |
+| B3 | **MATCH.** The four `armeb` legs and `compcert (armeb-linux)` restored the toolchain from the entry #140 saved, and `compcert (armeb-linux)` its CompCert from #105's, each "Cache hit occurred on the primary key"; no build step ran, and `compcert (armeb-linux)` took 3 minutes where run 1 took 19. |
+| B4 | **MATCH.** The 123 other jobs green, every notice as their last runs printed it, word for word, the times aside. |
+
+Four of four. Not predicted, and as they fell: the times.
+
+**Closed.** CompCert at big-endian Arm Linux is held to its pin, as at
+the other thirteen configurations, and item 9b's third step is done. The
+close changes nothing but this record.
+
+What it shows:
+
+- **A pin that a first run gave as predicted is held by changing one
+  line.** The prediction came from GCC in ccomp's place, run 1 confirmed
+  it, and holding it changed nothing the job computes: the step now
+  fails where it would only have said "not the pin".
