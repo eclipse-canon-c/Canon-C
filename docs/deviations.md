@@ -45282,6 +45282,7 @@ What it shows:
 | **ID**         | VERIFY-121 |
 | **Date**       | 2026-11-24 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-25 — Scored: A1 to A4 MATCH. CLOSED: four of four ("Scored", below). Big-endian 32-bit Arm Linux tested: the four `armeb` legs green, every test passing with the data big-endian, on a toolchain built from Ubuntu's source packages; `compcert (armeb-linux)` 61 of 61, as predicted, its pin to be held next. The Status above is the record as committed. |
 | **Baseline**   | baf01cf (VERIFY-120's change; its close, a record, is pushed with this): `1` and `3` to `6` #104, `2` #139 and `8` #163, at baf01cf; `17` #8 at 340a5d8. |
 | **Scope**      | `tools/armeb/` (new): `build.sh`, `README.md`. `.github/workflows/platforms.yml`: a job, `armeb`, and its header. `.github/workflows/analysis.yml`: a job, `compcert-armeb`, and its header. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `docs/compcert-licensing.md`, the workflow map, the README's note on atomics. No library or test file. |
 | **Category**   | Item 9b's third step, as the author chose on 2026-11-24: big-endian Arm Linux, with GCC and with CompCert, glibc its C library, one toolchain and one cache entry for both. |
@@ -45515,3 +45516,42 @@ at `armeb-linux`; GitHub's own notices.
 A1 to A4 scored, and the record closes. The next record holds
 `compcert (armeb-linux)` to its pin, run 1's, and answers what run 1
 finds. Then the rest of item 9b: macOS, Cygwin, BSD.
+
+### Scored (2026-11-25)
+
+The push of 6e84964, 55e3e55 and f109c1e started eight workflows, `1` to
+`6`, `8` and `17`, each green at its first attempt: `2` #140 in 25
+minutes and `3` #105 in 20, each building the toolchain, `6` #105 the
+last, in 84.
+
+| # | scored |
+|---|--------|
+| A1 | **MATCH.** 1 to 6, 8 and 17 ran, and no other. |
+| A2 | **MATCH.** The four `armeb` legs green, each building the toolchain from the four packages at the versions measured here, the cache having no entry, in 17 to 24 minutes; at each, the notice predicted, "0 of 61 test binaries linked with libatomic", 1 with the 64-bit atomic inline (LDREXD) with `CANON_LIFETIME` off and 24 with `debug`; and "100% tests passed, 0 tests failed out of 61". |
+| A3 | **MATCH.** `compcert (armeb-linux)` green: the toolchain built in 15 minutes; the archive's digest opam's; configure's "arm", "armv7a", "hardfloat", "big", and `-no-pie` taken; CompCert built in 2 minutes, `ccomp -version` 3.17; its notice "61 / 61 compiled, 61 ran; as pinned", no binary named not BE8. |
+| A4 | **MATCH.** The 124 other jobs green, every notice as their last runs printed it, word for word, the times aside. |
+
+Four of four. Not predicted, and as they fell: the times; the
+toolchain's entry, saved by `armeb (Release, off)`, the first of the five
+to end, and refused to the other four; CompCert's own, saved by
+`compcert (armeb-linux)`; and at each leg `main` at the address it had
+here, two builds of the toolchain from the same tarballs, on two
+machines, linking the tests alike.
+
+**Closed.** Big-endian 32-bit Arm Linux is tested, GCC's tests enforced
+at four legs on a toolchain built from Ubuntu's own source packages, and
+CompCert's `armeb-linux` passes all 61 under qemu-user; its pin is held
+next. The close changes nothing but this record.
+
+What it shows:
+
+- **What a distribution adds to its compiler is part of the platform.**
+  The byte order changed nothing the tests can see, as at PowerPC. What
+  changed what CompCert needs is Ubuntu's: at `arm-linux` its GCC makes
+  `time_t` 64 bits, and ccomp needs configure's `__REDIRECT` undone; at
+  `armeb-linux`, with GCC as released, `time_t` has 32 bits and
+  configure's own preprocessing serves.
+- **A toolchain is measured before it is pushed.** `build.sh`'s two
+  faults, glibc taking the build machine's `g++` and `MAKEINFO=true`
+  overriding glibc's word for no makeinfo, showed in the builds here; the
+  first run built it five times without one.
