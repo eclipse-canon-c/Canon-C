@@ -30,7 +30,7 @@ here for them.
 | 32-bit Arm, bare metal: ARMv7-A (Cortex-A9; the hard-float ABI, and the base ABI), ARMv7-R (Cortex-R5F), ARMv7-M (Cortex-M7, double-precision FPU), ARMv6 (ARM1176) | bare metal: picolibc 1.8.6 | CompCert 3.17 (`arm-eabihf`, `arm-eabi`, `armv7r-eabihf`, `armv7m-eabihf`, `armv6-eabihf`), Ubuntu's `arm-none-eabi` GCC preprocessing, assembling and linking for it | `compcert-bare` (`analysis.yml`), on QEMU's models of the cores through semihosting: 55 of the 61 tests at each, held to that (VERIFY-117); not `lifetime_token_test`, `time_test`, `impl_defined_test` and `file_test`, for what picolibc on bare metal does not give, nor `compare_test` and `parse_test`, whose `<math.h>` CompCert does not take (below); informational, as `compcert` |
 | PowerPC 32, big-endian, bare metal: the embedded ABI, with the FPU | bare metal: newlib 4.4 | CompCert 3.17 (`ppc-eabi`), the `powerpc` job's toolchain preprocessing, assembling and linking for it | `compcert-ppc` (`analysis.yml`), under psim, GDB 15.1's PowerPC simulator, each test linked as `powerpc` links its tests at `ppc` (below): 56 of 61 run, held to that (VERIFY-120): not built, `lifetime_token_test` and `time_test`, which use what newlib gives only with `_POSIX_BARRIERS` and `_POSIX_TIMERS`, and `impl_defined_test` and `file_test`, psim's system calls having no `link`, which `rename()` needs; `stringbuf_test` failing, its `%ls` on big-endian data, as at `powerpc`; newlib's `__func__` undone for ccomp (below); informational, as `compcert` |
 | 32-bit Arm, big-endian (Armv7-A, hard float) | Linux, glibc 2.39 | CompCert 3.17 (`armeb-linux`), the `armeb` job's toolchain preprocessing, assembling and linking for it | `compcert-armeb` (`analysis.yml`), under qemu-user in that toolchain's sysroot, each binary checked BE8: 61 of 61 run, held to that (VERIFY-122); configure's `__REDIRECT` left as it is, this GCC not defining `_TIME_BITS=64` (below); informational, as `compcert` |
-| AArch64 (Apple silicon) and x86-64 | macOS | CompCert 3.17 (`aarch64-macos`, `x86_64-macos`), built on each runner, Apple's cc preprocessing, assembling and linking for it | `compcert-macos` (`analysis.yml`), on `macos-latest` and `macos-15-intel`, the tests run natively, Apple Clang's on the same runners their baseline: 59 of 61 run at `aarch64-macos` and 57 at `x86_64-macos`, held to that (VERIFY-124): `lifetime_token_test` needs POSIX barriers, which macOS does not have, so that no compiler builds it there; at Apple silicon `compare_test` does not link, and at Intel three tests that format through `vsnprintf` stop by a signal, both under diagnosis; informational, as `compcert` |
+| AArch64 (Apple silicon) and x86-64 | macOS | CompCert 3.17 (`aarch64-macos`, `x86_64-macos`), built on each runner, Apple's cc preprocessing, assembling and linking for it | `compcert-macos` (`analysis.yml`), on `macos-latest` and `macos-15-intel`, the tests run natively, Apple Clang's on the same runners their baseline: 60 of 61 run at each, held to that (VERIFY-125): `lifetime_token_test` needs POSIX barriers, which macOS does not have, so that no compiler builds it there; each file given first a header of the job's own, for two things Apple's headers give a compiler without GNU C (below); informational, as `compcert` |
 | x86, 32-bit | Linux, glibc | GCC (`-m32`) | `build-32bit` (`ci.yml`): `size_t` exactly 32 bits |
 | AArch64 | Linux, glibc | GCC, Clang | `build-arm64` (`platforms.yml`), on GitHub's Arm runner, with sanitizers; `char` is unsigned there |
 | AArch64 | macOS | Apple Clang | `build` and `lifetime-debug` (`ci.yml`), `macos-latest` is Apple silicon |
@@ -119,6 +119,28 @@ includes `<sys/cdefs.h>` and then undefines `__func__`: its later
 inclusions change nothing, and ccomp's own `__func__`, C99's, names the
 function. `compcert-ppc` does so (VERIFY-120); picolibc excepts CompCert
 from that definition.
+On macOS, Apple's headers give a compiler that does not define
+`__GNUC__`, as CompCert's preprocessing leaves it, two things CompCert
+cannot use (VERIFY-124). `NAN` is a call, `__nan()`, which libSystem
+exports at x86-64 and not at Apple silicon, where a program that uses it
+does not link. And `<stdio.h>` declares `va_list` as `void *`, before
+CompCert's `<stdarg.h>`, which finds `_VA_LIST_T` defined and keeps it:
+harmless at Apple silicon, whose `va_list` is a pointer, but at x86-64
+CompCert's is three words, which its builtins reach by the address the
+array decays to: given the pointer, they take its value, never set, for
+that address, and a function that passes its arguments on to
+`vsnprintf` stops by a signal.
+Give ccomp, with `-include`, a header that includes `<stdarg.h>`, which
+is CompCert's, its directory first on ccomp's path, and `<math.h>`, and
+then undefines `NAN` and defines it as glibc's `<math.h>` does without
+GNU C, `(0.0f / 0.0f)`. `compcert-macos` does so (VERIFY-125). It is not
+a recipe for glibc, which fixes what it declares at the first system
+header it reads: a feature macro that a file defines after it, as
+`util/time.h` defines `_POSIX_C_SOURCE`, comes too late (here, under
+GCC, `time_test` and `lifetime_token_test` do not compile so). Apple's
+headers set their level at the first one too, but in full where no such
+macro is defined, and the full level declares `clock_gettime`
+(VERIFY-125, read in Apple's sources).
 
 *Planned:*
 

@@ -3228,16 +3228,17 @@ jobs:
   #   alone (--deps-only), built on the runner and cached by its system and
   #   architecture; CompCert itself is built once, from opam's archive and
   #   its digest. Each test is compiled and linked by ccomp with the compcert
-  #   job's flags, and run with a limit of 600 s (perl's alarm: macOS has no
-  #   timeout(1)). The build matrix (ci.yml) runs Apple Clang's tests on
-  #   both runners, the baseline this job is read against.
+  #   job's flags, a header of the job's own given first (VERIFY-125, the
+  #   test step says why), and run with a limit of 600 s (perl's alarm:
+  #   macOS has no timeout(1)). The build matrix (ci.yml) runs Apple
+  #   Clang's tests on both runners, the baseline this job is read against.
   #
   #   The notice says what was compiled and ran, and whether that is the
-  #   pin, run 1's outcome (VERIFY-123), held since VERIFY-124: another
-  #   outcome fails the job, as does a failed install, fetch, configure or
-  #   build; continue-on-error keeps it from the workflow's result. A last
-  #   step diagnoses what run 1 found, and never fails the job (VERIFY-124,
-  #   the author's choice of 2026-11-25).
+  #   pin, held since VERIFY-124: another outcome fails the job, as does a
+  #   failed install, fetch, configure or build; continue-on-error keeps it
+  #   from the workflow's result. A last step diagnoses what run 1 found,
+  #   without the header, and never fails the job (VERIFY-124, the author's
+  #   choice of 2026-11-25).
   # -------------------------------------------------------------------------
   compcert-macos:
     name: compcert (${{ matrix.target }})
@@ -3252,18 +3253,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Run 1's outcomes (VERIFY-123), held (VERIFY-124). At both,
-          # lifetime_token_test needs POSIX barriers, which macOS does not
-          # have: no compiler builds it there, and it is no ctest. At
-          # Apple silicon, compare_test does not link; at Intel, three
-          # tests that format through vsnprintf stop by a signal. The last
-          # step diagnoses the two.
+          # 60 of 61 at each since VERIFY-125, held. lifetime_token_test
+          # needs POSIX barriers, which macOS does not have: no compiler
+          # builds it there, and it is no ctest. Run 1's other failures,
+          # compare_test not linked at Apple silicon and three tests that
+          # format through vsnprintf stopped by a signal at Intel
+          # (VERIFY-123, diagnosed by VERIFY-124), the test step's header
+          # answers.
           - target: aarch64-macos
             runner: macos-latest
-            pin: "59 / 61 compiled, 59 ran; not compiled: lifetime_token_test compare_test"
+            pin: "60 / 61 compiled, 60 ran; not compiled: lifetime_token_test"
           - target: x86_64-macos
             runner: macos-15-intel
-            pin: "60 / 61 compiled, 57 ran; not compiled: lifetime_token_test; did not run: hashmap_test stringbuf_test vec_fmt_test"
+            pin: "60 / 61 compiled, 60 ran; not compiled: lifetime_token_test"
     steps:
       - uses: actions/checkout@v6
 
@@ -3332,7 +3334,7 @@ jobs:
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
-          # Run 1's outcome, held since VERIFY-124 (the matrix says why).
+          # Held since VERIFY-124 (the matrix says why).
           PIN: ${{ matrix.pin }}
         run: |
           ccomp="$HOME/compcert-$TARGET/bin/ccomp"
@@ -3340,7 +3342,23 @@ jobs:
           if ! "$ccomp" -version | grep -q "version 3.17"; then
             echo "FAIL: ccomp is not the pinned 3.17"; exit 1
           fi
-          # The compcert job's flags, and its reasons.
+          mkdir -p ccomp-out
+          # A header given first to every file (VERIFY-125), for two things
+          # Apple's headers give where __GNUC__ is not defined, as ccomp's
+          # preprocessing leaves it (VERIFY-124). CompCert's <stdarg.h>
+          # first: its va_list then stands, at x86-64 the three words of the
+          # System V ABI, where Apple's <stdio.h> would declare it void *
+          # before it, and CompCert's, finding _VA_LIST_T, would keep that.
+          # And NAN a constant, as glibc's <math.h> defines it without GNU
+          # C: Apple's calls __nan(), which libSystem exports at x86_64 and
+          # not at arm64.
+          cat > ccomp-out/canon_macos.h <<'HEADER'
+          #include <stdarg.h>
+          #include <math.h>
+          #undef NAN
+          #define NAN (0.0f / 0.0f)
+          HEADER
+          # The compcert job's flags, and its reasons; then the header.
           CCOMP_FLAGS=(
             -fall
             -DCANON_NO_GNU_EXTENSIONS
@@ -3348,8 +3366,8 @@ jobs:
             -DCANON_BITS_FORCE_FALLBACK
             -iquote core/primitives -I core -I semantics -I .
             -I integrations/autosar -I test/integrations/autosar/stubs
+            -include "$PWD/ccomp-out/canon_macos.h"
           )
-          mkdir -p ccomp-out
           total=0; compiled=0; ran=0; failed_compile=(); failed_run=(); status=()
           while IFS= read -r t; do
             total=$((total + 1))
@@ -3401,9 +3419,11 @@ jobs:
           fi
 
       - name: Diagnose run 1's findings
-        # VERIFY-124: what stops compare_test at Apple silicon and the
+        # VERIFY-124: what stopped compare_test at Apple silicon and the
         # three at Intel, measured; informational, the step can fail
-        # nothing. NAN as ccomp's preprocessing expands it, and whether
+        # nothing. Its probes are compiled without the test step's header
+        # (VERIFY-125), so that it still shows what Apple's headers give
+        # ccomp. NAN as ccomp's preprocessing expands it, and whether
         # libSystem exports __nan, at each architecture, by Apple's own
         # linker; va_list's size beside __builtin_va_list's under ccomp, and
         # how Apple's headers define it there; and a function that ccomp
