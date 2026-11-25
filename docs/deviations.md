@@ -46354,3 +46354,64 @@ What it shows:
   it found in Cygwin's `/usr/bin`, first on the `PATH`; the one it did
   not name, CMake's make, CMake chose by a search that puts a name before
   a directory.
+
+---
+
+## VERIFY-127: Pre-registration — The Cygwin Job Given Cygwin's Make, Its Tools Checked
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-127 |
+| **Date**       | 2026-11-25 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | da81506 (VERIFY-126's change; its close, a record, is pushed with this): `1` #110, its two `cygwin` legs failed at their build, `2` #145, `3` to `6` #110 and `8` #169, at da81506. |
+| **Scope**      | `.github/workflows/ci.yml`'s `cygwin`: CMake given Cygwin's make; each tool the job runs checked to be Cygwin's, and every `gmake` on the `PATH` listed; its comment. No document, library, test or tool file. |
+| **Category**   | VERIFY-126's "What run 1 found", answered: a fix of the job, which leaves it as the author chose it. |
+
+### What is missing
+
+The `cygwin` job fails at its build: CMake took a `gmake` that is not
+Cygwin's, which cannot read Cygwin's paths (VERIFY-126). None of the
+tests has run under Cygwin.
+
+### What changes
+
+- **CMake's make, named**: `-DCMAKE_MAKE_PROGRAM:FILEPATH=/usr/bin/make`,
+  Cygwin's; the configure step prints the cache's entry.
+- **The tools, checked**: the first step after the install finds `gcc`,
+  `make`, `cmake`, `ctest` and `objdump` each in `/usr/bin`, or fails,
+  and lists every `gmake` on the `PATH`, the one CMake would take first;
+  then as before.
+- **The job's comment** says why.
+- **The documents** stand as VERIFY-126 wrote them; they hold if G5
+  does.
+
+### Measured here
+
+- **The configure step**, run from a copy of the tree with the host's
+  CMake 3.28 and GCC: "Detecting C compiler ABI info - done", and
+  "CMAKE_MAKE_PROGRAM:FILEPATH=/usr/bin/make". Given without its type,
+  the entry reads "UNINITIALIZED"; hence `:FILEPATH`.
+- **The tools' check**, run with the host's tools: each in `/usr/bin`;
+  with two stand-in `gmake`s on the `PATH` behind `/usr/bin`, the list
+  names them in the `PATH`'s order, with the host's own two.
+- ShellCheck on every step of the job: nothing.
+  `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| G1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| G2 | **The tools** at both legs each in `/usr/bin` ("gcc: /usr/bin/gcc", and so on), and "gmake on the PATH:" one or more, none in `/usr/bin`, the first Strawberry Perl's, `/cygdrive/c/Strawberry/c/bin/gmake`. | a tool outside `/usr/bin`, no `gmake`, or another first | M: run 1's `gmake` was not Cygwin's; that it is Strawberry Perl's is inferred from the image's Perl |
+| G3 | **CMake takes Cygwin's make** at both legs: "CMAKE_MAKE_PROGRAM:FILEPATH=/usr/bin/make", "Detecting C compiler ABI info - done", and the build complete without a warning under `-Werror`. | another make, a failed detection, or a warning | M–H: GCC 14.4's warnings at the tests' flags are not seen here; the `mingw` job's GCC, newer, builds them clean |
+| G4 | **The notice at each leg**: "cygwin Release: x86_64-pc-cygwin, GCC 14.4.0; int 4, long 8, long long 8, void * 8, wchar_t 2, long double 16, va_list 8; char signed; __CYGWIN__, not _WIN32; 61 of 61 test binaries need cygwin1.dll, 0 libatomic's DLL", and the same for "cygwin Debug". | another notice, or none | M–H: GCC and the model as run 1 measured them; the DLLs read as the check reads them, measured here on stand-ins |
+| G5 | **Every test passes** at both legs: CTest's "100% tests passed, 0 tests failed out of 61". | a failure | M: F4's, unmeasured. The POSIX branches run on Windows for the first time; `file_test`'s replacement of a file held open for reading rests on Cygwin's `rename` replacing it as POSIX's does, not read here (a report to Cygwin's list in 2017 says it cannot when the file is open for writing, not this test's case); `log_test` needs Cygwin's `/tmp` |
+| G6 | **Nothing else changes**: the other 134 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1 #110's, 2 #145's, 3 to 6 #110's, 8 #169's. | another notice, or a failure | H |
+
+**Not predicted**: the times; the install's output; the build's lines.
+
+### What follows
+
+G1 to G6 scored, and the record closes. Then VERIFY-128: CompCert 3.17
+at `x86_64-cygwin`, built natively in Cygwin, as the author chose.
