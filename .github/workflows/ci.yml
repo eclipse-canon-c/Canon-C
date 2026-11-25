@@ -1,6 +1,6 @@
 name: "1 · Build & test"
-# Builds and runs the test suite: Linux, Windows (MSVC, MinGW) and macOS
-# (Apple silicon and Intel), Release and Debug with sanitizers; i386;
+# Builds and runs the test suite: Linux, Windows (MSVC, MinGW, Cygwin) and
+# macOS (Apple silicon and Intel), Release and Debug with sanitizers; i386;
 # Valgrind; libFuzzer; the lifetime token under concurrency and the
 # lifetime-debug build. Start here.
 # Map of every workflow: .github/workflows/README.md (VERIFY-050).
@@ -224,6 +224,115 @@ jobs:
             -S .
       - name: Build
         run: cmake --build build
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
+
+  # -------------------------------------------------------------------------
+  # 1d. Cygwin build + test — Windows, Cygwin's GCC (VERIFY-126)
+  #
+  #    Cygwin is POSIX on Windows: GCC for x86_64-pc-cygwin, and Cygwin's
+  #    C library, newlib's, in cygwin1.dll. Its data model is LP64, where
+  #    MSVC's and MinGW-w64's Windows is LLP64; its wchar_t has 16 bits
+  #    and its calling convention is Windows' x64 one, as theirs. Its GCC
+  #    defines __CYGWIN__ and __unix__, not _WIN32, so that the tests take
+  #    their POSIX branches on Windows here: rename replacing a name that
+  #    exists, a file replaced while it is held open. It is the baseline
+  #    that CompCert's x86_64-cygwin is to be read against (item 9b).
+  #
+  #    Cygwin is installed by the Cygwin project's own action, as MSYS2 by
+  #    its own above, which checks the installer's hash and Authenticode
+  #    signature and setup.ini's signature (the author's choice of
+  #    2026-11-25). Cygwin's bash runs every step after it, without a
+  #    login, so that the checkout stays the working directory, and with
+  #    -o igncr; the checkout's line ends are LF (the action's advice).
+  #    Sanitizers OFF, as at MinGW. A notice per leg gives the compiler,
+  #    its data model, and how many test binaries need cygwin1.dll and
+  #    libatomic's DLL.
+  # -------------------------------------------------------------------------
+  cygwin:
+    needs: build
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: D:\cygwin\bin\bash.exe --noprofile --norc -eo pipefail -o igncr '{0}'
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - name: Check out with LF line ends
+        shell: pwsh
+        run: git config --global core.autocrlf input
+      - uses: actions/checkout@v6
+      - uses: cygwin/cygwin-install-action@v7
+        with:
+          install-dir: 'D:\cygwin'
+          packages: gcc-core make cmake
+      - name: Show Cygwin's compiler and its data model
+        run: |
+          gcc --version | sed -n 1p
+          machine=$(gcc -dumpmachine)
+          if [ "$machine" != x86_64-pc-cygwin ]; then
+            echo "::error::gcc is $machine's, not Cygwin's"; exit 1
+          fi
+          mkdir -p probe
+          cat > probe/model.c <<'PROBE'
+          #include <limits.h>
+          #include <stdarg.h>
+          #include <stddef.h>
+          #include <stdio.h>
+
+          int main(void)
+          {
+              printf("int %u, long %u, long long %u, void * %u, wchar_t %u, "
+                     "long double %u, va_list %u; char %s",
+                     (unsigned)sizeof(int), (unsigned)sizeof(long),
+                     (unsigned)sizeof(long long), (unsigned)sizeof(void *),
+                     (unsigned)sizeof(wchar_t), (unsigned)sizeof(long double),
+                     (unsigned)sizeof(va_list), (CHAR_MIN < 0) ? "signed" : "unsigned");
+          #if defined(__CYGWIN__)
+              printf("; __CYGWIN__");
+          #endif
+          #if defined(_WIN32)
+              printf(", _WIN32\n");
+          #else
+              printf(", not _WIN32\n");
+          #endif
+              return 0;
+          }
+          PROBE
+          gcc -std=c99 -Wall -Wextra -Wpedantic -Werror -o probe/model probe/model.c
+          ./probe/model | tee probe/model.txt
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DENABLE_SANITIZERS=OFF \
+            -S .
+      - name: Build
+        run: cmake --build build -j 4
+      - name: Check the test binaries are Cygwin's
+        run: |
+          # Each one's DLLs, from its import table: cygwin1.dll, Cygwin's
+          # C library; libatomic's would be cygatomic-1.dll.
+          all=0; cygwin=0; atomic=""
+          for f in $(find build -maxdepth 1 -type f -name '*_test.exe' | sort); do
+            all=$((all + 1))
+            dlls=$(objdump -p "$f" | sed -n 's/^[[:space:]]*DLL Name: //p')
+            if grep -qx 'cygwin1.dll' <<< "$dlls"; then
+              cygwin=$((cygwin + 1))
+            else
+              echo "::error::${f#build/} does not need cygwin1.dll"
+            fi
+            if grep -q 'cygatomic' <<< "$dlls"; then atomic="$atomic ${f#build/}"; fi
+          done
+          echo "linked with libatomic:$atomic"
+          # No title, as armeb's: the leg is in the message.
+          echo "::notice::cygwin ${{ matrix.build_type }}: $(gcc -dumpmachine), GCC $(gcc -dumpfullversion); $(cat probe/model.txt); $cygwin of $all test binaries need cygwin1.dll, $(echo "$atomic" | wc -w) libatomic's DLL"
+          if [ "$cygwin" != "$all" ] || [ "$all" = 0 ]; then exit 1; fi
+          if [ -n "$atomic" ]; then echo "::error::linked with libatomic:$atomic"; exit 1; fi
       - name: Test
         working-directory: build
         run: ctest --output-on-failure

@@ -9,7 +9,7 @@ and those files differ, they are right and this page is wrong; please say
 so in an issue. A record that changes a fact stated here updates this
 page with it.
 
-*Written for VERIFY-118, 2026-11-24; brought up to date by VERIFY-119 to VERIFY-125.*
+*Written for VERIFY-118, 2026-11-24; brought up to date by VERIFY-119 to VERIFY-126.*
 
 ## The words used
 
@@ -31,7 +31,7 @@ With GCC, Clang, MSVC or a vendor's compiler:
 
 | family | target | compilers | the tests | proved at its type sizes |
 |--------|--------|-----------|-----------|--------------------------|
-| x86-64 | Linux (glibc), Linux (musl), Windows, macOS (Intel) | GCC, Clang, MSVC, MinGW, Apple Clang | run, all pass; also with sanitizers, Valgrind and fuzzing | every unit; at Windows' type sizes, `core/` |
+| x86-64 | Linux (glibc), Linux (musl), Windows, Windows under Cygwin, macOS (Intel) | GCC, Clang, MSVC, MinGW, Cygwin's GCC, Apple Clang | run, all pass; also with sanitizers, Valgrind and fuzzing | every unit; at Windows' type sizes, `core/` |
 | x86 | Linux, 32-bit | GCC | run, all pass | `core/arena.h` |
 | AArch64 | Linux; macOS (Apple silicon) | GCC, Clang; Apple Clang | run, all pass | `core/` (Linux) |
 | AArch64, bare metal | Cortex-A78AE, Cortex-R82 | GCC, picolibc | run, exceptions pinned | planned |
