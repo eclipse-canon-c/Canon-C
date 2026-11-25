@@ -45846,3 +45846,111 @@ What it shows:
   macOS, Apple's give a compiler they do not know a `NAN` that calls a
   function and, perhaps, a `va_list` of their own: paths that no
   compiler Apple ships ever takes.
+
+---
+
+## VERIFY-124: Pre-registration — CompCert on macOS Held at Run 1's Outcome, and Its Failures Diagnosed
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-124 |
+| **Date**       | 2026-11-25 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | edaedc2 (VERIFY-123's change; its close, a record, is pushed with this): `1` and `3` to `6` #107, `2` #142 and `8` #166, at edaedc2. |
+| **Scope**      | `.github/workflows/analysis.yml`'s `compcert-macos`: its pins, held, its listing, and a step of diagnosis. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`. No library, test or tool file. |
+| **Category**   | VERIFY-123's "What follows", as the author chose on 2026-11-25: run 1's outcome held, and its failures diagnosed before anything is changed for them; `lifetime_token_test` pinned on macOS, the test unchanged. |
+
+### What is missing
+
+`compcert-macos` ran 59 of 61 at `aarch64-macos` and 57 at `x86_64-macos`
+(VERIFY-123, C4), and a run other than that fails nothing. Of its
+failures, one is understood: `lifetime_token_test` needs POSIX barriers,
+which macOS does not have. Two are not: `compare_test` does not link at
+Apple silicon, the listing cutting off the symbol's name, and three tests
+stop by a signal at Intel, their output lost.
+
+### The author's choice (2026-11-25)
+
+Two answers. **Diagnose, and hold run 1**: the pins at run 1's outcome,
+and the job made to show what it did not, before any change is made for
+the failures; not the pins alone, nor workarounds from reading alone.
+**`lifetime_token_test` pinned on macOS**, with its reason, the test
+unchanged; not a fallback barrier of a mutex and a condition variable.
+
+### What changes
+
+- **The pins**, in `compcert-macos`'s matrix: "59 / 61 compiled, 59 ran;
+  not compiled: lifetime_token_test compare_test" and "60 / 61 compiled,
+  57 ran; not compiled: lifetime_token_test; did not run: hashmap_test
+  stringbuf_test vec_fmt_test", the reasons in its comment. **Held**:
+  another outcome prints "FAIL: compcert TARGET is pinned to: PIN" and
+  fails the job, in `compcert-armeb`'s words; `continue-on-error` and the
+  `if:` guard as they were.
+- **The listing**: Apple's linker's line that names an undefined symbol,
+  "referenced from", taken with the error lines; each test that did not
+  run shown with its exit status, 128 and the signal's number where a
+  signal stopped it.
+- **A step, "Diagnose run 1's findings"**, after the tests, run whatever
+  came before (`if: always()`) and failing nothing (`continue-on-error`,
+  `set +e`). Its notice, `compcert TARGET diagnosis`: what `NAN` gives
+  under ccomp's preprocessing; whether Apple's `cc` links a call of
+  `__nan` for arm64 and for x86_64, the SDK holding both; the line by
+  which Apple's headers define `__darwin_va_list` under ccomp; the sizes
+  of `va_list` and `__builtin_va_list` in a program ccomp compiles; and
+  what that program's variadic function, passing its arguments to
+  `vsnprintf` through `va_copy` as `stringbuf` does, gives, or its status.
+- **The documents**: `compcert-macos`'s rows in `docs/architectures.md`
+  and `docs/verification.md`, and its row in `docs/status.md`, "59 and
+  57 of 61", held, and why; the date line.
+
+### Read, in the sources
+
+- **`NAN` without GNU C**: Apple's `math.h` defines it `__nan( )`, a call,
+  where `__GNUC__` is not defined (Libm-315's ARM header); glibc's gives
+  a constant: here, `gcc -U__GNUC__ -E` of `NAN` gives `(0.0f / 0.0f)`.
+  At `x86_64-macos`, `compare_test` linked and passed with the same
+  header: the call links there.
+- **`va_list`**: CompCert's `__builtin_va_list` is a pointer at Apple
+  silicon (`aarch64/CBuiltins.ml`, `Archi.Apple`) and three 64-bit words
+  at x86-64 (`x86/CBuiltins.ml`); its `stdarg.h` defines `va_list` as it
+  only where `_VA_LIST_T` is not defined. What Apple's headers make of
+  `__darwin_va_list` without `__GNUC__` is not read here: the diagnosis
+  measures it.
+
+### Measured here
+
+- **The held step**, extracted from `analysis.yml` and run from a copy
+  of the tree with a ccomp that is the host's GCC: "61 / 61 compiled, 61
+  ran; not the pin", then "FAIL: compcert aarch64-macos is pinned to:
+  59 / 61 compiled, 59 ran; not compiled: lifetime_token_test
+  compare_test", exit 1. The status kept through perl's `exec`: a program
+  stopped by SIGSEGV gives 139, by SIGBUS 135 (Linux's 7; macOS's is 10,
+  so 138).
+- **The diagnosis step**, the same way: its notice, "NAN gives:
+  canon_nan_probe = (__builtin_nanf ("")); ... va_list 24 bytes,
+  __builtin_va_list 24; vsnprintf through va_copy: 8 "42-x-2.5"", exit 0;
+  with no ccomp at all, every probe empty and "status compile", exit 0.
+  A macro from a system header that GCC's `-E` prints across lines is
+  read joined.
+- ShellCheck on every step of `compcert-macos`: nothing.
+  `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| D1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| D2 | **`compcert-macos` holds at both**: green, its notices the two pins with "; as pinned"; its CompCert restored from its entries, no install or build step run. | a failure, another notice, or a build | M–H: the binaries and inputs are run 1's; a crash that stack layout decides could differ |
+| D3 | **The listing names what run 1's did not**: at `aarch64-macos`, `compare_test`'s `"___nan", referenced from:`; at `x86_64-macos`, the statuses 139, 139 and 138, `hashmap_test`, `stringbuf_test` and `vec_fmt_test` in that order, SIGSEGV twice and SIGBUS, as bash named them at run 1. | another symbol, or other statuses | M: `compare_test` is the one test that uses `NAN` |
+| D4 | **`NAN` and `__nan`**, in both diagnoses: `NAN` gives a call of `__nan`; `__nan links at arm64 no x86_64 yes`. | a constant, or another answer | M: read in an older Apple header, Libm-315's, and inferred from which link failed |
+| D5 | **`va_list`**: at `aarch64-macos`, "va_list 8 bytes, __builtin_va_list 8" and "vsnprintf through va_copy: 8 "42-x-2.5""; at `x86_64-macos`, "va_list 8 bytes, __builtin_va_list 24", Apple's `__darwin_va_list` a pointer without GNU C, and the probe stopped by a signal, status 138 or 139. | other sizes, or the probe's result otherwise | L–M: Apple's definition is not read, only what would make the three crash |
+| D6 | **Nothing else changes**: every other job green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly, the slowest header's name among it: 1 and 3 to 6 #107's, 2 #142's, 8 #166's. | another notice, or a failure | H |
+
+**Not predicted**: the times; the line by which Apple's headers define
+`__darwin_va_list` at Apple silicon; GitHub's own notices.
+
+### What follows
+
+D1 to D6 scored, and the record closes. With the diagnosis in, the next
+record answers each failure, by a change or by a reason kept with its
+pin, the author's choice asked first. Then item 9b's fifth step, Cygwin.
