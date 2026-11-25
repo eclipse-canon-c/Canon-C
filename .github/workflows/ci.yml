@@ -246,9 +246,13 @@ jobs:
   #    2026-11-25). Cygwin's bash runs every step after it, without a
   #    login, so that the checkout stays the working directory, and with
   #    -o igncr; the checkout's line ends are LF (the action's advice).
-  #    Sanitizers OFF, as at MinGW. A notice per leg gives the compiler,
-  #    its data model, and how many test binaries need cygwin1.dll and
-  #    libatomic's DLL.
+  #    That bash keeps the runner's PATH after Cygwin's /usr/bin, so that
+  #    each tool the job runs is checked to be Cygwin's, and CMake is
+  #    given Cygwin's make: it looks for gmake through the whole PATH
+  #    before make, and took one of the runner's own, which cannot read
+  #    Cygwin's paths (VERIFY-126; VERIFY-127). Sanitizers OFF, as at
+  #    MinGW. A notice per leg gives the compiler, its data model, and how
+  #    many test binaries need cygwin1.dll and libatomic's DLL.
   # -------------------------------------------------------------------------
   cygwin:
     needs: build
@@ -269,8 +273,19 @@ jobs:
         with:
           install-dir: 'D:\cygwin'
           packages: gcc-core make cmake
-      - name: Show Cygwin's compiler and its data model
+      - name: Show Cygwin's tools, its compiler and its data model
         run: |
+          # Each tool the job runs is Cygwin's, in /usr/bin; and every gmake
+          # on the PATH, which CMake would take before any make.
+          for t in gcc make cmake ctest objdump; do
+            p=$(command -v "$t" || true)
+            case "$p" in
+              /usr/bin/*) echo "$t: $p" ;;
+              *) echo "::error::$t is '$p', not Cygwin's"; exit 1 ;;
+            esac
+          done
+          gmakes=$(type -ap gmake | paste -sd ' ' - || true)
+          echo "gmake on the PATH: ${gmakes:-none}"
           gcc --version | sed -n 1p
           machine=$(gcc -dumpmachine)
           if [ "$machine" != x86_64-pc-cygwin ]; then
@@ -306,11 +321,14 @@ jobs:
           ./probe/model | tee probe/model.txt
       - name: Configure CMake
         run: |
+          # Cygwin's make, named: CMake's own search takes a gmake first.
           cmake -B build \
             -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_MAKE_PROGRAM:FILEPATH=/usr/bin/make \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DENABLE_SANITIZERS=OFF \
             -S .
+          grep '^CMAKE_MAKE_PROGRAM' build/CMakeCache.txt
       - name: Build
         run: cmake --build build -j 4
       - name: Check the test binaries are Cygwin's
