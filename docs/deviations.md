@@ -46450,3 +46450,141 @@ What it shows:
   falsifier decided the score; the line it quoted was another version's
   of CTest. A tool's words, quoted before the run, are as much a guess as
   the outcome they report.
+
+---
+
+## VERIFY-128: Pre-registration — CompCert at `x86_64-cygwin`, Built Natively in Cygwin
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-128 |
+| **Date**       | 2026-11-26 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 103d8f5 (VERIFY-127's change; its close, a record, is pushed with this): `1` #111, `2` #146, `3` to `6` #111 and `8` #170, at 103d8f5. |
+| **Scope**      | `.github/workflows/analysis.yml`: a job, `compcert-cygwin`, and the header's line on CompCert's configurations. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `docs/compcert-licensing.md`, `.github/workflows/README.md`. No library, test or tool file. |
+| **Category**   | Item 9b's fifth step, as the author chose on 2026-11-25 (natively in Cygwin, with Cygwin installed by the Cygwin project's own action) and on 2026-11-26 (newlib's `__func__` undone, the feature macro first). Run 1 measures. |
+
+### What is missing
+
+CompCert runs the tests at fifteen configurations besides x86-64 Linux,
+at Linux, on macOS and on bare metal; never on Windows. CompCert's
+`x86_64-cygwin` is its configuration there, and the `cygwin` job
+(VERIFY-126, VERIFY-127) is its baseline: under Cygwin's GCC every test
+passes.
+
+### The author's choice
+
+On 2026-11-25: **natively in Cygwin**, Cygwin's OCaml, a current opam
+built from its release, and Coq and the rest from opam, as on macOS; and
+**Cygwin installed by the Cygwin project's own action**. On 2026-11-26:
+**newlib's `__func__` undone with the feature macro first**. Cygwin's C
+library is newlib's, whose `<sys/cdefs.h>` defines `__func__` as `NULL`
+under ccomp; `compcert-ppc`'s header, which undoes it, would under Cygwin
+also fix newlib's feature set before `time_test` and
+`lifetime_token_test` define `_POSIX_C_SOURCE`. So the header defines
+`_POSIX_C_SOURCE` at 200809, the widest any test asks for, then includes
+`<sys/cdefs.h>`, then undefines `__func__`; every test then compiles at
+POSIX 2008 under ccomp.
+
+### What changes
+
+- **The job `compcert-cygwin`** in `analysis.yml`, informational and
+  upstream only, as every CompCert job, on `windows-latest`. The checkout
+  with LF line ends; Cygwin installed by the action at v7 into
+  `D:\cygwin`, with GCC (C and C++), make, OCaml and its compiler
+  libraries, GMP's headers, curl, patch, unzip, m4 and diffutils, its
+  checks at their defaults; every later step in Cygwin's bash, as at
+  `cygwin`. A step checks that each tool the job runs is Cygwin's, makes
+  `cc` as `gcc` if Cygwin has none, and gives OCaml's version to the
+  cache's key.
+- **Its stages, each cached apart** as an archive of Cygwin's own `tar`,
+  restored by `actions/cache/restore` and saved by `actions/cache/save`
+  as soon as the stage succeeds: opam with its root, keyed by opam's
+  version, OCaml's and CompCert's; then CompCert, keyed by its version
+  and target. A run that finds CompCert skips the rest.
+- **opam 2.6.1** built from its full archive, downloaded from its release
+  and checked against GitHub's SHA-256 of it: `./configure
+  --with-vendored-deps`, `make`, `make install`, into `D:\cc\opam`.
+- **CompCert's prerequisites** with that opam: `opam init --bare
+  --disable-sandboxing --no-setup`, a switch of Cygwin's OCaml
+  (`ocaml-system`), the `coq-released` repository, and
+  `opam install coq-compcert.3.17 --deps-only`, as at macOS; depexts off
+  (`OPAMNODEPEXTS`), Cygwin's packages being the action's. What opam
+  chose is listed.
+- **CompCert 3.17** from opam's archive and its digest, as at macOS,
+  configured for `x86_64-cygwin` with opam's flags, built and installed
+  into `D:\cc\compcert`.
+- **The tests**: each compiled and linked by ccomp with the `compcert`
+  job's flags and the header given first (above), and run under
+  `timeout(1)`, 600 s at most; the notice says what was compiled and ran,
+  "no pin yet"; the listings as at the other CompCert jobs; the logs
+  uploaded.
+- **The documents**: rows in `docs/architectures.md` and
+  `docs/verification.md`, and in `docs/status.md` "to be run", with its
+  date line; the recipe in `docs/architectures.md`, after newlib's
+  `__func__`; the planned bullet, which names BSD alone now; the list of
+  CompCert jobs in `docs/compcert-licensing.md`; the workflows' README.
+
+### Read, in the sources
+
+- **opam 2.6.1's README** (its full archive's): OCaml 4.11 or later, GNU
+  make and, for its solver, a C++ compiler; `./configure
+  --with-vendored-deps`, then `make` and `make install`. GitHub's digest
+  of `opam-full-2.6.1.tar.gz` is
+  `sha256:ebbaffa4192e69d612d2c1a5fc5a15b32730322d7e34bc4456ad4076bb987007`;
+  the archive, downloaded here, hashes the same (15,877,014 bytes).
+- **Cygwin's mirror** (`mirrors.kernel.org`, read 2026-11-26): `ocaml` at
+  4.14.0-2, 4.14.1-1 and 4.14.2-0, a release 0 that may mark a test
+  version, so that Cygwin's current may be 4.14.1; `ocaml-compiler-libs`;
+  `libgmp-devel`. Cygwin's own `opam` is 2.0.7.
+- **opam's repository**: `ocaml-system.4.14.2` is available wherever
+  `os` is not `win32`; Cygwin's is `cygwin`.
+- **newlib 4.4** (the `powerpc` job's toolchain, VERIFY-119):
+  `<sys/cdefs.h>` includes `<sys/features.h>` (its line 46) and defines
+  `__func__` as `NULL` under `#if !__GNUC_PREREQ__(2, 7)`;
+  `<sys/features.h>`, guarded by `_SYS_FEATURES_H`, sets
+  `__POSIX_VISIBLE` from the feature macros defined when it is first
+  read, and under `__STRICT_ANSI__`, which ccomp's preprocessing at C99
+  defines, from them alone. Cygwin's newlib is not read here.
+- **Cygwin's barriers**: `pthread_barrier_*` since Cygwin 2.5.0, of 2016
+  (Cygwin's announcements).
+- **CompCert 3.17**: `x86_64-cygwin` preprocesses with `gcc -m64
+  -U__GNUC__ -U__SIZEOF_INT128__ '-D__attribute__(x)=' -E`, assembles and
+  links with `gcc -m64`; its data model is LP64 (`Machine.x86_64`, as
+  `cparser`'s driver picks for Cygwin at 64 bits), its calls Windows'
+  (`Archi.win64`), its `va_list` a pointer; its `wchar_t` has 32 bits,
+  where Cygwin's has 16.
+
+### Measured here
+
+- **The test step**, extracted from `analysis.yml` and run from a copy of
+  the tree with a ccomp that is the host's GCC at C99, on glibc: the
+  header written as above and given to every one of the 61 calls; "61 /
+  61 compiled, 61 ran; no pin yet", exit 0, `time_test` and
+  `lifetime_token_test` among them, the feature macro first. (Without it,
+  VERIFY-125's header first lost both under glibc.)
+- **The job's YAML**, parsed; ShellCheck on every step: nothing.
+  `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| H1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| H2 | **Cygwin installs** with the job's packages, and each tool the job checks is Cygwin's. | the action fails, or a tool outside `/usr/bin` | M–H: the `cygwin` job's install, with more packages, their names read on the mirror |
+| H3 | **opam 2.6.1 builds** from its release under Cygwin, `opam --version` "2.6.1". | the build fails | M: its README asks what Cygwin gives; a Cygwin build of opam is not tried here |
+| H4 | **CompCert's prerequisites install** with it, Coq among them, and their archive is saved. | `opam init`, the switch or an install fails | L–M: Coq, zarith and dune have not been built under Cygwin here; the step has 240 minutes |
+| H5 | **CompCert 3.17 builds** for `x86_64-cygwin`, `ccomp -version` 3.17, and its archive is saved. | configure, the build or the install fails | M, given H4 |
+| H6 | **The tests**: the notice "compcert x86_64-cygwin: 61 / 61 compiled, 61 ran; no pin yet". | another notice, or none | L–M: nothing has run under ccomp at `x86_64-cygwin`; Windows' calling convention, CompCert's 32-bit `wchar_t` against Cygwin's 16 (`stringbuf_test`'s `%ls` accepts either outcome) and the barriers rest on reading alone |
+| H7 | **Nothing else changes**: the other 136 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1 #111's, 2 #146's, 3 to 6 #111's, 8 #170's. | another notice, or a failure | H |
+
+**Not predicted**: OCaml's version; whether Cygwin has a `cc`; the
+versions opam chooses, Coq's among them (8.16.1 at macOS); the times of
+each stage; the install's output.
+
+### What follows
+
+H1 to H7 scored, and the record closes. If run 1 builds CompCert, the
+next record holds its outcome as a pin, as VERIFY-124 held macOS's; if a
+stage fails, the next record answers it, the stages before it cached.
+Then item 9b's last step, BSD.
