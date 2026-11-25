@@ -45856,6 +45856,7 @@ What it shows:
 | **ID**         | VERIFY-124 |
 | **Date**       | 2026-11-25 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-25 — Scored: D1 to D6 MATCH. CLOSED: six of six ("Scored", below). `compcert-macos` held at run 1's outcome, and both causes measured: `NAN` is a call of `__nan`, which libSystem exports at x86_64 alone; and without GNU C Apple's `va_list` is `void *`, 8 bytes where CompCert's is 24 at x86-64, so that a variadic function passing its arguments on stops by a signal there. The Status above is the record as committed. |
 | **Baseline**   | edaedc2 (VERIFY-123's change; its close, a record, is pushed with this): `1` and `3` to `6` #107, `2` #142 and `8` #166, at edaedc2. |
 | **Scope**      | `.github/workflows/analysis.yml`'s `compcert-macos`: its pins, held, its listing, and a step of diagnosis. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`. No library, test or tool file. |
 | **Category**   | VERIFY-123's "What follows", as the author chose on 2026-11-25: run 1's outcome held, and its failures diagnosed before anything is changed for them; `lifetime_token_test` pinned on macOS, the test unchanged. |
@@ -45954,3 +45955,42 @@ unchanged; not a fallback barrier of a mutex and a condition variable.
 D1 to D6 scored, and the record closes. With the diagnosis in, the next
 record answers each failure, by a change or by a reason kept with its
 pin, the author's choice asked first. Then item 9b's fifth step, Cygwin.
+
+### Scored (2026-11-25)
+
+The push of 53f517c, 8ebd9b2 and cbd4ddd started seven workflows, `1` to
+`6` and `8`, each green at its first attempt: `3` #108 in 4 minutes,
+`compcert (aarch64-macos)` and `compcert (x86_64-macos)` in 2 and 3, `6`
+#108 the last, in 89.
+
+| # | scored |
+|---|--------|
+| D1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| D2 | **MATCH.** Both legs green, their notices the pins with "; as pinned"; CompCert restored from its entries, the install and build steps skipped. |
+| D3 | **MATCH.** At `aarch64-macos`, `compare_test`'s listing "Undefined symbols for architecture arm64:", then `"___nan", referenced from:`; at `x86_64-macos`, "hashmap_test: did not run, status 139", "stringbuf_test: ... status 139", "vec_fmt_test: ... status 138". |
+| D4 | **MATCH.** At both, "NAN gives: canon_nan_probe = __nan()" and "__nan links at arm64 no x86_64 yes". |
+| D5 | **MATCH.** At `aarch64-macos`, "va_list 8 bytes, __builtin_va_list 8; vsnprintf through va_copy: 8 "42-x-2.5""; at `x86_64-macos`, "typedef void * __darwin_va_list;", "va_list 8 bytes, __builtin_va_list 24", and the probe "status 138", a bus error. |
+| D6 | **MATCH.** The other 132 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them, "1.0 s in all, the slowest 0.03 s (algo/any_all/any_all.h)", set aside whole. |
+
+Six of six. Not predicted, and as they fell: the times; at Apple silicon
+too, "typedef void * __darwin_va_list;", which a pointer `va_list`, its
+ABI's, makes harmless there.
+
+**Closed.** The two failures that run 1 left unexplained are measured.
+At Apple silicon, `NAN`, for a compiler without GNU C, is a call of
+`__nan`, which libSystem exports for x86_64 and not for arm64. At Intel,
+Apple's headers define `va_list` from `__darwin_va_list`, `void *`
+without GNU C, before CompCert's `stdarg.h`, which then leaves it as it
+is. CompCert's builtins take a `va_list` there as its array of three
+words decays, by the address of its storage, and so take a pointer's
+value for that address (`va_list_ptr`, `cfrontend/C2C.ml`): `va_start`
+writes the three words where a pointer never set points, and a function
+that passes its arguments on, as `stringbuf`'s do, stops by a signal.
+The close changes nothing but this record.
+
+What it shows:
+
+- **A diagnosis is a prediction too.** Each cause was read before it was
+  measured, and the record said what the measure would show; it showed
+  that, and the failures are now answered from evidence, not from a
+  reading alone.
