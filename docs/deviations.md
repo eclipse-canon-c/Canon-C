@@ -45994,3 +45994,150 @@ What it shows:
   measured, and the record said what the measure would show; it showed
   that, and the failures are now answered from evidence, not from a
   reading alone.
+
+---
+
+## VERIFY-125: Pre-registration — CompCert on macOS Given a Header First, for Apple's NAN and va_list
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-125 |
+| **Date**       | 2026-11-25 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | cbd4ddd (VERIFY-124's change; its close, a record, is pushed with this): `1` and `3` to `6` #108, `2` #143 and `8` #167, at cbd4ddd. |
+| **Scope**      | `.github/workflows/analysis.yml`'s `compcert-macos`: a header that its test step writes and gives ccomp first, its pins, and its comments. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`. No library, test or tool file. |
+| **Category**   | VERIFY-124's "What follows", as the author chose on 2026-11-25: both failures that it measured answered in the job's flags, the library and its tests unchanged; both reported to CompCert, the reports drafted for the author to file (item 9c). |
+
+### What is missing
+
+`compcert-macos` runs 59 of 61 at `aarch64-macos` and 57 at
+`x86_64-macos`, held there (VERIFY-124). Besides `lifetime_token_test`,
+which needs POSIX barriers, which macOS does not have, four tests fail
+for what Apple's headers give where `__GNUC__` is not defined, as
+CompCert's preprocessing leaves it. `NAN` is a call of `__nan`, which
+libSystem exports at x86_64 and not at arm64, so that `compare_test`
+does not link at Apple silicon. And `va_list` is `void *`, declared by
+`<stdio.h>` before CompCert's `<stdarg.h>`, which keeps it, so that at
+x86-64, where CompCert's builtins reach a `va_list` of three words by its
+address, they take the pointer's value, never set, for it, and
+`hashmap_test`, `stringbuf_test` and `vec_fmt_test` stop by a signal.
+
+### The author's choice (2026-11-25)
+
+Three answers. **`NAN` undone with `-include`**: a header in the job's
+flags redefines it as glibc's `<math.h>` defines it without GNU C,
+`(0.0f / 0.0f)`. **CompCert's `<stdarg.h>` first**: the same header
+includes it ahead of Apple's headers, so that `va_list` is CompCert's,
+24 bytes at x86-64. **Both reported to CompCert**: reports 9 and 10 of
+item 9c, with the measured evidence, drafted for the author to file on
+CompCert's issues.
+
+### What changes
+
+- **The header**, `ccomp-out/canon_macos.h`, written by the test step:
+  `#include <stdarg.h>`, `#include <math.h>`, `#undef NAN` and
+  `#define NAN (0.0f / 0.0f)`; given to ccomp by
+  `-include "$PWD/ccomp-out/canon_macos.h"`, after the `compcert` job's
+  flags, at both legs, for every test.
+- **The pins**: "60 / 61 compiled, 60 ran; not compiled:
+  lifetime_token_test" at both, held as since VERIFY-124; the matrix's
+  comment, the job's header and the step's say why.
+- **The diagnosis step**, unchanged but its comment: its probes are
+  compiled without the header, so that it still shows what Apple's
+  headers give ccomp.
+- **The documents**: `compcert-macos`'s rows in `docs/architectures.md`
+  and `docs/verification.md`, and its row in `docs/status.md`, "60 of 61
+  at each", and the date line; in `docs/architectures.md`, the recipe,
+  after `__func__`'s for newlib, and why it is not one for glibc.
+
+### Read, in the sources
+
+- **CompCert 3.17**: ccomp gives `-include` to the preprocessor
+  (`driver/Frontend.ml`), after `-I` and its own directory of headers, so
+  that `<stdarg.h>` is CompCert's. That one defines `_VA_LIST_T` and
+  `va_list`, as `__builtin_va_list`, where `_VA_LIST_T` is not defined;
+  at x86-64 outside Windows, `__builtin_va_list` is `unsigned long[3]`,
+  24 bytes (`x86/CBuiltins.ml`), which `runtime/x86_64/vararg.S` lays
+  out as the System V ABI's `va_list`, for `SYS_macos` as for Linux and
+  BSD. The builtins of `<stdarg.h>` take their `va_list` as the array
+  decays, by the address of its 24 bytes, and take the address of a
+  `va_list` only where it is a scalar (`va_list_ptr`,
+  `cfrontend/C2C.ml`): given Apple's `void *` at x86-64, they take its
+  value, never set, and `va_start` writes there. This, not an overrun of
+  8 bytes, is how VERIFY-124's signals come; its close, not yet pushed,
+  is corrected to say so.
+- **Apple's** (xnu and Libc, `apple-oss-distributions` on GitHub, their
+  `main`): `sys/_types/_va_list.h` declares `va_list` from
+  `__darwin_va_list` only where `_VA_LIST_T` is not defined, and defines
+  it; `i386/_types.h` makes `__darwin_va_list` `void *` where `__GNUC__`
+  is not above 2 and Clang's types are not used. Given first, then,
+  CompCert's `<stdarg.h>` stands, and Apple's `<stdio.h>` declares
+  `vsnprintf` with its `va_list`.
+- **`time_test`**: `util/time.h` defines `_POSIX_C_SOURCE` at 199309
+  before any system header, and the header now comes before it. Apple's
+  `sys/cdefs.h` sets `__DARWIN_C_LEVEL` once, at the first system
+  header: in full where neither `_ANSI_SOURCE` nor `_POSIX_C_SOURCE` is
+  defined, `__STRICT_ANSI__` changing nothing. `time_test` is then
+  compiled at the full level, the older guards
+  (`!defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)`) closed by
+  its macro as before: a state that no test has been compiled in on
+  macOS. In Libc's `_stdio.h`, `_stdlib.h`, `_string.h` and `_time.h`,
+  and in xnu's `sys/wait.h`, `sys/signal.h` and `sys/resource.h`, each
+  block of the full level declares with types that its own conditions
+  give, none with one that the older guards close; `clock_gettime` and
+  `CLOCK_MONOTONIC` need `__DARWIN_C_LEVEL >= 199309L` alone. No name
+  that only the full level declares is in `time_test` or its headers
+  (grepped).
+- **`NAN`**: glibc's `<math.h>`, without GNU C, defines it
+  `(0.0f / 0.0f)`, as the CompCert jobs at Linux compile it.
+  `compare.h`'s comparators test NaN by `x != x`, whatever its sign; the
+  division gives the hardware's default NaN, negative at x86-64 and
+  positive at AArch64. `compare_test` alone uses `NAN`.
+
+### Measured here
+
+- **The test step**, extracted from `analysis.yml` and run from a copy
+  of the tree with a ccomp that is the host's GCC at C99, its arguments
+  logged: the header written as above, and every one of the 61 calls
+  given `-include` and its path. "59 / 61 compiled, 59 ran; not
+  compiled: lifetime_token_test time_test; not the pin", then "FAIL:
+  compcert aarch64-macos is pinned to: 60 / 61 compiled, 60 ran; not
+  compiled: lifetime_token_test", exit 1. Under glibc the header costs
+  both: glibc fixes what it declares at the first system header, here
+  `<math.h>` read at strict C99, and their `_POSIX_C_SOURCE` comes after
+  it (`pthread_barrier_t`; `CLOCK_MONOTONIC` and `struct timespec`).
+  Hence a header for macOS, whose headers are read above, and not a
+  recipe for glibc.
+- **Every test**, syntax-checked by GCC with the job's flags and glibc's
+  widest declarations (`_GNU_SOURCE`, which moots the feature macros),
+  with the header first and without: 61 and 61, no warning either way;
+  no name of `<math.h>` or `<stdarg.h>` meets one of the tests'. GCC
+  without `__GNUC__` cannot read glibc 2.39's `<math.h>` (its
+  `<bits/floatn-common.h>` then declares `_Float32`, a keyword to GCC),
+  so GCC keeps it here.
+- **The names that Apple's `<math.h>` may declare and glibc's does
+  not**, its BSD and SVID legacy (`struct exception`, the constants
+  `DOMAIN` to `PLOSS`, `HUGE`, `MAXFLOAT`, `rinttol`, `roundtol`),
+  grepped in the library and its tests: only in comments and strings.
+- ShellCheck on every step of `compcert-macos`: nothing.
+  `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| E1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| E2 | **CompCert restored at both legs**, from its entries, no install or build step run. | an install or a build | H: the keys are unchanged |
+| E3 | **At `aarch64-macos`**, green, its notice "60 / 61 compiled, 60 ran; not compiled: lifetime_token_test; as pinned": `compare_test` linked, nothing calling `__nan`, and passed. | another notice, or a failure | M–H: `___nan` the one undefined symbol #108 listed; `time_test` at the full level, read and not compiled here (above) |
+| E4 | **At `x86_64-macos`**, green, the same notice: `hashmap_test`, `stringbuf_test` and `vec_fmt_test` run and pass, with CompCert's `va_list`. | another notice, or a failure | M: CompCert's `<stdarg.h>` read to stand when first, and its `va_list` read to be the System V one that libSystem's `vsnprintf` reads, as at Linux; `time_test` as at E3 |
+| E5 | **The diagnosis**, its probes without the header, word for word as #108's: at `aarch64-macos`, "NAN gives: canon_nan_probe = __nan(); __nan links at arm64 no x86_64 yes; typedef void * __darwin_va_list;; va_list 8 bytes, __builtin_va_list 8; vsnprintf through va_copy: 8 "42-x-2.5""; at `x86_64-macos`, the same to `__darwin_va_list`, then "va_list 8 bytes, __builtin_va_list 24; vsnprintf through va_copy: status 138". | another notice | M–H: the step and its inputs are #108's; which signal stops the probe at x86-64, the stack's layout decides |
+| E6 | **Nothing else changes**: every other job green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1 and 3 to 6 #108's, 2 #143's, 8 #167's. | another notice, or a failure | H |
+
+**Not predicted**: the times; the lines of `lifetime_token_test`'s
+listing; GitHub's own notices.
+
+### What follows
+
+E1 to E6 scored, and the record closes. Then item 9b's fifth step,
+Cygwin: CompCert's `x86_64-cygwin` on GitHub's Windows runner, the
+author's choices asked first.
