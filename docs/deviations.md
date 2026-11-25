@@ -46364,6 +46364,7 @@ What it shows:
 | **ID**         | VERIFY-127 |
 | **Date**       | 2026-11-25 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-25 — Scored: G1 to G6 MATCH. CLOSED: six of six ("Scored", below), G5 by its falsifier, the line that it quoted not CTest 4.4's. Under Cygwin, with Cygwin's make, the 61 tests build clean and pass at Release and Debug; the `gmake` that CMake took in VERIFY-126's run is Strawberry Perl's. The Status above is the record as committed. |
 | **Baseline**   | da81506 (VERIFY-126's change; its close, a record, is pushed with this): `1` #110, its two `cygwin` legs failed at their build, `2` #145, `3` to `6` #110 and `8` #169, at da81506. |
 | **Scope**      | `.github/workflows/ci.yml`'s `cygwin`: CMake given Cygwin's make; each tool the job runs checked to be Cygwin's, and every `gmake` on the `PATH` listed; its comment. No document, library, test or tool file. |
 | **Category**   | VERIFY-126's "What run 1 found", answered: a fix of the job, which leaves it as the author chose it. |
@@ -46415,3 +46416,37 @@ tests has run under Cygwin.
 
 G1 to G6 scored, and the record closes. Then VERIFY-128: CompCert 3.17
 at `x86_64-cygwin`, built natively in Cygwin, as the author chose.
+
+### Scored (2026-11-25)
+
+The push of 863cd7c, bbed789 and 103d8f5 started seven workflows, `1` to
+`6` and `8`, each green at its first attempt: `1` #111 in 20 minutes,
+`cygwin (Release)` and `cygwin (Debug)` in 4 and 3, CTest's runs in 1.7
+and 1.5 seconds; `6` #111 the last, in 87.
+
+| # | scored |
+|---|--------|
+| G1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| G2 | **MATCH.** At both legs "gcc: /usr/bin/gcc", "make: /usr/bin/make", "cmake: /usr/bin/cmake", "ctest: /usr/bin/ctest" and "objdump: /usr/bin/objdump"; and "gmake on the PATH: /cygdrive/c/Strawberry/c/bin/gmake", the only one. |
+| G3 | **MATCH.** At both legs "CMAKE_MAKE_PROGRAM:FILEPATH=/usr/bin/make" and "Detecting C compiler ABI info - done"; the build complete, no warning in either log. |
+| G4 | **MATCH.** Both notices word for word: "cygwin Release: x86_64-pc-cygwin, GCC 14.4.0; int 4, long 8, long long 8, void * 8, wchar_t 2, long double 16, va_list 8; char signed; __CYGWIN__, not _WIN32; 61 of 61 test binaries need cygwin1.dll, 0 libatomic's DLL", and its Debug twin. |
+| G5 | **MATCH**, by its falsifier, "a failure": none at either leg, 61 tests run and passed at each. But the line that it quoted is CTest 3's, and CTest 4.4 prints "100% tests passed out of 61": the claim right, its quotation wrong. |
+| G6 | **MATCH.** The other 134 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly. |
+
+Six of six. Not predicted, and as they fell: the times; the install's
+output, Cygwin 3.6.12 again; the build's lines.
+
+**Closed.** The tests run on Windows under Cygwin, with Cygwin's GCC
+14.4.0, LP64 with a 16-bit `wchar_t` and Windows' x64 `va_list`, and all
+61 pass at Release and Debug, their POSIX branches with them: `rename`
+replacing a name that exists, and a file held open for reading; and
+`tmpfile` in Cygwin's `/tmp`. VERIFY-126's documents hold. This is the
+baseline that CompCert's `x86_64-cygwin` is to be read against
+(VERIFY-128). The close changes nothing but this record.
+
+What it shows:
+
+- **A quotation is a prediction too.** G5's claim held, and its
+  falsifier decided the score; the line it quoted was another version's
+  of CTest. A tool's words, quoted before the run, are as much a guess as
+  the outcome they report.
