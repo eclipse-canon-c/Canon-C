@@ -46184,3 +46184,124 @@ What it shows:
   on macOS, its feature macro after Apple's first header. Apple's
   sources, read, said it would compile, and it did; under glibc, as
   measured here, the same header breaks it.
+
+---
+
+## VERIFY-126: Pre-registration — The Tests on Windows under Cygwin, with Cygwin's GCC
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-126 |
+| **Date**       | 2026-11-25 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 0f533ff (VERIFY-125's change; its close, a record, is pushed with this): `1` and `3` to `6` #109, `2` #144 and `8` #168, at 0f533ff. |
+| **Scope**      | `.github/workflows/ci.yml`: a job, `cygwin`, and its header's first line. `docs/architectures.md`, `docs/status.md`, `docs/verification.md`, `docs/implementation-defined.md`, `docs/autosar-classic.md`, `.github/workflows/README.md`. No library, test or tool file. |
+| **Category**   | Item 9b's fifth step, Cygwin, as the author chose on 2026-11-25: its baseline first, alone; CompCert at `x86_64-cygwin` next, natively in Cygwin (VERIFY-127). |
+
+### What is missing
+
+The tests run on Windows with MSVC and with MinGW-w64's GCC, both LLP64,
+both on Windows' own C libraries. Never under Cygwin, Windows' POSIX
+layer, where `long` has 64 bits and `wchar_t` 16, the calling convention
+is Windows' x64 one, and the tests take their POSIX branches, as Cygwin's
+GCC defines no `_WIN32`. CompCert's `x86_64-cygwin`, item 9b's next
+target, needs a baseline at the same platform, as Apple Clang is
+`compcert-macos`'s.
+
+### The author's choice (2026-11-25)
+
+Three answers. **Cygwin installed by the Cygwin project's own action**,
+`cygwin/cygwin-install-action`, as the `mingw` job installs MSYS2 with
+MSYS2's. **CompCert built natively in Cygwin**: Cygwin's OCaml 4.14.2, a
+current opam built from its release (Cygwin's is 2.0.7, of 2020), and
+Coq 8.16.1, Flocq, MenhirLib and Menhir from opam, as on macOS; that is
+VERIFY-127's. **The baseline first, alone**: this record.
+
+### What changes
+
+- **The job `cygwin`** in `ci.yml`, beside `mingw` and as it, at Release
+  and Debug, after `build`. The checkout's line ends LF
+  (`core.autocrlf input`, the action's advice); Cygwin installed by the
+  action at v7 into `D:\cygwin`, with `gcc-core`, `make` and `cmake`, its
+  checks at their defaults (the installer's hash and Authenticode
+  signature, `setup.ini`'s signature); every step after it in Cygwin's
+  bash, without a login and with `-o igncr`. A step shows GCC and its
+  data model, by a probe compiled as the tests are (C99, `-Wall -Wextra
+  -Wpedantic -Werror`), and fails unless `gcc -dumpmachine` is
+  `x86_64-pc-cygwin`. CMake configures and builds with Cygwin's GCC,
+  sanitizers off. A step checks that every test binary imports
+  `cygwin1.dll` and none libatomic's DLL, `cygatomic-1.dll`, and gives
+  the notice. CTest runs the tests.
+- **`ci.yml`'s header** names Cygwin among Windows' compilers.
+- **The documents**: a row in `docs/architectures.md`; `docs/status.md`'s
+  x86-64 row and date line; `docs/verification.md`'s row of the shipped
+  configurations; the lists of where the tests run in
+  `docs/implementation-defined.md` and `docs/autosar-classic.md`; the
+  workflows' README's row for `ci.yml`.
+
+### Read, in the sources
+
+- **GCC 13.3's Cygwin target** (Ubuntu's `gcc-13-source`, as
+  `tools/armeb` builds from it): `config.gcc`'s `x86_64-*-cygwin*` takes
+  `cygming.h`, `cygwin.h` and `cygwin-w64.h`. `__CYGWIN__` and `__unix__`
+  are defined, `_WIN32` only under `-mwin32`; `wchar_t` is
+  `short unsigned int`, 16 bits; `long` has 64 bits at x86-64
+  (`cygwin-w64.h` over `cygming.h`'s 32); the default ABI is Microsoft's
+  at 64 bits, whose `va_list` is a `char *` (`i386.cc`'s `ms_va_list`).
+- **Canon-C**: CMake compiles at `-std=c99` without extensions, with
+  `-Wall -Wextra -Wpedantic -Werror`, as at Linux, and registers 61
+  tests, none under a condition. The branches on `_WIN32` (`util/time.h`,
+  `util/file.h`, `time_test`, `file_test`, `impl_defined_test`) take
+  their POSIX side under Cygwin: `clock_gettime` and `nanosleep`, under
+  the `_POSIX_C_SOURCE` that `util/time.h` defines; `rename` replacing a
+  name that exists (`impl_defined_test`), and `file_write_all_atomic`
+  replacing a file held open (`file_test`), where the Windows runs expect
+  Windows' refusal. `stringbuf_test`'s `%ls` accepts either outcome;
+  `log_test` needs `tmpfile`, which under Cygwin writes in `/tmp`.
+- **Cygwin's mirrors** (`mirrors.kernel.org`, `mirrors.mit.edu`, read
+  2026-11-25): `gcc-core` at 11.5.0, 12.5.0, 13.4.0, 13.5.0 and 14.4.0,
+  and test releases of 15 to 17; CMake 4.4.5, which
+  `cmake_minimum_required(VERSION 3.10)` meets.
+- **The action** (its `action.yml` and README, read at `master`): v7;
+  `check-hash`, `check-installer-sig` and `check-sig` true by default;
+  Cygwin's `/usr/bin` put first on the `PATH`; `D:` its volume by
+  default; `core.autocrlf input` before the checkout, and `-o igncr`, its
+  advice.
+
+### Measured here
+
+- **The probe**, compiled by the host's GCC at the job's flags, prints
+  Linux's model, "int 4, long 8, long long 8, void * 8, wchar_t 4, long
+  double 16, va_list 24; char signed, not _WIN32"; MinGW-w64's GCC
+  (Ubuntu's, already here) compiles it without a warning.
+- **The check step**, run on two PE executables built by MinGW-w64's
+  GCC, one linked with an import library of a `cygwin1.dll` that
+  `dlltool` made: "::error::beta_test.exe does not need cygwin1.dll", the
+  notice "... 1 of 2 test binaries need cygwin1.dll, 0 libatomic's DLL",
+  and exit 1. `objdump -p` gives the import table's DLL names as the step
+  reads them.
+- **The job's YAML**, parsed: its shell `D:\cygwin\bin\bash.exe
+  --noprofile --norc -eo pipefail -o igncr '{0}'`, the action given
+  `install-dir` `D:\cygwin` and `gcc-core make cmake`.
+- ShellCheck on every step of the job: nothing.
+  `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| F1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| F2 | **Cygwin installs** at both legs, the action's checks passing, and its GCC is the one found: `gcc -dumpmachine` gives "x86_64-pc-cygwin". | the action fails, or another `gcc` | M–H: the checks are the action's defaults, and it puts Cygwin's `/usr/bin` first |
+| F3 | **The notice at each leg**: "cygwin Release: x86_64-pc-cygwin, GCC V; int 4, long 8, long long 8, void * 8, wchar_t 2, long double 16, va_list 8; char signed; __CYGWIN__, not _WIN32; 61 of 61 test binaries need cygwin1.dll, 0 libatomic's DLL", V the version of Cygwin's GCC, and the same for "cygwin Debug". | another notice, or none | M–H: the model read in GCC's Cygwin target; the 64-bit atomic inline at x86-64, which CMake's check finds wherever the program links without libatomic |
+| F4 | **Every test passes** at both legs: the build without a warning under `-Werror`, and CTest's "100% tests passed, 0 tests failed out of 61". | a warning, or a failure | M: the POSIX branches run on Windows for the first time. `file_test`'s replacement of a file held open rests on Cygwin's `rename` replacing it as POSIX's does, not read here; `log_test`, on Cygwin's `/tmp` |
+| F5 | **Nothing else changes**: the other 134 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1 and 3 to 6 #109's, 2 #144's, 8 #168's. | another notice, or a failure | H |
+
+**Not predicted**: the version of Cygwin's GCC, its current release; the
+times, the install's among them; the action's output; GitHub's own
+notices.
+
+### What follows
+
+F1 to F5 scored, and the record closes. Then VERIFY-127: CompCert 3.17
+at `x86_64-cygwin`, built natively in Cygwin on the installation that
+this job proves, as the author chose.
