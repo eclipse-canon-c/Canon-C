@@ -3232,10 +3232,12 @@ jobs:
   #   timeout(1)). The build matrix (ci.yml) runs Apple Clang's tests on
   #   both runners, the baseline this job is read against.
   #
-  #   Run 1 measures (VERIFY-123): the notice says what was compiled and
-  #   ran, and whether that is the pin, VERIFY-123's prediction, which is
-  #   not held yet. A failed install, fetch, configure or build fails the
-  #   job; continue-on-error keeps it from the workflow's result.
+  #   The notice says what was compiled and ran, and whether that is the
+  #   pin, run 1's outcome (VERIFY-123), held since VERIFY-124: another
+  #   outcome fails the job, as does a failed install, fetch, configure or
+  #   build; continue-on-error keeps it from the workflow's result. A last
+  #   step diagnoses what run 1 found, and never fails the job (VERIFY-124,
+  #   the author's choice of 2026-11-25).
   # -------------------------------------------------------------------------
   compcert-macos:
     name: compcert (${{ matrix.target }})
@@ -3250,12 +3252,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Run 1's outcomes (VERIFY-123), held (VERIFY-124). At both,
+          # lifetime_token_test needs POSIX barriers, which macOS does not
+          # have: no compiler builds it there, and it is no ctest. At
+          # Apple silicon, compare_test does not link; at Intel, three
+          # tests that format through vsnprintf stop by a signal. The last
+          # step diagnoses the two.
           - target: aarch64-macos
             runner: macos-latest
-            pin: "61 / 61 compiled, 61 ran"
+            pin: "59 / 61 compiled, 59 ran; not compiled: lifetime_token_test compare_test"
           - target: x86_64-macos
             runner: macos-15-intel
-            pin: "61 / 61 compiled, 61 ran"
+            pin: "60 / 61 compiled, 57 ran; not compiled: lifetime_token_test; did not run: hashmap_test stringbuf_test vec_fmt_test"
     steps:
       - uses: actions/checkout@v6
 
@@ -3324,9 +3332,7 @@ jobs:
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
-          # Run 1's outcome as VERIFY-123 predicts it: every test, as at
-          # CompCert's Linux targets and as Apple Clang passes them on the
-          # same runner. Not yet held: the notice says whether the run is it.
+          # Run 1's outcome, held since VERIFY-124 (the matrix says why).
           PIN: ${{ matrix.pin }}
         run: |
           ccomp="$HOME/compcert-$TARGET/bin/ccomp"
@@ -3344,7 +3350,7 @@ jobs:
             -I integrations/autosar -I test/integrations/autosar/stubs
           )
           mkdir -p ccomp-out
-          total=0; compiled=0; ran=0; failed_compile=(); failed_run=()
+          total=0; compiled=0; ran=0; failed_compile=(); failed_run=(); status=()
           while IFS= read -r t; do
             total=$((total + 1))
             n=$(basename "$t" .c)
@@ -3353,11 +3359,13 @@ jobs:
                  > "ccomp-out/$n.log" 2>&1; then
               compiled=$((compiled + 1))
               # 600 s at most: perl's alarm survives the exec.
-              if perl -e 'alarm shift; exec @ARGV or die "exec: $!\n"' 600 "./ccomp-out/$n" \
-                   > "ccomp-out/$n.run.log" 2>&1; then
+              rc=0
+              perl -e 'alarm shift; exec @ARGV or die "exec: $!\n"' 600 "./ccomp-out/$n" \
+                > "ccomp-out/$n.run.log" 2>&1 || rc=$?
+              if [ "$rc" -eq 0 ]; then
                 ran=$((ran + 1))
               else
-                failed_run+=("$n")
+                failed_run+=("$n"); status+=("$rc")
               fi
             else
               failed_compile+=("$n")
@@ -3370,18 +3378,100 @@ jobs:
           echo "CompCert at $TARGET (INFORMATIONAL): $line; $held"
           echo "::notice title=compcert $TARGET::$line; $held"   # VERIFY-050
           # Of each log, the lines that name an error, or its first 15 if
-          # none does, as in compcert-targets (VERIFY-117).
+          # none does, as in compcert-targets (VERIFY-117); with Apple's
+          # linker's line that names an undefined symbol (VERIFY-124).
           for n in "${failed_compile[@]}"; do
             echo "--- $n: not compiled ---"
-            errs=$(grep -m 12 -E 'error|undefined reference|Undefined symbols' "ccomp-out/$n.log" || true)
+            errs=$(grep -m 12 -E 'error|undefined reference|Undefined symbols|referenced from' "ccomp-out/$n.log" || true)
             [ -n "$errs" ] || errs=$(head -15 "ccomp-out/$n.log")
             printf '%s\n' "$errs" | sed 's/^/    /'
           done
+          # Each with its exit status: 128 and the signal's number, when a
+          # signal stopped it (VERIFY-124).
+          k=0
           for n in "${failed_run[@]}"; do
-            echo "--- $n: did not run ---"; tail -15 "ccomp-out/$n.run.log" | sed 's/^/    /'
+            echo "--- $n: did not run, status ${status[$k]} ---"
+            tail -15 "ccomp-out/$n.run.log" | sed 's/^/    /'
+            k=$((k + 1))
           done
-          # Run 1 measures (VERIFY-123): the pin is not held yet, and a run
-          # other than it fails nothing.
+          # Held to the pin (VERIFY-124).
+          if [ "$held" != "as pinned" ]; then
+            echo "FAIL: compcert $TARGET is pinned to: $PIN"
+            exit 1
+          fi
+
+      - name: Diagnose run 1's findings
+        # VERIFY-124: what stops compare_test at Apple silicon and the
+        # three at Intel, measured; informational, the step can fail
+        # nothing. NAN as ccomp's preprocessing expands it, and whether
+        # libSystem exports __nan, at each architecture, by Apple's own
+        # linker; va_list's size beside __builtin_va_list's under ccomp, and
+        # how Apple's headers define it there; and a function that ccomp
+        # compiles passing its arguments to vsnprintf through va_copy, as
+        # stringbuf does.
+        if: always()
+        continue-on-error: true
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          # Every probe runs whatever the one before it gave.
+          set +e
+          ccomp="$HOME/compcert-$TARGET/bin/ccomp"
+          d="$RUNNER_TEMP/diagnose"
+          mkdir -p "$d"
+          printf '#include <math.h>\nfloat canon_nan_probe = NAN;\n' > "$d/nan.c"
+          # A macro from a system header may be printed across lines.
+          nan=$("$ccomp" -E "$d/nan.c" | grep -v '^#' | tr '\n' ' ' | tr -s ' ' | grep -o 'canon_nan_probe = [^;]*' | sed 's/ *$//')
+          printf 'extern float __nan(void);\nint main(void) { return __nan() == __nan(); }\n' > "$d/link.c"
+          links=""
+          for arch in arm64 x86_64; do
+            if cc -arch "$arch" -o "$d/link-$arch" "$d/link.c" > "$d/link-$arch.log" 2>&1; then
+              links="$links $arch yes"
+            else
+              links="$links $arch no"
+            fi
+          done
+          printf '#include <stdio.h>\n#include <stdarg.h>\n' > "$d/types.c"
+          darwin=$("$ccomp" -E "$d/types.c" | grep -E 'typedef .*__darwin_va_list;' | head -1 | sed 's/^ *//')
+          cat > "$d/va.c" <<'PROBE'
+          #include <stdio.h>
+          #include <stdarg.h>
+          static int canon_fmt(char *buf, size_t n, const char *f, ...)
+          {
+              va_list ap, cp;
+              int r;
+              va_start(ap, f);
+              va_copy(cp, ap);
+              r = vsnprintf(buf, n, f, cp);
+              va_end(cp);
+              va_end(ap);
+              return r;
+          }
+          int main(void)
+          {
+              char b[64];
+              int r;
+              printf("va_list %u bytes, __builtin_va_list %u\n",
+                     (unsigned)sizeof(va_list), (unsigned)sizeof(__builtin_va_list));
+              fflush(stdout);
+              r = canon_fmt(b, sizeof b, "%d-%s-%.1f", 42, "x", 2.5);
+              printf("vsnprintf through va_copy: %d \"%s\"\n", r, b);
+              return 0;
+          }
+          PROBE
+          vrc=0
+          if "$ccomp" -fall -o "$d/va" "$d/va.c" > "$d/va.log" 2>&1; then
+            perl -e 'alarm shift; exec @ARGV or die "exec: $!\n"' 60 "$d/va" > "$d/va.out" 2>&1 || vrc=$?
+          else
+            vrc=compile
+            cat "$d/va.log"
+          fi
+          sizes=$(grep -m 1 'va_list' "$d/va.out" 2>/dev/null || true)
+          result=$(grep -m 1 'through va_copy' "$d/va.out" 2>/dev/null || true)
+          [ -n "$result" ] || result="vsnprintf through va_copy: status $vrc"
+          for f in "$d"/link-*.log "$d/va.out"; do echo "--- ${f##*/}"; sed 's/^/    /' "$f"; done
+          echo "::notice title=compcert $TARGET diagnosis::NAN gives: $nan; __nan links at$links; $darwin; $sizes; $result"
 
       - name: Upload the target's CompCert logs
         if: always()
