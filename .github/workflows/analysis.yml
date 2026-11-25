@@ -3519,14 +3519,16 @@ jobs:
   #   opam 2.6.1's full archive, its digest GitHub's, is built with Cygwin's
   #   OCaml; its switch takes that OCaml (ocaml-system) and CompCert's
   #   prerequisites alone (--deps-only), as at macOS, Coq among them, built
-  #   under Cygwin; CompCert comes from opam's archive and its digest.
+  #   under Cygwin, and dune pinned at 3.22.2 (VERIFY-129: 3.23's and
+  #   3.24's own build fails under Cygwin); CompCert comes from opam's
+  #   archive and its digest.
   #   Cygwin's GCC preprocesses, assembles and links for ccomp, with
   #   configure's options for Cygwin, and the tests run natively.
   #
   #   Each stage is cached apart, as a tar archive of Cygwin's own tar, so
   #   that a run stopped at one keeps those before it: opam with its root,
-  #   keyed by opam's version, OCaml's and CompCert's; then CompCert, keyed
-  #   by its version and target.
+  #   keyed by opam's version, OCaml's, dune's pin and CompCert's; then
+  #   CompCert, keyed by its version and target.
   #
   #   Each test is compiled and linked by ccomp with the compcert job's
   #   flags and a header of the job's own given first: _POSIX_C_SOURCE at
@@ -3605,7 +3607,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: D:\cc-deps.tar
-          key: opam-2.6.1-cygwin-ocaml-${{ steps.tools.outputs.ocaml }}-compcert-3.17-deps-v1
+          key: opam-2.6.1-cygwin-ocaml-${{ steps.tools.outputs.ocaml }}-dune-3.22.2-compcert-3.17-deps-v1
 
       - name: Unpack what the cache gave
         run: |
@@ -3645,6 +3647,12 @@ jobs:
           opam switch create compcert ocaml-system
           eval "$(opam env --switch=compcert)"
           opam repository add coq-released https://coq.inria.fr/opam/released
+          # dune at 3.22.2. 3.23.1's own build fails under Cygwin: its
+          # vendored BLAKE3 enables two rules for one object there, the
+          # first of x86-64 and the portable one (VERIFY-128, dune's
+          # #15340), and 3.24.2's rules read the same; 3.22.2 is where a
+          # maintainer of opam's pinned it, "the latest working version".
+          opam pin add --no-action dune 3.22.2
           opam install coq-compcert.3.17 --deps-only
           # What opam chose, for the record; neither line can fail the step.
           opam list --installed --columns=name,version \
@@ -3658,7 +3666,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: D:\cc-deps.tar
-          key: opam-2.6.1-cygwin-ocaml-${{ steps.tools.outputs.ocaml }}-compcert-3.17-deps-v1
+          key: opam-2.6.1-cygwin-ocaml-${{ steps.tools.outputs.ocaml }}-dune-3.22.2-compcert-3.17-deps-v1
 
       - name: Build CompCert 3.17 for the target
         if: steps.target-cache.outputs.cache-hit != 'true'
