@@ -45656,6 +45656,7 @@ What it shows:
 | **ID**         | VERIFY-123 |
 | **Date**       | 2026-11-25 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-25 — Scored: C1, C2, C3 MATCH; C4, C5 MISS. CLOSED: three of five ("Scored", below). Apple Clang's 61 tests pass on Intel macOS, and CompCert builds on both runners; it compiled and ran 59 of 61 at `aarch64-macos` and 57 at `x86_64-macos`, not the predicted 61; and `embedded`'s slowest header changed name, which C5 did not set aside. The Status above is the record as committed. |
 | **Baseline**   | b0055ba (VERIFY-122's change; its close, a record, is pushed with this): `1` and `3` to `6` #106, `2` #141 and `8` #165, at b0055ba. |
 | **Scope**      | `.github/workflows/analysis.yml`: a job, `compcert-macos`, and its header. `.github/workflows/ci.yml`: `macos-15-intel` in the `build` and `lifetime-debug` matrices, and its header. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `docs/compcert-licensing.md`, the workflow map. No library, test or tool file. |
 | **Category**   | Item 9b's fourth step, as the author chose on 2026-11-25: CompCert's two macOS targets, each natively on its runner, OCaml and opam from Homebrew, and Apple Clang's tests on the Intel runner as their baseline. |
@@ -45782,3 +45783,66 @@ on the new jobs.
 C1 to C5 scored, and the record closes. The next record holds
 `compcert-macos` to run 1's outcome, and answers what run 1 finds. Then
 item 9b's fifth step, Cygwin.
+
+### Scored (2026-11-25)
+
+The push of c6171cf, 21e0d86 and edaedc2 started seven workflows, `1` to
+`6` and `8`, each green at its first attempt: `1` #107 in 20 minutes,
+`3` #107 in 32, `compcert (x86_64-macos)` its last job, `6` #107 the
+last, in 89.
+
+| # | scored |
+|---|--------|
+| C1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| C2 | **MATCH.** The four `macos-15-intel` legs green, AppleClang 17.0.0 on the `macos-15` image, "100% tests passed out of 61" at each. |
+| C3 | **MATCH.** Both legs built CompCert: Homebrew's opam (2.6.1 on macOS 26.7.2, 2.5.2 on macOS 15.7.9), its GMP and pkgconf already there; the prerequisites in 6 and 23 minutes (OCaml 4.14.2, Coq 8.16.1, Flocq 4.2.2, MenhirLib 20260209); the archive "OK"; configure's "aarch64", "default", "apple" and "x86", "64", "macos", each system "macos"; CompCert in 2 and 5 minutes, `ccomp -version` 3.17; every entry saved. |
+| C4 | **MISS.** `aarch64-macos`: "59 / 61 compiled, 59 ran; not compiled: lifetime_token_test compare_test; not the pin". `x86_64-macos`: "60 / 61 compiled, 57 ran; not compiled: lifetime_token_test; did not run: hashmap_test stringbuf_test vec_fmt_test; not the pin". |
+| C5 | **MISS.** Every other job green, and every notice of the 127 jobs its last run's, word for word, the times aside, but `embedded`'s time report: "the slowest 0.04 s (data/hashmap/hashmap_range.h)", where #141 had `algo/any_all/any_all.h`, at the same 0.04 s. The slowest header's name changes with the times; VERIFY-110's P4 missed on it, and VERIFY-111's Q5 set the whole report aside; the predictions since set aside the times alone, and held while the name stayed. C5 did the same, and missed. |
+
+Three of five. Not predicted, and as they fell: the times; Coq 8.16.1,
+opam's pick; GitHub's notice of capacity on the Apple silicon jobs, at
+`compcert (aarch64-macos)` too.
+
+**What run 1 found**, from the log, and read where the log is silent
+(its artifact of logs, on Azure's storage, cannot be fetched from here):
+
+- **`lifetime_token_test`, at both**: "syntax error after 'static' and
+  before 'pthread_barrier_t'". macOS has no POSIX barriers, an option of
+  POSIX it does not implement (PostgreSQL's `port/pg_pthread.h` supplies
+  one "for the benefit of macOS, which lacks it"): no compiler builds the
+  test there. Apple Clang never tries: the test is "deliberately NOT a
+  ctest" (`CMakeLists.txt`). C4's ground counted two different 61s:
+  CTest's, 60 files with `autosar_test.c` built twice, and ccomp's, the
+  61 `*_test.c` files, `lifetime_token_test.c` among them.
+- **`compare_test`, at `aarch64-macos`**: not linked, "Undefined symbols
+  for architecture arm64". The line naming the symbol is the one after,
+  which the listing's filter does not take. Read: Apple's `math.h`,
+  without `__GNUC__`, defines `NAN` as a call, `__nan( )` (Libm-315's
+  ARM header), and `HUGE_VALF` as `1e50f`; `compare_test` is the one
+  test that uses `NAN`, and at `x86_64-macos` it links and passes.
+- **`hashmap_test`, `stringbuf_test` and `vec_fmt_test`, at
+  `x86_64-macos`**: compiled, then stopped, "Segmentation fault: 11"
+  twice and "Bus error: 10", their output lost. All three format
+  through `stringbuf`'s `vsnprintf` with `va_copy`. Read: CompCert's
+  `stdarg.h` defines `va_list` as `__builtin_va_list`, three 64-bit words
+  at x86-64, only where `_VA_LIST_T` is not yet defined, and Apple's
+  `<stdio.h>` defines `va_list` before it, from its own
+  `__darwin_va_list`; what that is without `__GNUC__` is not read here.
+  At `aarch64-macos` CompCert's `__builtin_va_list` is a pointer, as
+  Apple's ABI has it, and the three pass.
+
+**Closed.** Apple Clang's tests run on Intel macOS, and CompCert builds
+and runs at both macOS targets, 59 and 57 of the 61; the next record
+holds run 1's outcome and answers it. The close changes nothing but this
+record.
+
+What it shows:
+
+- **A count is not a set.** Apple Clang's 61 on the same runner was C4's
+  ground, and it was a different 61: one file it never compiles, one it
+  compiles twice. A baseline is the same files, or it is not one.
+- **Without GNU C, a platform's headers take paths that nothing else
+  takes.** On Linux, glibc's headers serve ccomp as they serve GCC; on
+  macOS, Apple's give a compiler they do not know a `NAN` that calls a
+  function and, perhaps, a `va_list` of their own: paths that no
+  compiler Apple ships ever takes.
