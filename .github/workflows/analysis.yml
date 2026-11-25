@@ -1,8 +1,8 @@
 name: "3 · Static analysis & coverage"
 # clang-tidy and Cppcheck, MISRA C:2012 (advisory), MC/DC and branch
-# coverage (GCC 14), and CompCert at x86-64 and at fifteen other
-# configurations, at Linux, on macOS and on bare metal (informational,
-# upstream only).
+# coverage (GCC 14), and CompCert at x86-64 and at sixteen other
+# configurations, at Linux, on macOS, under Cygwin and on bare metal
+# (informational, upstream only).
 # Map: .github/workflows/README.md.
 on:
   push:
@@ -3498,6 +3498,280 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: compcert-logs-${{ matrix.target }}
+          path: ccomp-out/*.log
+          retention-days: 90
+          if-no-files-found: ignore
+
+  # -------------------------------------------------------------------------
+  # 12g. CompCert under Cygwin, x86-64 — INFORMATIONAL, upstream repository
+  #      only (VERIFY-128)
+  #
+  #   LICENSING — the compcert job's note above holds here word for word:
+  #   docs/compcert-licensing.md, the same `if:` guard and the same
+  #   continue-on-error.
+  #
+  #   CompCert 3.17 built for x86_64-cygwin under Cygwin, on GitHub's
+  #   Windows runner, natively: the author's choice of 2026-11-25, as are
+  #   Cygwin installed by the Cygwin project's own action, as the cygwin
+  #   job installs it (ci.yml), whose tests under Cygwin's GCC are this
+  #   job's baseline (VERIFY-127), and opam built from its release, Cygwin's
+  #   own (2.0.7, of 2020) being one that opam's repository no longer tests.
+  #   opam 2.6.1's full archive, its digest GitHub's, is built with Cygwin's
+  #   OCaml; its switch takes that OCaml (ocaml-system) and CompCert's
+  #   prerequisites alone (--deps-only), as at macOS, Coq among them, built
+  #   under Cygwin; CompCert comes from opam's archive and its digest.
+  #   Cygwin's GCC preprocesses, assembles and links for ccomp, with
+  #   configure's options for Cygwin, and the tests run natively.
+  #
+  #   Each stage is cached apart, as a tar archive of Cygwin's own tar, so
+  #   that a run stopped at one keeps those before it: opam with its root,
+  #   keyed by opam's version, OCaml's and CompCert's; then CompCert, keyed
+  #   by its version and target.
+  #
+  #   Each test is compiled and linked by ccomp with the compcert job's
+  #   flags and a header of the job's own given first: _POSIX_C_SOURCE at
+  #   200809, the widest that any test asks for; then newlib's
+  #   <sys/cdefs.h>; then __func__ undefined, which newlib defines as NULL
+  #   where __GNUC__ is not defined, as ccomp's preprocessing leaves it.
+  #   That is compcert-ppc's recipe (VERIFY-120), with the feature macro
+  #   first: newlib fixes what it declares at its first header, here the
+  #   header's, so that a file's own _POSIX_C_SOURCE would come too late
+  #   (the author's choice of 2026-11-26). Each runs under timeout(1), 600 s
+  #   at most. The notice says what was compiled and ran; run 1 measures,
+  #   with no pin yet.
+  # -------------------------------------------------------------------------
+  compcert-cygwin:
+    name: compcert (x86_64-cygwin)
+    runs-on: windows-latest
+    if: github.repository == 'eclipse-canon-c/Canon-C'
+    continue-on-error: true
+    defaults:
+      run:
+        shell: D:\cygwin\bin\bash.exe --noprofile --norc -eo pipefail -o igncr '{0}'
+    env:
+      TARGET: x86_64-cygwin
+      # opam asks nothing, and leaves Cygwin's packages to the action.
+      OPAMYES: "1"
+      OPAMNODEPEXTS: "1"
+      OPAMROOT: /cygdrive/d/cc/opam-root
+      # None yet: run 1 measures (VERIFY-128).
+      PIN: ""
+    steps:
+      - name: Check out with LF line ends
+        shell: pwsh
+        run: git config --global core.autocrlf input
+      - uses: actions/checkout@v6
+      - uses: cygwin/cygwin-install-action@v7
+        with:
+          install-dir: 'D:\cygwin'
+          packages: >-
+            gcc-core gcc-g++ make ocaml ocaml-compiler-libs libgmp-devel
+            curl patch unzip m4 diffutils
+
+      - name: Show Cygwin's tools and its OCaml
+        id: tools
+        run: |
+          # Each tool the job runs is Cygwin's, in /usr/bin (VERIFY-127).
+          for t in gcc g++ make ocamlc ocamlopt curl patch unzip tar; do
+            p=$(command -v "$t" || true)
+            case "$p" in
+              /usr/bin/*) echo "$t: $p" ;;
+              *) echo "::error::$t is '$p', not Cygwin's"; exit 1 ;;
+            esac
+          done
+          # cc, which some of opam's packages call by that name, as gcc.
+          if command -v cc > /dev/null; then
+            echo "cc: $(command -v cc)"
+          else
+            printf '#!/bin/sh\nexec gcc "$@"\n' > /usr/bin/cc
+            chmod +x /usr/bin/cc
+            echo "cc: made, as gcc"
+          fi
+          gcc --version | sed -n 1p
+          ocaml=$(ocamlc -version)
+          echo "OCaml $ocaml, system $(ocamlc -config | sed -n 's/^system: //p')"
+          echo "ocaml=$ocaml" >> "$GITHUB_OUTPUT"
+
+      - name: Restore CompCert built for the target
+        id: target-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: D:\cc-compcert.tar
+          key: compcert-3.17-x86_64-cygwin-build-v1
+
+      - name: Restore opam and CompCert's prerequisites
+        id: deps-cache
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v5
+        with:
+          path: D:\cc-deps.tar
+          key: opam-2.6.1-cygwin-ocaml-${{ steps.tools.outputs.ocaml }}-compcert-3.17-deps-v1
+
+      - name: Unpack what the cache gave
+        run: |
+          mkdir -p /cygdrive/d/cc
+          for a in /cygdrive/d/cc-compcert.tar /cygdrive/d/cc-deps.tar; do
+            if [ -f "$a" ]; then
+              tar -C /cygdrive/d -xf "$a"
+              echo "unpacked ${a##*/}"
+            fi
+          done
+
+      - name: Build opam 2.6.1 from its release
+        if: steps.target-cache.outputs.cache-hit != 'true' && steps.deps-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 90
+        run: |
+          # opam's full archive, its OCaml dependencies within it; the
+          # SHA-256 is GitHub's digest of the release's asset.
+          url=https://github.com/ocaml/opam/releases/download/2.6.1/opam-full-2.6.1.tar.gz
+          sha256=ebbaffa4192e69d612d2c1a5fc5a15b32730322d7e34bc4456ad4076bb987007
+          mkdir -p /cygdrive/d/cc-build
+          cd /cygdrive/d/cc-build
+          curl -fsSL --retry 3 -o opam-full.tar.gz "$url"
+          echo "$sha256  opam-full.tar.gz" | sha256sum -c -
+          tar -xzf opam-full.tar.gz
+          cd opam-full-2.6.1
+          ./configure --prefix=/cygdrive/d/cc/opam --with-vendored-deps
+          make -j4
+          make install
+          /cygdrive/d/cc/opam/bin/opam --version
+
+      - name: Install CompCert's prerequisites with opam
+        if: steps.target-cache.outputs.cache-hit != 'true' && steps.deps-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 240
+        run: |
+          export PATH="/cygdrive/d/cc/opam/bin:$PATH"
+          opam init --bare --disable-sandboxing --no-setup
+          opam switch create compcert ocaml-system
+          eval "$(opam env --switch=compcert)"
+          opam repository add coq-released https://coq.inria.fr/opam/released
+          opam install coq-compcert.3.17 --deps-only
+          # What opam chose, for the record; neither line can fail the step.
+          opam list --installed --columns=name,version \
+            ocaml ocaml-system dune ocamlfind zarith menhir coq coq-core coq-stdlib coq-flocq coq-menhirlib \
+            || true
+          opam clean --download-cache || true
+          tar -C /cygdrive/d -cf /cygdrive/d/cc-deps.tar cc/opam cc/opam-root
+
+      - name: Save opam and CompCert's prerequisites
+        if: steps.target-cache.outputs.cache-hit != 'true' && steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: D:\cc-deps.tar
+          key: opam-2.6.1-cygwin-ocaml-${{ steps.tools.outputs.ocaml }}-compcert-3.17-deps-v1
+
+      - name: Build CompCert 3.17 for the target
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 120
+        run: |
+          export PATH="/cygdrive/d/cc/opam/bin:$PATH"
+          eval "$(opam env --switch=compcert)"
+          coqc --version | sed -n 1p
+          menhir --version
+          # opam's coq-compcert.3.17: its archive and its SHA-256.
+          url=https://github.com/AbsInt/CompCert/archive/v3.17.tar.gz
+          sha256=671425695c92d6c3a44d9f0833a803a9fa6b9199675a0b10dfdc131a0e2abffa
+          mkdir -p /cygdrive/d/cc-build/compcert
+          cd /cygdrive/d/cc-build
+          curl -fsSL --retry 3 -o compcert.tar.gz "$url"
+          echo "$sha256  compcert.tar.gz" | sha256sum -c -
+          tar -xzf compcert.tar.gz -C compcert --strip-components=1
+          cd compcert
+          # Cygwin's gcc, which configure names for Cygwin, preprocesses,
+          # assembles (CompCert's runtime library too) and links. opam's
+          # flags, but -prefix and the target, as at macOS.
+          ./configure "$TARGET" -prefix /cygdrive/d/cc/compcert \
+            -use-external-Flocq -use-external-MenhirLib -ignore-coq-version
+          make -j4
+          make install
+          tar -C /cygdrive/d -cf /cygdrive/d/cc-compcert.tar cc/compcert
+
+      - name: Save CompCert built for the target
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: D:\cc-compcert.tar
+          key: compcert-3.17-x86_64-cygwin-build-v1
+
+      - name: Compile and run the test suite with ccomp
+        run: |
+          ccomp=/cygdrive/d/cc/compcert/bin/ccomp
+          "$ccomp" -version
+          if ! "$ccomp" -version | grep -q "version 3.17"; then
+            echo "FAIL: ccomp is not the pinned 3.17"; exit 1
+          fi
+          mkdir -p ccomp-out
+          # The header given first to every file (the job's comment says
+          # why): POSIX 2008's names declared by newlib, and ccomp's own
+          # __func__, C99's.
+          cat > ccomp-out/canon_cygwin.h <<'HEADER'
+          #define _POSIX_C_SOURCE 200809L
+          #include <sys/cdefs.h>
+          #undef __func__
+          HEADER
+          # The compcert job's flags, and its reasons; then the header.
+          CCOMP_FLAGS=(
+            -fall
+            -DCANON_NO_GNU_EXTENSIONS
+            -DCANON_CHECKED_FORCE_FALLBACK
+            -DCANON_BITS_FORCE_FALLBACK
+            -iquote core/primitives -I core -I semantics -I .
+            -I integrations/autosar -I test/integrations/autosar/stubs
+            -include "$PWD/ccomp-out/canon_cygwin.h"
+          )
+          total=0; compiled=0; ran=0; failed_compile=(); failed_run=(); status=()
+          while IFS= read -r t; do
+            total=$((total + 1))
+            n=$(basename "$t" .c)
+            extra=(); d="${t%_test.c}_defs.c"; [ -f "$d" ] && extra=("$d")
+            if "$ccomp" "${CCOMP_FLAGS[@]}" -o "ccomp-out/$n.exe" "$t" "${extra[@]}" \
+                 > "ccomp-out/$n.log" 2>&1; then
+              compiled=$((compiled + 1))
+              rc=0
+              timeout 600 "./ccomp-out/$n.exe" > "ccomp-out/$n.run.log" 2>&1 || rc=$?
+              if [ "$rc" -eq 0 ]; then
+                ran=$((ran + 1))
+              else
+                failed_run+=("$n"); status+=("$rc")
+              fi
+            else
+              failed_compile+=("$n")
+            fi
+          done < <(find test -name '*_test.c' | sort)
+          line="$compiled / $total compiled, $ran ran"
+          [ ${#failed_compile[@]} -gt 0 ] && line="$line; not compiled: ${failed_compile[*]}"
+          [ ${#failed_run[@]} -gt 0 ] && line="$line; did not run: ${failed_run[*]}"
+          if [ -z "$PIN" ]; then held="no pin yet"
+          elif [ "$line" = "$PIN" ]; then held="as pinned"
+          else held="not the pin"; fi
+          echo "CompCert at $TARGET (INFORMATIONAL): $line; $held"
+          echo "::notice title=compcert $TARGET::$line; $held"   # VERIFY-050
+          # Of each log, the lines that name an error, or its first 15 if
+          # none does, as in compcert-targets (VERIFY-117).
+          for n in "${failed_compile[@]}"; do
+            echo "--- $n: not compiled ---"
+            errs=$(grep -m 12 -E 'error|undefined reference' "ccomp-out/$n.log" || true)
+            [ -n "$errs" ] || errs=$(head -15 "ccomp-out/$n.log")
+            printf '%s\n' "$errs" | sed 's/^/    /'
+          done
+          # Each with its exit status: 124 where timeout(1) stopped it, and
+          # 128 and the signal's number where a signal did.
+          k=0
+          for n in "${failed_run[@]}"; do
+            echo "--- $n: did not run, status ${status[$k]} ---"
+            tail -15 "ccomp-out/$n.run.log" | sed 's/^/    /'
+            k=$((k + 1))
+          done
+          if [ "$held" = "not the pin" ]; then
+            echo "FAIL: compcert $TARGET is pinned to: $PIN"
+            exit 1
+          fi
+
+      - name: Upload the ccomp logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: compcert-logs-x86_64-cygwin
           path: ccomp-out/*.log
           retention-days: 90
           if-no-files-found: ignore

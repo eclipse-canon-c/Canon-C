@@ -32,6 +32,7 @@ here for them.
 | PowerPC 32, big-endian, bare metal: the embedded ABI, with the FPU | bare metal: newlib 4.4 | CompCert 3.17 (`ppc-eabi`), the `powerpc` job's toolchain preprocessing, assembling and linking for it | `compcert-ppc` (`analysis.yml`), under psim, GDB 15.1's PowerPC simulator, each test linked as `powerpc` links its tests at `ppc` (below): 56 of 61 run, held to that (VERIFY-120): not built, `lifetime_token_test` and `time_test`, which use what newlib gives only with `_POSIX_BARRIERS` and `_POSIX_TIMERS`, and `impl_defined_test` and `file_test`, psim's system calls having no `link`, which `rename()` needs; `stringbuf_test` failing, its `%ls` on big-endian data, as at `powerpc`; newlib's `__func__` undone for ccomp (below); informational, as `compcert` |
 | 32-bit Arm, big-endian (Armv7-A, hard float) | Linux, glibc 2.39 | CompCert 3.17 (`armeb-linux`), the `armeb` job's toolchain preprocessing, assembling and linking for it | `compcert-armeb` (`analysis.yml`), under qemu-user in that toolchain's sysroot, each binary checked BE8: 61 of 61 run, held to that (VERIFY-122); configure's `__REDIRECT` left as it is, this GCC not defining `_TIME_BITS=64` (below); informational, as `compcert` |
 | AArch64 (Apple silicon) and x86-64 | macOS | CompCert 3.17 (`aarch64-macos`, `x86_64-macos`), built on each runner, Apple's cc preprocessing, assembling and linking for it | `compcert-macos` (`analysis.yml`), on `macos-latest` and `macos-15-intel`, the tests run natively, Apple Clang's on the same runners their baseline: 60 of 61 run at each, held to that (VERIFY-125): `lifetime_token_test` needs POSIX barriers, which macOS does not have, so that no compiler builds it there; each file given first a header of the job's own, for two things Apple's headers give a compiler without GNU C (below); informational, as `compcert` |
+| x86-64 | Windows under Cygwin: newlib's C library, in `cygwin1.dll` | CompCert 3.17 (`x86_64-cygwin`), built under Cygwin on the runner, Cygwin's GCC preprocessing, assembling and linking for it | `compcert-cygwin` (`analysis.yml`), on `windows-latest`, the tests run natively, Cygwin's GCC's on the same runner their baseline (`cygwin`, `ci.yml`): since VERIFY-128, run 1 to measure, no pin yet; each file given first a header of the job's own, newlib's `__func__` undone with the feature macro first (below); informational, as `compcert` |
 | x86, 32-bit | Linux, glibc | GCC (`-m32`) | `build-32bit` (`ci.yml`): `size_t` exactly 32 bits |
 | AArch64 | Linux, glibc | GCC, Clang | `build-arm64` (`platforms.yml`), on GitHub's Arm runner, with sanitizers; `char` is unsigned there |
 | AArch64 | macOS | Apple Clang | `build` and `lifetime-debug` (`ci.yml`), `macos-latest` is Apple silicon |
@@ -119,7 +120,13 @@ it with `%s` (VERIFY-119). Give ccomp, with `-include`, a header that
 includes `<sys/cdefs.h>` and then undefines `__func__`: its later
 inclusions change nothing, and ccomp's own `__func__`, C99's, names the
 function. `compcert-ppc` does so (VERIFY-120); picolibc excepts CompCert
-from that definition.
+from that definition. Under Cygwin, whose C library is newlib's too, the
+same header would come before a file's own feature macro, which newlib,
+fixing what it declares at its first header, would then not see:
+`time_test` and `lifetime_token_test` define `_POSIX_C_SOURCE`, for
+`clock_gettime` and the barriers. So the header defines it first, at
+200809, the widest any test asks for. `compcert-cygwin` does so
+(VERIFY-128).
 On macOS, Apple's headers give a compiler that does not define
 `__GNUC__`, as CompCert's preprocessing leaves it, two things CompCert
 cannot use (VERIFY-124). `NAN` is a call, `__nan()`, which libSystem
@@ -159,10 +166,9 @@ macro is defined, and the full level declares `clock_gettime`
 - The targets compiled only, run: RISC-V 32 and 64 on bare metal under
   QEMU, AVR under simavr, and ARC where a simulator CI can run turns up.
 - WebAssembly under a runtime.
-- CompCert 3.17 at its other targets, each built for it as
-  `compcert-targets` builds it for Linux, in this order: Cygwin
-  (`x86_64-cygwin`) on GitHub's Windows runner; BSD (`x86_64-bsd`,
-  `x86_32-bsd`) in a FreeBSD virtual machine, GitHub having no BSD runner.
+- CompCert 3.17 at its last targets, BSD (`x86_64-bsd`, `x86_32-bsd`),
+  each built for it as `compcert-targets` builds it for Linux, in a
+  FreeBSD virtual machine, GitHub having no BSD runner.
   `ppc-eabi-diab` waits for a compiler (below).
 
 ## Compiled for
