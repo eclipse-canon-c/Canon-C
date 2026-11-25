@@ -46460,6 +46460,7 @@ What it shows:
 | **ID**         | VERIFY-128 |
 | **Date**       | 2026-11-26 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-26 — Scored: H1, H2, H3 and H7 MATCH; H4, H5 and H6 MISS. CLOSED: four of seven ("Scored", below). Cygwin installs, opam 2.6.1 builds under it from its release, its switch takes Cygwin's OCaml 4.14.2, and its solver chooses macOS's versions; zarith builds, but dune 3.23.1 does not, its vendored BLAKE3 defining one object twice under Cygwin ("What run 1 found"); CompCert is not reached. The Status above is the record as committed. |
 | **Baseline**   | 103d8f5 (VERIFY-127's change; its close, a record, is pushed with this): `1` #111, `2` #146, `3` to `6` #111 and `8` #170, at 103d8f5. |
 | **Scope**      | `.github/workflows/analysis.yml`: a job, `compcert-cygwin`, and the header's line on CompCert's configurations. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `docs/compcert-licensing.md`, `.github/workflows/README.md`. No library, test or tool file. |
 | **Category**   | Item 9b's fifth step, as the author chose on 2026-11-25 (natively in Cygwin, with Cygwin installed by the Cygwin project's own action) and on 2026-11-26 (newlib's `__func__` undone, the feature macro first). Run 1 measures. |
@@ -46588,3 +46589,52 @@ H1 to H7 scored, and the record closes. If run 1 builds CompCert, the
 next record holds its outcome as a pin, as VERIFY-124 held macOS's; if a
 stage fails, the next record answers it, the stages before it cached.
 Then item 9b's last step, BSD.
+
+### Scored (2026-11-26)
+
+The push of a8fe7ab, cb13561 and 811f254 started seven workflows, `1` to
+`6` and `8`, each green at its first attempt; `compcert (x86_64-cygwin)`,
+continue-on-error as every CompCert job, failed after 13 minutes at its
+prerequisites, which `3` #112's green does not show.
+
+| # | scored |
+|---|--------|
+| H1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| H2 | **MATCH.** The action installed the job's packages, one of them (`cygutils`) downloaded again after "connection error: 12002"; each tool checked was Cygwin's; `cc` was there, `/usr/bin/cc`; "gcc (GCC) 14.4.0", "OCaml 4.14.2, system cygwin". |
+| H3 | **MATCH.** opam 2.6.1 built from its release under Cygwin in 5 minutes; `opam --version` "2.6.1". |
+| H4 | **MISS.** `opam init` and the switch went as the step asks ("installed ocaml-system.4.14.2"), and the solver's plan was macOS's: Coq 8.16.1, Flocq 4.2.2, Menhir and MenhirLib 20260209, dune 3.23.1, ocamlfind 1.9.8, zarith 1.14. ocamlfind and zarith installed; then "[ERROR] The compilation of dune.3.23.1 failed at "./_boot/dune.exe build dune.install --release --profile dune-bootstrap -j 3".", its output "File "vendor/ocaml-blake3-mini/dune", line 21, characters 8-14: … Error: Multiple definitions for the same object file "blake3". See another definition at vendor/ocaml-blake3-mini/dune:234.". Nothing saved. |
+| H5 | **MISS.** Not reached. |
+| H6 | **MISS.** Not reached; no notice. |
+| H7 | **MATCH.** The other 136 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly. |
+
+Four of seven.
+
+### What run 1 found
+
+dune 3.23.1's vendored BLAKE3 (`vendor/ocaml-blake3-mini/dune`, read in
+its release archive) has three configurations. The first, assembly for
+x86-64, is enabled wherever `%{architecture}` is `amd64`, but its
+assembly rules only where `%{system}` is Linux, macOS, BeOS or a BSD, or
+MinGW-w64; the third, portable C, wherever the architecture is not
+`amd64` with one of those systems or Windows', nor Arm's. Cygwin's
+`%{system}` is `cygwin`, in neither list: the first and the third are
+both enabled, each the archive `blake3` with an object `blake3`, and
+dune refuses. The rules read the same in dune 3.20.2, 3.21.1, 3.22.2 and
+3.24.2 but for flags; dune 3.20.0 brought BLAKE3 in, and 3.20.2's "Fix
+Cygwin bootstrap" (#12325) changed the bootstrap's first stage, not this
+file. It is dune's issue #15340, "dune 3.23.1 fails to build on the
+cygwin backend", closed on 2026-06-26, the same error; a maintainer of
+opam's writes there that they pinned dune at 3.22.2, "the latest working
+version", and dune's that the rules would be fixed in its main branch,
+not in older releases. No release has the fix yet, by the rules of
+3.24.2, the latest. Nothing here has built a dune under Cygwin.
+
+**Closed.** Run 1 installs Cygwin, builds opam 2.6.1 under it and makes
+the switch; the first of CompCert's prerequisites that fails is dune. The
+close changes nothing but this record; VERIFY-129 pins dune at 3.22.2.
+
+What it shows:
+
+- **A green workflow can carry a red job.** `compcert-cygwin` is
+  continue-on-error, as every CompCert job, so that `3` is green whatever
+  it does; its own conclusion, read from the API, is the measure.
