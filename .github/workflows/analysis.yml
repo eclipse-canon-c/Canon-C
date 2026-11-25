@@ -1,8 +1,8 @@
 name: "3 · Static analysis & coverage"
 # clang-tidy and Cppcheck, MISRA C:2012 (advisory), MC/DC and branch
-# coverage (GCC 14), and CompCert at x86-64 and at thirteen other
-# configurations, at Linux and on bare metal (informational, upstream
-# only).
+# coverage (GCC 14), and CompCert at x86-64 and at fifteen other
+# configurations, at Linux, on macOS and on bare metal (informational,
+# upstream only).
 # Map: .github/workflows/README.md.
 on:
   push:
@@ -3204,6 +3204,190 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: compcert-logs-armeb-linux
+          path: ccomp-out/*.log
+          retention-days: 90
+          if-no-files-found: ignore
+
+  # -------------------------------------------------------------------------
+  # 12f. CompCert on macOS, Apple silicon and Intel — INFORMATIONAL,
+  #      upstream repository only (VERIFY-123)
+  #
+  #   LICENSING — the compcert job's note above holds here word for word:
+  #   docs/compcert-licensing.md, the same `if:` guard and the same
+  #   continue-on-error.
+  #
+  #   CompCert 3.17 built for its two macOS configurations, each on its own
+  #   runner, as compcert-targets builds it for Linux: aarch64-macos on
+  #   macos-latest (Apple silicon) and x86_64-macos on macos-15-intel,
+  #   GitHub's last Intel image, which it retires with macOS 15 in fall
+  #   2027; the leg goes then. Apple's cc preprocesses, assembles and links
+  #   for it, with configure's options for macOS, and the tests run
+  #   natively. OCaml and opam come from Homebrew, which GitHub's macOS
+  #   images carry as Ubuntu's carry apt: the author's choice of 2026-11-25,
+  #   as are the two runners. The opam switch holds CompCert's prerequisites
+  #   alone (--deps-only), built on the runner and cached by its system and
+  #   architecture; CompCert itself is built once, from opam's archive and
+  #   its digest. Each test is compiled and linked by ccomp with the compcert
+  #   job's flags, and run with a limit of 600 s (perl's alarm: macOS has no
+  #   timeout(1)). The build matrix (ci.yml) runs Apple Clang's tests on
+  #   both runners, the baseline this job is read against.
+  #
+  #   Run 1 measures (VERIFY-123): the notice says what was compiled and
+  #   ran, and whether that is the pin, VERIFY-123's prediction, which is
+  #   not held yet. A failed install, fetch, configure or build fails the
+  #   job; continue-on-error keeps it from the workflow's result.
+  # -------------------------------------------------------------------------
+  compcert-macos:
+    name: compcert (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    if: github.repository == 'eclipse-canon-c/Canon-C'
+    continue-on-error: true
+    env:
+      # opam asks nothing: a cached root that a newer Homebrew opam must
+      # upgrade is upgraded.
+      OPAMYES: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-macos
+            runner: macos-latest
+            pin: "61 / 61 compiled, 61 ran"
+          - target: x86_64-macos
+            runner: macos-15-intel
+            pin: "61 / 61 compiled, 61 ran"
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Show the runner, Apple's compiler and its SDK
+        run: |
+          sw_vers
+          uname -m
+          cc --version | head -1
+          xcrun --show-sdk-version
+
+      - name: Restore CompCert built for the target
+        id: target-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/compcert-${{ matrix.target }}
+          key: compcert-3.17-${{ matrix.target }}-build-v1
+
+      - name: Restore the opam switch of CompCert's prerequisites
+        id: opam-cache
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v5
+        with:
+          path: ~/.opam
+          key: opam-${{ runner.os }}-${{ runner.arch }}-ocaml-4.14.2-compcert-3.17-deps-v1
+
+      - name: Install opam, GMP and pkg-config from Homebrew
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        run: brew install opam gmp pkgconf
+
+      - name: Install CompCert's prerequisites with opam
+        if: steps.target-cache.outputs.cache-hit != 'true' && steps.opam-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 120
+        run: |
+          opam init --bare --disable-sandboxing --yes
+          opam switch create compcert 4.14.2 --yes
+          eval "$(opam env --switch=compcert)"
+          opam repository add coq-released https://coq.inria.fr/opam/released --yes
+          opam install coq-compcert.3.17 --deps-only --yes
+
+      - name: Build CompCert 3.17 for the target
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 90
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          eval "$(opam env --switch=compcert)"
+          # opam's coq-compcert.3.17: its archive and its SHA-256.
+          url=https://github.com/AbsInt/CompCert/archive/v3.17.tar.gz
+          sha256=671425695c92d6c3a44d9f0833a803a9fa6b9199675a0b10dfdc131a0e2abffa
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/compcert.tar.gz" "$url"
+          echo "$sha256  $RUNNER_TEMP/compcert.tar.gz" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/compcert-src"
+          tar -xzf "$RUNNER_TEMP/compcert.tar.gz" -C "$RUNNER_TEMP/compcert-src" --strip-components=1
+          prefix="$HOME/compcert-$TARGET"
+          cd "$RUNNER_TEMP/compcert-src" || exit 1
+          # Apple's cc, which configure names for macOS, preprocesses,
+          # assembles (CompCert's runtime library too) and links. opam's
+          # flags, but -prefix and the target, and no Coq development or
+          # clightgen.
+          ./configure "$TARGET" -prefix "$prefix" \
+            -use-external-Flocq -use-external-MenhirLib -ignore-coq-version
+          make -j"$(sysctl -n hw.ncpu)"
+          make install
+
+      - name: Compile and run the test suite with ccomp
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          # Run 1's outcome as VERIFY-123 predicts it: every test, as at
+          # CompCert's Linux targets and as Apple Clang passes them on the
+          # same runner. Not yet held: the notice says whether the run is it.
+          PIN: ${{ matrix.pin }}
+        run: |
+          ccomp="$HOME/compcert-$TARGET/bin/ccomp"
+          "$ccomp" -version
+          if ! "$ccomp" -version | grep -q "version 3.17"; then
+            echo "FAIL: ccomp is not the pinned 3.17"; exit 1
+          fi
+          # The compcert job's flags, and its reasons.
+          CCOMP_FLAGS=(
+            -fall
+            -DCANON_NO_GNU_EXTENSIONS
+            -DCANON_CHECKED_FORCE_FALLBACK
+            -DCANON_BITS_FORCE_FALLBACK
+            -iquote core/primitives -I core -I semantics -I .
+            -I integrations/autosar -I test/integrations/autosar/stubs
+          )
+          mkdir -p ccomp-out
+          total=0; compiled=0; ran=0; failed_compile=(); failed_run=()
+          while IFS= read -r t; do
+            total=$((total + 1))
+            n=$(basename "$t" .c)
+            extra=(); d="${t%_test.c}_defs.c"; [ -f "$d" ] && extra=("$d")
+            if "$ccomp" "${CCOMP_FLAGS[@]}" -o "ccomp-out/$n" "$t" "${extra[@]}" \
+                 > "ccomp-out/$n.log" 2>&1; then
+              compiled=$((compiled + 1))
+              # 600 s at most: perl's alarm survives the exec.
+              if perl -e 'alarm shift; exec @ARGV or die "exec: $!\n"' 600 "./ccomp-out/$n" \
+                   > "ccomp-out/$n.run.log" 2>&1; then
+                ran=$((ran + 1))
+              else
+                failed_run+=("$n")
+              fi
+            else
+              failed_compile+=("$n")
+            fi
+          done < <(find test -name '*_test.c' | sort)
+          line="$compiled / $total compiled, $ran ran"
+          [ ${#failed_compile[@]} -gt 0 ] && line="$line; not compiled: ${failed_compile[*]}"
+          [ ${#failed_run[@]} -gt 0 ] && line="$line; did not run: ${failed_run[*]}"
+          if [ "$line" = "$PIN" ]; then held="as pinned"; else held="not the pin"; fi
+          echo "CompCert at $TARGET (INFORMATIONAL): $line; $held"
+          echo "::notice title=compcert $TARGET::$line; $held"   # VERIFY-050
+          # Of each log, the lines that name an error, or its first 15 if
+          # none does, as in compcert-targets (VERIFY-117).
+          for n in "${failed_compile[@]}"; do
+            echo "--- $n: not compiled ---"
+            errs=$(grep -m 12 -E 'error|undefined reference|Undefined symbols' "ccomp-out/$n.log" || true)
+            [ -n "$errs" ] || errs=$(head -15 "ccomp-out/$n.log")
+            printf '%s\n' "$errs" | sed 's/^/    /'
+          done
+          for n in "${failed_run[@]}"; do
+            echo "--- $n: did not run ---"; tail -15 "ccomp-out/$n.run.log" | sed 's/^/    /'
+          done
+          # Run 1 measures (VERIFY-123): the pin is not held yet, and a run
+          # other than it fails nothing.
+
+      - name: Upload the target's CompCert logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: compcert-logs-${{ matrix.target }}
           path: ccomp-out/*.log
           retention-days: 90
           if-no-files-found: ignore

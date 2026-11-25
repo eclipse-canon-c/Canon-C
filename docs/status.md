@@ -9,7 +9,7 @@ and those files differ, they are right and this page is wrong; please say
 so in an issue. A record that changes a fact stated here updates this
 page with it.
 
-*Written for VERIFY-118, 2026-11-24; brought up to date by VERIFY-119 to VERIFY-122.*
+*Written for VERIFY-118, 2026-11-24; brought up to date by VERIFY-119 to VERIFY-123.*
 
 ## The words used
 
@@ -31,7 +31,7 @@ With GCC, Clang, MSVC or a vendor's compiler:
 
 | family | target | compilers | the tests | proved at its type sizes |
 |--------|--------|-----------|-----------|--------------------------|
-| x86-64 | Linux (glibc), Linux (musl), Windows | GCC, Clang, MSVC, MinGW | run, all pass; also with sanitizers, Valgrind and fuzzing | every unit; at Windows' type sizes, `core/` |
+| x86-64 | Linux (glibc), Linux (musl), Windows, macOS (Intel) | GCC, Clang, MSVC, MinGW, Apple Clang | run, all pass; also with sanitizers, Valgrind and fuzzing | every unit; at Windows' type sizes, `core/` |
 | x86 | Linux, 32-bit | GCC | run, all pass | `core/arena.h` |
 | AArch64 | Linux; macOS (Apple silicon) | GCC, Clang; Apple Clang | run, all pass | `core/` (Linux) |
 | AArch64, bare metal | Cortex-A78AE, Cortex-R82 | GCC, picolibc | run, exceptions pinned | planned |
@@ -59,6 +59,7 @@ With CompCert 3.17, the formally verified compiler (informational):
 | RISC-V 32, picolibc's headers | build, 55 of 61, pinned |
 | bare-metal PowerPC 32 (`ppc-eabi`), with newlib | run, 56 of 61, pinned: the five use what newlib on bare metal or GDB's simulator does not have, or print `%ls` on big-endian data |
 | big-endian 32-bit Arm Linux (`armeb-linux`), with glibc | run, 61 of 61 |
+| macOS on Apple silicon and Intel (`aarch64-macos`, `x86_64-macos`) | run; its first run measures, against a prediction of 61 of 61 at each (VERIFY-123) |
 
 In the GCC jobs on bare metal, each test runs at four levels of
 optimization (`-O0`, `-O2`, `-O3`, `-Os`). Each pinned exception, and

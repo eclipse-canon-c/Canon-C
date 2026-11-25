@@ -30,9 +30,11 @@ here for them.
 | 32-bit Arm, bare metal: ARMv7-A (Cortex-A9; the hard-float ABI, and the base ABI), ARMv7-R (Cortex-R5F), ARMv7-M (Cortex-M7, double-precision FPU), ARMv6 (ARM1176) | bare metal: picolibc 1.8.6 | CompCert 3.17 (`arm-eabihf`, `arm-eabi`, `armv7r-eabihf`, `armv7m-eabihf`, `armv6-eabihf`), Ubuntu's `arm-none-eabi` GCC preprocessing, assembling and linking for it | `compcert-bare` (`analysis.yml`), on QEMU's models of the cores through semihosting: 55 of the 61 tests at each, held to that (VERIFY-117); not `lifetime_token_test`, `time_test`, `impl_defined_test` and `file_test`, for what picolibc on bare metal does not give, nor `compare_test` and `parse_test`, whose `<math.h>` CompCert does not take (below); informational, as `compcert` |
 | PowerPC 32, big-endian, bare metal: the embedded ABI, with the FPU | bare metal: newlib 4.4 | CompCert 3.17 (`ppc-eabi`), the `powerpc` job's toolchain preprocessing, assembling and linking for it | `compcert-ppc` (`analysis.yml`), under psim, GDB 15.1's PowerPC simulator, each test linked as `powerpc` links its tests at `ppc` (below): 56 of 61 run, held to that (VERIFY-120): not built, `lifetime_token_test` and `time_test`, which use what newlib gives only with `_POSIX_BARRIERS` and `_POSIX_TIMERS`, and `impl_defined_test` and `file_test`, psim's system calls having no `link`, which `rename()` needs; `stringbuf_test` failing, its `%ls` on big-endian data, as at `powerpc`; newlib's `__func__` undone for ccomp (below); informational, as `compcert` |
 | 32-bit Arm, big-endian (Armv7-A, hard float) | Linux, glibc 2.39 | CompCert 3.17 (`armeb-linux`), the `armeb` job's toolchain preprocessing, assembling and linking for it | `compcert-armeb` (`analysis.yml`), under qemu-user in that toolchain's sysroot, each binary checked BE8: 61 of 61 run, held to that (VERIFY-122); configure's `__REDIRECT` left as it is, this GCC not defining `_TIME_BITS=64` (below); informational, as `compcert` |
+| AArch64 (Apple silicon) and x86-64 | macOS | CompCert 3.17 (`aarch64-macos`, `x86_64-macos`), built on each runner, Apple's cc preprocessing, assembling and linking for it | `compcert-macos` (`analysis.yml`), on `macos-latest` and `macos-15-intel`, the tests run natively, Apple Clang's on the same runners their baseline: run 1 measures, against VERIFY-123's prediction, 61 of 61 at each; informational, as `compcert` |
 | x86, 32-bit | Linux, glibc | GCC (`-m32`) | `build-32bit` (`ci.yml`): `size_t` exactly 32 bits |
 | AArch64 | Linux, glibc | GCC, Clang | `build-arm64` (`platforms.yml`), on GitHub's Arm runner, with sanitizers; `char` is unsigned there |
-| AArch64 | macOS | Apple Clang | `build` (`ci.yml`), `macos-latest` is Apple silicon |
+| AArch64 | macOS | Apple Clang | `build` and `lifetime-debug` (`ci.yml`), `macos-latest` is Apple silicon |
+| x86-64 | macOS | Apple Clang | `build` and `lifetime-debug` (`ci.yml`), on `macos-15-intel`, GitHub's last Intel image, until it retires with macOS 15 in fall 2027 (VERIFY-123) |
 | s390x, big-endian | Linux, glibc | GCC | `big-endian` (`platforms.yml`), under qemu-user |
 | PowerPC 32, big-endian | Linux, glibc | GCC | `big-endian-32` (`platforms.yml`), under qemu-user, also with `CANON_LIFETIME=debug`; `char` is unsigned there, and the 64-bit atomic of `lifetime.h` is libatomic's |
 | 32-bit Arm (Armv7-A, Thumb-2, hard float) | Linux, glibc | GCC 13.3 (Ubuntu's `arm-linux-gnueabihf`) | `armhf` (`platforms.yml`), under qemu-user, also with `CANON_LIFETIME=debug`; `char` is unsigned there and a `uint64_t` in a struct aligned to 8, and the 64-bit atomic of `lifetime.h` is lock-free (LDREXD and STREXD), no test linked with libatomic (VERIFY-112) |
@@ -135,12 +137,10 @@ from that definition.
   QEMU, AVR under simavr, and ARC where a simulator CI can run turns up.
 - WebAssembly under a runtime.
 - CompCert 3.17 at its other targets, each built for it as
-  `compcert-targets` builds it for Linux, in this order:
-  macOS (`aarch64-macos` on GitHub's macOS runner, and `x86_64-macos`,
-  where an Intel runner or Rosetta allows); Cygwin (`x86_64-cygwin`) on
-  GitHub's Windows runner; BSD (`x86_64-bsd`, `x86_32-bsd`) in a FreeBSD
-  virtual machine, GitHub having no BSD runner. `ppc-eabi-diab` waits for
-  a compiler (below).
+  `compcert-targets` builds it for Linux, in this order: Cygwin
+  (`x86_64-cygwin`) on GitHub's Windows runner; BSD (`x86_64-bsd`,
+  `x86_32-bsd`) in a FreeBSD virtual machine, GitHub having no BSD runner.
+  `ppc-eabi-diab` waits for a compiler (below).
 
 ## Compiled for
 
