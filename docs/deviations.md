@@ -46004,6 +46004,7 @@ What it shows:
 | **ID**         | VERIFY-125 |
 | **Date**       | 2026-11-25 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-25 — Scored: E1 to E6 MATCH. CLOSED: six of six ("Scored", below). `compcert-macos` at 60 of 61 at each, as pinned, the header in force: `compare_test` links and passes at Apple silicon, and `hashmap_test`, `stringbuf_test` and `vec_fmt_test` pass at Intel; `lifetime_token_test` alone is not compiled, for POSIX barriers. The Status above is the record as committed. |
 | **Baseline**   | cbd4ddd (VERIFY-124's change; its close, a record, is pushed with this): `1` and `3` to `6` #108, `2` #143 and `8` #167, at cbd4ddd. |
 | **Scope**      | `.github/workflows/analysis.yml`'s `compcert-macos`: a header that its test step writes and gives ccomp first, its pins, and its comments. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`. No library, test or tool file. |
 | **Category**   | VERIFY-124's "What follows", as the author chose on 2026-11-25: both failures that it measured answered in the job's flags, the library and its tests unchanged; both reported to CompCert, the reports drafted for the author to file (item 9c). |
@@ -46141,3 +46142,45 @@ listing; GitHub's own notices.
 E1 to E6 scored, and the record closes. Then item 9b's fifth step,
 Cygwin: CompCert's `x86_64-cygwin` on GitHub's Windows runner, the
 author's choices asked first.
+
+### Scored (2026-11-25)
+
+The push of c2d4df3, a175515 and 0f533ff started seven workflows, `1` to
+`6` and `8`, each green at its first attempt: `3` #109 in 5 minutes,
+`compcert (aarch64-macos)` and `compcert (x86_64-macos)` in 2 and 4, `6`
+#109 the last, in 89.
+
+| # | scored |
+|---|--------|
+| E1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| E2 | **MATCH.** At both legs, "Cache hit for: compcert-3.17-aarch64-macos-build-v1" and its `x86_64-macos` twin; the opam switch's restore, the installs and the build skipped. |
+| E3 | **MATCH.** At `aarch64-macos`, "60 / 61 compiled, 60 ran; not compiled: lifetime_token_test; as pinned", the job green: `compare_test` linked and exited 0, and `time_test` too. |
+| E4 | **MATCH.** At `x86_64-macos`, the same notice, the job green: `hashmap_test`, `stringbuf_test` and `vec_fmt_test` exited 0. |
+| E5 | **MATCH.** Both diagnoses word for word as #108's, the probe at x86-64 "status 138" again. |
+| E6 | **MATCH.** The other 132 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them, now "1.2 s in all, the slowest 0.04 s (algo/any_all/any_all.h)", set aside whole. |
+
+Six of six. Not predicted, and as they fell: the times;
+`lifetime_token_test`'s listing at both, as #108's,
+"test/concurrency/lifetime_token_test.c:78:8: syntax error after 'static'
+and before 'pthread_barrier_t'."; GitHub's own notice of the queue for
+macOS arm64 runners, as at #108.
+
+**Closed.** Both failures that VERIFY-124 measured are answered in the
+job's flags, as the author chose: given CompCert's `<stdarg.h>` and a
+constant `NAN` first, `compcert-macos` compiles and passes 60 of the 61
+tests at each target, the one left needing POSIX barriers, which macOS
+does not have. The library and its tests are unchanged. The diagnosis
+step, compiling without the header, shows Apple's headers as before: the
+evidence of reports 9 and 10 to CompCert, drafted for the author to file
+(item 9c). The close changes nothing but this record.
+
+What it shows:
+
+- **The remedy measures the diagnosis.** The four tests that VERIFY-124
+  traced to `NAN` and to `va_list` pass once those two alone change, and
+  nothing else among 134 jobs moves.
+- **Sources read can carry a prediction that nothing here can compile.**
+  `time_test` was compiled in a state that no test had been compiled in
+  on macOS, its feature macro after Apple's first header. Apple's
+  sources, read, said it would compile, and it did; under glibc, as
+  measured here, the same header breaks it.
