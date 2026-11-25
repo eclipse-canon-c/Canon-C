@@ -46638,3 +46638,75 @@ What it shows:
 - **A green workflow can carry a red job.** `compcert-cygwin` is
   continue-on-error, as every CompCert job, so that `3` is green whatever
   it does; its own conclusion, read from the API, is the measure.
+
+---
+
+## VERIFY-129: Pre-registration — CompCert under Cygwin, with dune Pinned at 3.22.2
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-129 |
+| **Date**       | 2026-11-26 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 811f254 (VERIFY-128's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #112, `2` #147 and `8` #171, at 811f254; `compcert-cygwin` failed at its prerequisites. |
+| **Scope**      | `.github/workflows/analysis.yml`'s `compcert-cygwin`: dune pinned at 3.22.2 before CompCert's prerequisites, the pin in their cache's key, the job's comment. No document, library, test or tool file. |
+| **Category**   | VERIFY-128's "What run 1 found", answered: a pin of a dependency, which leaves the job as the author chose it. |
+
+### What is missing
+
+`compcert-cygwin` stops at CompCert's prerequisites: dune 3.23.1, which
+opam chose, does not build under Cygwin (VERIFY-128). Coq, Flocq, Menhir
+and CompCert are not reached.
+
+### What changes
+
+- **dune pinned**: `opam pin add --no-action dune 3.22.2` before
+  `opam install coq-compcert.3.17 --deps-only`, a comment saying why.
+- **The prerequisites' cache key** names the pin (`-dune-3.22.2-`), at
+  its restore and its save.
+- **The job's comment.**
+
+### Read, in the sources
+
+- **dune's issue #15340** (read on GitHub, 2026-11-26): the same error,
+  at dune 3.23.1 under `ocaml-system.4.14.2` on cygwin/x86_64. A
+  maintainer of opam's: "As a workaround i've pinned dune to the latest
+  working version (3.22.2)"; dune's: the offending rules to be fixed in
+  its main branch, for newer releases. Its pull request, #15343, "fix:
+  blake3 foreign_library conflict on cygwin", closed on 2026-06-26.
+- **dune 3.24.2's release archive** (2026-08-03, the latest): its BLAKE3
+  rules (`src/ocaml-blake3-mini/dune`) read as 3.23.1's, and its changes
+  name no #15343.
+- **But 3.22.2's rules read as 3.23.1's too**: why its build works under
+  Cygwin, if it does, is not read here. The pin rests on that maintainer's
+  word.
+- **opam's repository**: dune 3.22.2 needs OCaml from 4.08 to below 5.6
+  (4.14.2 here); `menhir` and `menhirGLR` 20260209 need dune 2.8 or
+  later.
+- **opam 2.6.1's `pin`**: its target "may be a version"
+  (`src/client/opamCommands.ml`), with `--no-action`.
+
+### Measured here
+
+- ShellCheck on every step of the job: nothing; the YAML parsed.
+  `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| I1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| I2 | **Cygwin, its tools and opam** as in VERIFY-128's run: the install, each tool Cygwin's, "OCaml 4.14.2, system cygwin", and opam 2.6.1 built again, nothing having been saved. | the install, the check or opam's build fails | M–H: run 1 did each |
+| I3 | **dune 3.22.2 builds and installs** under Cygwin, in the solver's plan with the rest as run 1 chose them: Coq 8.16.1, Flocq 4.2.2, Menhir and MenhirLib 20260209, ocamlfind 1.9.8, zarith 1.14. | dune's build fails, or another plan | M: the maintainer's word, its reason unread |
+| I4 | **The rest of the prerequisites install**, Coq among them, and their archive is saved. | an install fails | L–M: Coq, Flocq and Menhir have not been built under Cygwin here; the step has 240 minutes |
+| I5 | **CompCert 3.17 builds** for `x86_64-cygwin`, `ccomp -version` 3.17, and its archive is saved. | configure, the build or the install fails | M, given I4 |
+| I6 | **The tests**: the notice "compcert x86_64-cygwin: 61 / 61 compiled, 61 ran; no pin yet". | another notice, or none | L–M: H6's reasons |
+| I7 | **Nothing else changes**: the other 136 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1, 3, 4, 5 and 6 #112's, 2 #147's, 8 #171's. | another notice, or a failure | H |
+
+**Not predicted**: the times of each stage; the install's output.
+
+### What follows
+
+I1 to I7 scored, and the record closes. If CompCert builds, the next
+record holds its outcome as a pin; if a stage fails, the next record
+answers it, the stages before it cached. Then item 9b's last step, BSD.
