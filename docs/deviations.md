@@ -45646,3 +45646,139 @@ What it shows:
   line.** The prediction came from GCC in ccomp's place, run 1 confirmed
   it, and holding it changed nothing the job computes: the step now
   fails where it would only have said "not the pin".
+
+---
+
+## VERIFY-123: Pre-registration — CompCert on macOS, Apple Silicon and Intel, Run 1 Measuring; Apple Clang's Tests on Intel macOS
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-123 |
+| **Date**       | 2026-11-25 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | b0055ba (VERIFY-122's change; its close, a record, is pushed with this): `1` and `3` to `6` #106, `2` #141 and `8` #165, at b0055ba. |
+| **Scope**      | `.github/workflows/analysis.yml`: a job, `compcert-macos`, and its header. `.github/workflows/ci.yml`: `macos-15-intel` in the `build` and `lifetime-debug` matrices, and its header. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `docs/compcert-licensing.md`, the workflow map. No library, test or tool file. |
+| **Category**   | Item 9b's fourth step, as the author chose on 2026-11-25: CompCert's two macOS targets, each natively on its runner, OCaml and opam from Homebrew, and Apple Clang's tests on the Intel runner as their baseline. |
+
+### What is missing
+
+CompCert has two macOS configurations, `aarch64-macos` (Apple silicon)
+and `x86_64-macos`; neither is run, and `docs/architectures.md` plans
+both next among its other targets. x86-64 macOS is not tested at all:
+the build matrix runs Apple Clang's tests on `macos-latest`, Apple
+silicon, alone.
+
+### The author's choice (2026-11-25)
+
+Three answers. **Both targets, natively**: `aarch64-macos` on
+`macos-latest` (macOS 26, Apple silicon), `x86_64-macos` on
+`macos-15-intel`, GitHub's last Intel image, which it retires with macOS
+15 in fall 2027, the leg going then; not `x86_64-macos` under Rosetta 2,
+which nothing here has checked the runner has. **Homebrew's opam**, which
+GitHub's macOS images carry as Ubuntu's carry apt, not the OCaml
+project's `setup-ocaml` action, which would be the workflows' first
+action from outside GitHub. **Apple Clang's tests on `macos-15-intel`
+too**, the native baseline that every other CompCert target has.
+
+### What changes
+
+- **`compcert-macos`** ("compcert (aarch64-macos)", "compcert
+  (x86_64-macos)"), in `analysis.yml`, after `compcert-armeb`, under the
+  `compcert` job's licensing note, its `if:` guard and its
+  `continue-on-error`; a matrix of the two targets and their runners.
+  The runner's system, `uname -m`, Apple's `cc` and its SDK printed. On a
+  miss of its CompCert's entry (`compcert-3.17-TARGET-build-v1`):
+  Homebrew's `opam`, `gmp` and `pkgconf`; an opam switch of OCaml 4.14.2
+  and coq-compcert 3.17's prerequisites alone (`--deps-only`), cached by
+  the runner's system and architecture
+  (`opam-macOS-ARCH-ocaml-4.14.2-compcert-3.17-deps-v1`), 120 minutes at
+  most; then CompCert built once from opam's archive and its digest
+  (`shasum -a 256`, macOS having no `sha256sum`), configure given the
+  target, `-prefix` and opam's flags, no `-toolprefix`: Apple's `cc`
+  preprocesses, assembles and links. `OPAMYES` set, so that a cached
+  root a newer opam upgrades asks nothing. Every `*_test.c` compiled by
+  ccomp with `compcert`'s flags, as `compcert-targets` compiles them, and
+  run natively, 600 s at most by perl's `alarm`, macOS having no
+  `timeout(1)`. A notice per target, `compcert TARGET`: "N / M compiled,
+  K ran", the tests not compiled or not run named, then "; as pinned" or
+  "; not the pin", against the pin predicted below; each test not built
+  shown by its log's error lines, "Undefined symbols" among them, Apple's
+  linker's word. **Run 1 measures**: the step exits 0 either way; a
+  failed install, fetch, configure or build fails the job.
+- **`ci.yml`**: `macos-15-intel` in the `build` and `lifetime-debug`
+  matrices, with Apple Clang alone, as `macos-latest`: four legs,
+  Release and Debug, Debug with AddressSanitizer and
+  UndefinedBehaviorSanitizer, each matrix twelve legs where it was ten;
+  its comment, and the header's "macOS (Apple silicon and Intel)".
+- **The header of `analysis.yml`**: "at fifteen other configurations, at
+  Linux, on macOS and on bare metal".
+- **The documents**: `docs/architectures.md`, a row for x86-64 macOS
+  with Apple Clang, Apple silicon's row naming `lifetime-debug`, which
+  ran there already, a row for `compcert-macos`, and macOS out of the
+  plan for CompCert's other targets, Cygwin and BSD left in it;
+  `docs/verification.md`, a row for `compcert-macos`; `docs/status.md`,
+  x86-64's row with macOS and Apple Clang, a row in CompCert's table, the
+  date line; `docs/compcert-licensing.md`, the forks' paragraph naming
+  the sixth job; the workflow map.
+
+### Read, in the sources
+
+- **CompCert 3.17** (`configure`): `aarch64-macos` is `aarch64`, model
+  `default`, ABI `apple`, little-endian, system `macos`; `x86_64-macos`
+  is `x86`, model `64`, ABI `macos`, system `macos`. For both, `cc`
+  preprocesses with `-U__GNUC__ -U__clang__ -U__BLOCKS__`, attributes,
+  `__asm`, `_Nullable` and `_Nonnull` defined away, and `-Wno-#warnings`;
+  `libmath` is empty, macOS's `libSystem` holding it; no `-no-pie`. Its
+  machine for Apple silicon makes plain `char` signed, Apple's ABI
+  (`cparser/Machine.ml`, `aarch64_apple`), and its back end gives
+  `va_start` Apple's form (`Asmexpand.ml`). Its 3.17 changelog has a fix
+  for AArch64 macOS's preprocessor: the port is kept up.
+- **Apple's headers**: xnu's `sys/cdefs.h` (Apple's open source,
+  xnu-7195.81.3) defines no `__func__`, unlike newlib's (VERIFY-120);
+  without `__GNUC__` of 4 or more it warns "Unsupported compiler
+  detected", which configure's `-Wno-#warnings` silences; nullability
+  and the `__has_*` tests do not depend on `__GNUC__`.
+- **The library and its tests** have no `long double`, which x86-64
+  macOS gives 80 bits and CompCert's `-flongdouble` takes for `double`;
+  their tests of `__clang__` see it undefined under ccomp, as at
+  CompCert's other targets.
+- **GitHub** (its changelog, 2025-09-19 and 2026-10-01): `macos-15-intel`
+  is the x86_64 label, and Intel ends on macOS runners when the macOS 15
+  image is retired, in fall 2027; `macos-latest` is macOS 26 on arm64
+  (VERIFY-122's run: "Image: macos-26-arm64", AppleClang 21.0.0, "100%
+  tests passed out of 61").
+
+### Measured here
+
+Nothing of macOS: this machine is Linux, and Apple's SDK is not here.
+
+- **The job's test step**, extracted from `analysis.yml` and run from a
+  copy of the tree with a ccomp that is the host's GCC at C99: the notice
+  "61 / 61 compiled, 61 ran; as pinned", exit 0. The time limit:
+  `perl -e 'alarm shift; exec @ARGV ...' 2 sleep 5` exits 142, a program's
+  own status is kept, and a missing one gives 2.
+- **The matrices**, expanded from `ci.yml`: `build` and `lifetime-debug`
+  twelve legs each, the new ones `macos-15-intel` with `clang`, Release
+  and Debug.
+- ShellCheck on every step of `compcert-macos`: nothing. The step read
+  for macOS's bash 3.2: no associative array, `mapfile` or case-changing
+  expansion. `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| C1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| C2 | **The four `macos-15-intel` legs green**: `build` and `lifetime-debug`, Release and Debug, with Apple Clang, every one of the 61 tests passing at each, Debug under the sanitizers. | a failure, or fewer than 61 | M–H: Apple Clang passes the 61 on Apple silicon, and x86-64 passes everywhere else; Intel macOS is not run here |
+| C3 | **Both `compcert-macos` legs build CompCert**: Homebrew's opam, the prerequisites within 120 minutes, the archive's digest opam's, configure's "aarch64", "apple" and "x86", "64", "macos", each "macos" its system, `ccomp -version` 3.17. | a failed install, fetch, configure or build | L–M: nothing of opam, OCaml or Coq on macOS 26 or 15 runs here |
+| C4 | **Their notices**: "61 / 61 compiled, 61 ran; as pinned" at each. | another count or name at either | L: the line is read, not measured; Apple Clang's 61 on the same runners, and CompCert's 61 at its Linux targets, are its ground |
+| C5 | **Nothing else changes**: every other job green, every notice as their last runs printed it, word for word, the times aside: 1 and 3 to 6 #106's, 2 #141's, 8 #165's. | another notice, or a failure | H |
+
+**Not predicted**: the times; which Coq opam takes; GitHub's own notices
+on the new jobs.
+
+### What follows
+
+C1 to C5 scored, and the record closes. The next record holds
+`compcert-macos` to run 1's outcome, and answers what run 1 finds. Then
+item 9b's fifth step, Cygwin.
