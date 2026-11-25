@@ -46194,6 +46194,7 @@ What it shows:
 | **ID**         | VERIFY-126 |
 | **Date**       | 2026-11-25 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-25 — Scored: F1, F2 and F5 MATCH; F3 and F4 MISS. CLOSED: three of five ("Scored", below). Cygwin installs, its GCC the one found, with the data model predicted; but CMake takes a `gmake` that is not Cygwin's, which cannot read Cygwin's paths, and the build stops at both legs before any test runs ("What run 1 found"). The Status above is the record as committed. |
 | **Baseline**   | 0f533ff (VERIFY-125's change; its close, a record, is pushed with this): `1` and `3` to `6` #109, `2` #144 and `8` #168, at 0f533ff. |
 | **Scope**      | `.github/workflows/ci.yml`: a job, `cygwin`, and its header's first line. `docs/architectures.md`, `docs/status.md`, `docs/verification.md`, `docs/implementation-defined.md`, `docs/autosar-classic.md`, `.github/workflows/README.md`. No library, test or tool file. |
 | **Category**   | Item 9b's fifth step, Cygwin, as the author chose on 2026-11-25: its baseline first, alone; CompCert at `x86_64-cygwin` next, natively in Cygwin (VERIFY-127). |
@@ -46305,3 +46306,51 @@ notices.
 F1 to F5 scored, and the record closes. Then VERIFY-127: CompCert 3.17
 at `x86_64-cygwin`, built natively in Cygwin on the installation that
 this job proves, as the author chose.
+
+### Scored (2026-11-25)
+
+The push of b2cab6b, 3bc131d and da81506 started seven workflows, `1` to
+`6` and `8`. All are green but `1` #110, whose two new jobs,
+`cygwin (Release)` and `cygwin (Debug)`, failed at their build, each in
+under 2 minutes.
+
+| # | scored |
+|---|--------|
+| F1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| F2 | **MATCH.** At both legs the action installed Cygwin 3.6.12, its installer's "Signature status: Valid" and "The downloaded file has the expected hash", and setup run without `-X`, so that it checked `setup.ini`'s signature; the probe's step passed its check of `gcc -dumpmachine`, "gcc (GCC) 14.4.0". |
+| F3 | **MISS.** No notice: the step that gives it never ran, the build having failed. The probe's line in the log is F3's model word for word at both legs, "int 4, long 8, long long 8, void * 8, wchar_t 2, long double 16, va_list 8; char signed; __CYGWIN__, not _WIN32". |
+| F4 | **MISS.** The build stopped at both legs: "gmake[2]: *** No rule to make target '/cygdrive/d/a/Canon-C/Canon-C/test/core/primitives/bits_test.c', needed by 'CMakeFiles/bits_test.dir/test/core/primitives/bits_test.c.o'.  Stop.", and the same for `checked_test`, `compare_test` and `contract_test`; no test ran. |
+| F5 | **MATCH.** The other 134 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly. |
+
+Three of five.
+
+### What run 1 found
+
+CMake took a `gmake`, and not Cygwin's `make`. Its messages carry that
+name; it finds no rule for sources that CMake had found when it
+configured, by the absolute paths that CMake gave it, Cygwin's
+`/cygdrive/d/a/...`; and CMake's detection of the compiler's ABI had
+failed the same way ("Detecting C compiler ABI info - failed"), its
+source among CMake's modules, while the checks whose sources CMake writes
+into the build tree passed. A make that is not Cygwin's cannot read
+Cygwin's paths. CMake looks for its make program as `gmake`, then
+`make`, then `smake`, each name through the whole `PATH`
+(`CMakeUnixFindMake.cmake`'s `find_program`, without `NAMES_PER_DIR`;
+read in CMake 3.28's). Cygwin's bash, run without a login, keeps the
+runner's `PATH` after Cygwin's `/usr/bin`, which holds `make` 4.4.1 and
+no `gmake`, or CMake would have taken it; so CMake took the first
+`gmake` among the runner's own tools. Run 1 did not print which: the
+image has Perl 5.42.0, which on Windows is Strawberry Perl, and its
+`c\bin` holds a `gmake.exe` (not read here).
+
+**Closed.** Cygwin installs as predicted, its GCC the one found, its
+data model as GCC's sources give it; the job fails at its build, for
+CMake's choice of make. The close changes nothing but this record;
+VERIFY-127 gives CMake Cygwin's make.
+
+What it shows:
+
+- **A tool's name is not the tool.** Every program that the job names
+  it found in Cygwin's `/usr/bin`, first on the `PATH`; the one it did
+  not name, CMake's make, CMake chose by a search that puts a name before
+  a directory.
