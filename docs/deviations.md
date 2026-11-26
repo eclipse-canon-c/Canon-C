@@ -47124,3 +47124,71 @@ What it shows:
   file found beside its includer, which starts at the quote path. The
   other CompCert jobs pass with the same flags; under Cygwin's newlib,
   read without `__GNUC__`, it stopped every test.
+
+---
+
+## VERIFY-132: Pre-registration — CompCert under Cygwin Held to Its Pin
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-132 |
+| **Date**       | 2026-11-26 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | ffb612c (VERIFY-131's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #115, `2` #150 and `8` #174, at ffb612c. |
+| **Scope**      | `.github/workflows/analysis.yml`'s `compcert-cygwin`: its pin, set and held; VERIFY-131's look at VERIFY-130's header, removed; its comments. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`. No library, test or tool file. |
+| **Category**   | VERIFY-131's "What follows": the pin held, as VERIFY-122 held `compcert-armeb`'s and VERIFY-125 `compcert-macos`'s. |
+
+### What is missing
+
+`compcert (x86_64-cygwin)` printed "61 / 61 compiled, 61 ran; no pin yet"
+at VERIFY-131's run (K5): it measures, and any other outcome would fail
+nothing, its pin being empty.
+
+### What changes
+
+- **`compcert-cygwin`'s pin**: "61 / 61 compiled, 61 ran", its comment
+  naming its source, VERIFY-131's prediction and its run's outcome. The
+  step's lines that print "not the pin" and fail are there since
+  VERIFY-128, as at the other CompCert jobs; the pin set, another outcome
+  fails the job. `continue-on-error` and the `if:` guard stay: the
+  workflow's result is not the job's.
+- **VERIFY-131's look at VERIFY-130's header**, removed from the test
+  step: GCC's search path, its own headers, the chain at
+  `<sys/_stdint.h>` and the `__intmax_t` lines. They showed the chain
+  once, in VERIFY-131's close; the job's comment and `architectures.md`
+  keep it.
+- **The job's comment**: the pin, held since VERIFY-132, in
+  `compcert-armeb`'s words.
+- **The documents**: `compcert-cygwin`'s rows in `docs/architectures.md`
+  and `docs/verification.md`, "61 of 61 run, held to that (VERIFY-132)",
+  as `compcert-armeb`'s say it, and the recipe's last sentence, that every
+  test then compiles and passes; in `docs/status.md`, its row "run, 61 of
+  61", with the header named as for macOS, and the line that dates the
+  page.
+
+### Measured here
+
+- **The step**, extracted from `analysis.yml` and run from a copy of the
+  tree with VERIFY-131's stand-in for ccomp: "61 / 61 compiled, 61 ran;
+  as pinned", exit 0; given another pin, "not the pin", then "FAIL:
+  compcert x86_64-cygwin is pinned to: 60 / 61 compiled, 60 ran", exit 1.
+- **The job's YAML**, parsed; ShellCheck on every step: nothing.
+  `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| L1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| L2 | **`compcert (x86_64-cygwin)` holds**: green, its notice "compcert x86_64-cygwin: 61 / 61 compiled, 61 ran; as pinned". | a failure, or another notice | M–H: CompCert and the tests are VERIFY-131's, but Cygwin's packages are the mirror's current ones at each run, not fixed |
+| L3 | **The cache serves**: CompCert restored from `compcert-3.17-x86_64-cygwin-build-v1`, "unpacked cc-compcert.tar"; no build step runs. | a build step run, or the key missed | H: no input of the key changed |
+| L4 | **Nothing else changes**: the other 136 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1, 3, 4, 5 and 6 #115's, 2 #150's, 8 #174's. | another notice, or a failure | H |
+
+**Not predicted**: the times.
+
+### What follows
+
+L1 to L4 scored, and the record closes; item 9b's fifth step, Cygwin,
+is then done. Then its last, BSD: CompCert at `x86_64-bsd` and
+`x86_32-bsd` in a FreeBSD virtual machine, GitHub having no BSD runner,
+as `docs/architectures.md` plans it, the author's choices asked first.
