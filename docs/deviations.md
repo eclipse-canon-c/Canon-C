@@ -46772,6 +46772,7 @@ What it shows:
 | **ID**         | VERIFY-130 |
 | **Date**       | 2026-11-26 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-26 — Scored: J1 to J6 and J8 MATCH; J7 MISS. CLOSED: seven of eight ("Scored", below). zarith's DLL was where findlib's rule puts it, `lib/zarith`; with that directory in `ld.conf` the probe ran, and Coq, Flocq and MenhirLib installed; CompCert 3.17 built for `x86_64-cygwin`, both stages cached. No test compiled: each stopped in newlib's `<sys/_stdint.h>`, at `intmax_t` ("What run 1 found"). The Status above is the record as committed. |
 | **Baseline**   | ebd38c9 (VERIFY-129's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #113, `2` #148 and `8` #172, at ebd38c9; `compcert-cygwin` failed at its prerequisites. |
 | **Scope**      | `.github/workflows/analysis.yml`'s `compcert-cygwin`: zarith installed first, its build shown; what OCaml and the switch say of its DLL; a program linked with zarith and run, before and after the directory that holds its DLL goes into OCaml's `ld.conf`; a step that prints, on failure, what opam gave each logged build; the job's comment. No document, library, test or tool file. |
 | **Category**   | VERIFY-129's "What run 1 found", answered: a cause read in the sources, shown and, if it is the cause, removed in the same run; the job as the author chose it. |
@@ -46887,3 +46888,57 @@ J1 to J8 scored, and the record closes. If J3 holds, findlib's rule is
 reported to findlib (item 9c), with this run's lines. If CompCert
 builds, the next record holds its outcome as a pin; if a stage fails,
 the next record answers it. Then item 9b's last step, BSD.
+
+### Scored (2026-11-26)
+
+The push of 6e777db, 2355046 and 26e51c9 started seven workflows, `1` to
+`6` and `8`, each green at its first attempt; `compcert (x86_64-cygwin)`,
+one of `3` #114's jobs, succeeded too, in 34 minutes.
+
+| # | scored |
+|---|--------|
+| J1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| J2 | **MATCH.** The action installed the job's packages; each tool checked was Cygwin's; "gcc (GCC) 14.4.0", "OCaml 4.14.2, system cygwin"; neither cache found; opam 2.6.1 built again, in 6 minutes; "dune is now pinned to version 3.22.2". |
+| J3 | **MATCH.** zarith built and installed, ocamlfind printing "Installed /cygdrive/d/cc/opam-root/compcert/lib/zarith/dllzarith.so"; "os_type: Cygwin", "ext_dll: .so"; "zarith's DLL: /cygdrive/d/cc/opam-root/compcert/lib/zarith/dllzarith.so", and no other; "Extra dynamically-loaded libraries: -lzarith"; "probe before: linked; the run failed", ocamlrun's "Fatal error: cannot load shared library dllzarith". |
+| J4 | **MATCH.** "ld.conf += /cygdrive/d/cc/opam-root/compcert/lib/zarith", the one line; "probe after: linked and ran, 1267650600228229401496703205376". |
+| J5 | **MATCH.** The eleven other packages installed, Coq 8.16.1, Flocq 4.2.2 and MenhirLib 20260209 among them, the step in 20 minutes; their archive saved, 334 MB. |
+| J6 | **MATCH.** CompCert 3.17 built and installed for `x86_64-cygwin` in 4 minutes, "The CompCert C verified compiler, version 3.17"; its archive saved. |
+| J7 | **MISS.** "compcert x86_64-cygwin: 0 / 61 compiled, 0 ran; not compiled: " all 61, "; no pin yet". Each stopped at the same line: "/usr/include/sys/_stdint.h:67:9: syntax error after 'typedef' and before '__intmax_t'." |
+| J8 | **MATCH.** The other 136 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly. |
+
+Seven of eight.
+
+### What run 1 found
+
+Line 67 of newlib's `<sys/_stdint.h>` is `typedef __intmax_t intmax_t;`,
+and `__intmax_t` is declared by newlib's `<machine/_default_types.h>`,
+which sets its guard at its top and declares its types last, with no
+condition but that guard (Cygwin 3.6.12's sources). The error means,
+then, that `<sys/_stdint.h>` was read while `<machine/_default_types.h>`
+was open, before its types. Before them it includes two headers:
+`<sys/features.h>`, which includes only newlib's version header, and,
+where `__GNUC__` is not defined, as CompCert's preprocessing leaves it,
+`<limits.h>`. So a header that `<limits.h>` reaches under Cygwin comes
+back to `<sys/_stdint.h>`. Which one, the sources read do not show:
+Cygwin's own `<limits.h>` does not, nor do newlib's and Cygwin's headers
+assembled from their sources here and preprocessed as ccomp preprocesses
+them; GCC's own headers under Cygwin are not read here. The first of
+newlib's headers that a test reads opens `<machine/_default_types.h>`,
+here the job's header by `<sys/cdefs.h>`, so that every test stops at
+the same line.
+
+**Closed.** Run 1 builds CompCert 3.17 under Cygwin, its prerequisites
+and its build cached, and compiles no test: newlib's headers, read
+without `__GNUC__`, stop CompCert at `intmax_t`. The close changes
+nothing but this record; VERIFY-131 answers it.
+
+What it shows:
+
+- **A probe made for one cause settles it in the same run.** J3 and J4
+  rested on four projects' sources; the probe's two lines, before the
+  remedy and after it, showed the cause and its end, and Coq built
+  behind them.
+- **The baseline vouches only for the paths its compiler takes.**
+  CompCert's preprocessing leaves `__GNUC__` undefined, and newlib then
+  reads headers that Cygwin's GCC never makes it read; the `cygwin` job's
+  61 passes say nothing of them.
