@@ -1,6 +1,7 @@
 name: "1 · Build & test"
-# Builds and runs the test suite: Linux, Windows (MSVC, MinGW, Cygwin) and
-# macOS (Apple silicon and Intel), Release and Debug with sanitizers; i386;
+# Builds and runs the test suite: Linux, Windows (MSVC, MinGW, Cygwin),
+# FreeBSD and macOS (Apple silicon and Intel), Release and Debug with
+# sanitizers; i386;
 # Valgrind; libFuzzer; the lifetime token under concurrency and the
 # lifetime-debug build. Start here.
 # Map of every workflow: .github/workflows/README.md (VERIFY-050).
@@ -354,6 +355,194 @@ jobs:
       - name: Test
         working-directory: build
         run: ctest --output-on-failure
+
+  # -------------------------------------------------------------------------
+  # 1e. FreeBSD build + test — FreeBSD 15.1, its own Clang (VERIFY-133)
+  #
+  #    FreeBSD on x86-64: its own C library and its base system's Clang,
+  #    LP64 as Linux. GitHub has no FreeBSD runner, so the job boots the
+  #    FreeBSD project's own VM image, its BASIC-CLOUDINIT variant, under
+  #    QEMU with KVM on the Ubuntu runner (the author's choice of
+  #    2026-11-26): the image checked against the SHA-256 that FreeBSD
+  #    15.1's announcement gives, pinned below, and against
+  #    download.freebsd.org's CHECKSUM.SHA256. FreeBSD's nuageinit reads a
+  #    seed disk labelled cidata, made here: the default user, freebsd,
+  #    with a key made for the run, and cmake-core and ninja from
+  #    FreeBSD's own package repository. The job waits until the first
+  #    boot, and a reboot it may ask for, is over; then copies the tree in
+  #    over SSH, and configures, builds and tests there with FreeBSD's
+  #    Clang, sanitizers off. A notice per leg gives the compiler, its
+  #    data model and what CTest passed. It is the baseline that
+  #    CompCert's x86_64-bsd is to be read against (item 9b).
+  # -------------------------------------------------------------------------
+  freebsd:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+    env:
+      FREEBSD_URL: https://download.freebsd.org/releases/VM-IMAGES/15.1-RELEASE/amd64/Latest
+      FREEBSD_IMAGE: FreeBSD-15.1-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2.xz
+      # The image's SHA-256, as FreeBSD 15.1's announcement gives it.
+      FREEBSD_SHA256: e4ca4db889f8559c9b9dfcacc70405c038476f4b6d41649b152d3809a2ed9e1f
+    steps:
+      - uses: actions/checkout@v6
+      - name: Enable KVM
+        run: |
+          # GitHub's documented step: /dev/kvm for the runner's user.
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Install QEMU and genisoimage
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils genisoimage
+          qemu-system-x86_64 --version | sed -n 1p
+      - name: Restore FreeBSD's image
+        uses: actions/cache@v5
+        with:
+          path: freebsd-vm/${{ env.FREEBSD_IMAGE }}
+          key: freebsd-15.1-cloudinit-ufs-${{ env.FREEBSD_SHA256 }}
+      - name: Fetch FreeBSD's image and check it
+        run: |
+          mkdir -p freebsd-vm
+          cd freebsd-vm
+          if [ ! -f "$FREEBSD_IMAGE" ]; then
+            curl -fsSL --retry 3 -o "$FREEBSD_IMAGE" "$FREEBSD_URL/$FREEBSD_IMAGE"
+          fi
+          echo "$FREEBSD_SHA256  $FREEBSD_IMAGE" | sha256sum -c -
+          curl -fsSL --retry 3 -o CHECKSUM.SHA256 "$FREEBSD_URL/CHECKSUM.SHA256"
+          line=$(grep -F "($FREEBSD_IMAGE)" CHECKSUM.SHA256 || true)
+          echo "download.freebsd.org: $line"
+          case "$line" in
+            *"$FREEBSD_SHA256"*) ;;
+            *) echo "::error::CHECKSUM.SHA256 does not give the pinned SHA-256"; exit 1 ;;
+          esac
+      - name: Prepare the disk and its seed
+        run: |
+          cd freebsd-vm
+          xz -dc "$FREEBSD_IMAGE" > disk.qcow2
+          qemu-img resize disk.qcow2 16G
+          ssh-keygen -q -t ed25519 -N '' -C canon-c-ci -f vmkey
+          mkdir -p seed
+          printf 'instance-id: canon-c-ci\nlocal-hostname: canon-freebsd\n' > seed/meta-data
+          {
+            echo '#cloud-config'
+            echo 'ssh_authorized_keys:'
+            echo "  - $(cat vmkey.pub)"
+            echo 'packages:'
+            echo '  - cmake-core'
+            echo '  - ninja'
+          } > seed/user-data
+          genisoimage -quiet -output seed.iso -volid cidata -joliet -rock \
+            seed/user-data seed/meta-data
+          # The helper: a command run in FreeBSD, as freebsd, over SSH.
+          cat > vm <<EOF
+          #!/bin/sh
+          exec ssh -q -o BatchMode=yes -o ConnectTimeout=10 \\
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \\
+            -i "$PWD/vmkey" -p 2222 freebsd@127.0.0.1 "\$@"
+          EOF
+          chmod +x vm
+      - name: Boot FreeBSD
+        run: |
+          cd freebsd-vm
+          qemu-system-x86_64 \
+            -machine q35,accel=kvm -cpu host -smp 2 -m 4096 \
+            -drive file=disk.qcow2,if=virtio,format=qcow2 \
+            -drive file=seed.iso,if=virtio,format=raw,readonly=on \
+            -netdev user,id=n0,hostfwd=tcp:127.0.0.1:2222-:22 \
+            -device virtio-net-pci,netdev=n0 \
+            -display none -serial file:console.log \
+            -daemonize -pidfile qemu.pid
+          # Ready when SSH answers, the first boot is over (no /firstboot),
+          # the packages are in, and the boot time reads the same twice,
+          # 15 s apart, so that a reboot asked for at the end of the first
+          # boot has come and gone. 20 minutes at most.
+          prev=""; t=0; ready=no
+          while [ "$t" -lt 1200 ]; do
+            if now=$(./vm 'test ! -e /firstboot && command -v cmake > /dev/null && command -v ninja > /dev/null && sysctl -n kern.boottime' 2> /dev/null); then
+              if [ -n "$prev" ] && [ "$now" = "$prev" ]; then ready=yes; break; fi
+              prev=$now
+            else
+              prev=""
+            fi
+            sleep 15; t=$((t + 15))
+          done
+          if [ "$ready" != yes ]; then
+            echo "::error::FreeBSD was not ready in 20 minutes"; exit 1
+          fi
+          echo "ready after $t s"
+      - name: Show FreeBSD, its compiler and its data model
+        run: |
+          cd freebsd-vm
+          ./vm 'freebsd-version -kru; uname -mrs; cc --version | sed -n 1p; cmake --version | sed -n 1p; printf "ninja "; ninja --version'
+          machine=$(./vm 'cc -dumpmachine')
+          case "$machine" in
+            x86_64-unknown-freebsd15.*) echo "cc: $machine" ;;
+            *) echo "::error::cc is '$machine', not FreeBSD 15's at x86-64"; exit 1 ;;
+          esac
+          ./vm 'mkdir -p probe && cat > probe/model.c' <<'PROBE'
+          #include <limits.h>
+          #include <stdarg.h>
+          #include <stddef.h>
+          #include <stdio.h>
+
+          int main(void)
+          {
+              printf("int %u, long %u, long long %u, void * %u, wchar_t %u, "
+                     "long double %u, va_list %u; char %s",
+                     (unsigned)sizeof(int), (unsigned)sizeof(long),
+                     (unsigned)sizeof(long long), (unsigned)sizeof(void *),
+                     (unsigned)sizeof(wchar_t), (unsigned)sizeof(long double),
+                     (unsigned)sizeof(va_list), (CHAR_MIN < 0) ? "signed" : "unsigned");
+          #if defined(__FreeBSD__)
+              printf("; __FreeBSD__ %d", __FreeBSD__);
+          #endif
+          #if defined(__linux__)
+              printf(", __linux__\n");
+          #else
+              printf(", not __linux__\n");
+          #endif
+              return 0;
+          }
+          PROBE
+          ./vm 'cc -std=c99 -Wall -Wextra -Wpedantic -Werror -o probe/model probe/model.c && ./probe/model' \
+            | tee model.txt
+      - name: Copy the tree in, configure and build
+        run: |
+          cd freebsd-vm
+          tar -C .. --exclude=./freebsd-vm --exclude=./.git -cf - . \
+            | ./vm 'rm -rf canon && mkdir canon && tar -xf - -C canon'
+          ./vm "cd canon && cmake -B build -G Ninja -DCMAKE_C_COMPILER=cc -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DENABLE_SANITIZERS=OFF -S . && cmake --build build -j 2"
+      - name: Test
+        run: |
+          cd freebsd-vm
+          rc=0
+          ./vm 'cd canon/build && ctest --output-on-failure' > ctest.log 2>&1 || rc=$?
+          cat ctest.log
+          # CTest's summary, "N% tests passed, F tests failed out of T".
+          summary=$(grep -E '^[0-9]+% tests passed, [0-9]+ tests failed out of [0-9]+' ctest.log | tail -n 1 || true)
+          total=$(printf '%s\n' "$summary" | sed -nE 's/.* out of ([0-9]+).*/\1/p')
+          failed=$(printf '%s\n' "$summary" | sed -nE 's/^[0-9]+% tests passed, ([0-9]+) tests failed.*/\1/p')
+          passed=$(( ${total:-0} - ${failed:-0} ))
+          # No title, as cygwin's: the leg is in the message.
+          echo "::notice::freebsd ${{ matrix.build_type }}: $(./vm 'cc -dumpmachine'), Clang $(./vm 'cc -dumpversion'); $(cat model.txt); $passed of ${total:-0} tests passed"
+          exit "$rc"
+      - name: Show FreeBSD's console and nuageinit's log, on failure
+        if: failure()
+        run: |
+          cd freebsd-vm || exit 0
+          if [ -f console.log ]; then tail -n 80 console.log; fi
+          if [ -x vm ]; then ./vm 'tail -n 60 /var/log/nuageinit.log' || true; fi
 
   # -------------------------------------------------------------------------
   # 3. Valgrind — Linux only

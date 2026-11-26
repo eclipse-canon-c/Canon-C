@@ -164,8 +164,8 @@ onto those.
   PowerPC, with glibc and musl; Cortex-M0+ and Cortex-M4 under QEMU, and
   Cortex-R5F and Cortex-R52 on QEMU's models of them (VERIFY-113); macOS;
   Windows with MSVC and MinGW-w64's GCC, and under Cygwin with Cygwin's
-  (VERIFY-126). The first gives `boolean`
-  AUTOSAR 4.3.1's form and sets every DET ID; the second gives it R22-11's
+  (VERIFY-126); FreeBSD with its Clang (VERIFY-133). The first gives
+  `boolean` AUTOSAR 4.3.1's form and sets every DET ID; the second gives it R22-11's
   and leaves the IDs at their defaults. Each checks
   `canon_autosar_std_return` for `ERR_OK` and every other code
   `semantics/error.h` names, `canon_autosar_boolean` for `true` and `false`,

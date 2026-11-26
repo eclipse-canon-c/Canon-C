@@ -27,7 +27,8 @@ behaviour turned out to be one of three kinds:
 program can check. It runs wherever CI runs the tests: Linux on x86-64,
 AArch64, i386, 32-bit Arm, and big-endian s390x and 32-bit PowerPC, with
 glibc and with musl; macOS; Windows with MSVC and with MinGW-w64's GCC,
-and under Cygwin with Cygwin's (VERIFY-126); with GCC, Clang and CompCert. CI's Windows jobs named `clang` build with MSVC
+and under Cygwin with Cygwin's (VERIFY-126); FreeBSD with its Clang
+(VERIFY-133); with GCC, Clang and CompCert. CI's Windows jobs named `clang` build with MSVC
 (VERIFY-074), so Clang is not run on Windows. On Cortex-M0+ and Cortex-M4
 it runs under QEMU with newlib, where its five checks of `rename` fail
 through QEMU's semihosting, and is not built with picolibc, which has no
