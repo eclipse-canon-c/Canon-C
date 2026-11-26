@@ -47218,3 +47218,154 @@ What it shows:
 - **A cached stage makes a held pin cheap.** The job built CompCert in
   34 minutes at VERIFY-130's run; held, it restores it and runs the
   tests in 4.
+
+---
+
+## VERIFY-133: Pre-registration — The Tests on FreeBSD 15.1, with Its Own Clang, in FreeBSD's VM Image
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-133 |
+| **Date**       | 2026-11-26 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | a608d70 (VERIFY-132's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #116, `2` #151 and `8` #175, at a608d70. |
+| **Scope**      | `.github/workflows/ci.yml`: a job, `freebsd`, and its header's first lines. `docs/architectures.md`, `docs/verification.md`, `docs/implementation-defined.md`, `docs/autosar-classic.md`, `.github/workflows/README.md`. No library, test or tool file. |
+| **Category**   | Item 9b's last step, BSD, as the author chose on 2026-11-26: its baseline first, alone, on FreeBSD's own image; CompCert at `x86_64-bsd` next, `x86_32-bsd` after. |
+
+### What is missing
+
+The tests run on Linux, on Windows with MSVC, MinGW-w64 and Cygwin, and
+on macOS; never on a BSD. CompCert's `x86_64-bsd` and `x86_32-bsd`, item
+9b's last targets, need a baseline on the same system, as Cygwin's GCC
+is `compcert-cygwin`'s.
+
+### The author's choices (2026-11-26)
+
+Four answers. **FreeBSD's own VM image**, booted under QEMU with its
+checksum pinned, rather than a community action and its images.
+**`x86_64-bsd` first, `x86_32-bsd` after**, on FreeBSD 14's i386 or on
+64-bit FreeBSD's 32-bit libraries, as the sources show. **The baseline
+first, alone**: this record. **After three records without the step
+done, the author is asked** before a fourth.
+
+### What changes
+
+- **The job `freebsd`** in `ci.yml`, beside `cygwin`, at Release and
+  Debug, after `build`, on `ubuntu-24.04` as every Linux job:
+  - KVM enabled by GitHub's documented udev rule; QEMU, `qemu-img` and
+    genisoimage from Ubuntu.
+  - FreeBSD 15.1's VM image, BASIC-CLOUDINIT, UFS, qcow2, from
+    download.freebsd.org, cached under its hash; checked against the
+    SHA-256 pinned in the job, from 15.1's announcement, and against the
+    `CHECKSUM.SHA256` beside the image. The disk grown to 16 GB, which the
+    image's `growfs` takes at first boot.
+  - A seed disk labelled `cidata`, made with genisoimage: its user-data
+    gives the default user, `freebsd`, a key made for the run, and the
+    packages `cmake-core` and `ninja`; its meta-data an instance id and a
+    host name.
+  - QEMU: q35 with KVM, 2 CPUs and 4 GB; the disks on virtio; user
+    networking, the runner's 127.0.0.1:2222 forwarded to the guest's SSH;
+    the serial console to a file. The job waits, 20 minutes at most,
+    until SSH answers, `/firstboot` is gone, CMake and Ninja are in, and
+    the boot time reads the same twice 15 s apart, so that a reboot that
+    the first boot may ask for has come and gone.
+  - A step shows FreeBSD's version, `cc`, CMake and Ninja; fails unless
+    `cc -dumpmachine` is FreeBSD 15's at x86-64; and runs the `cygwin`
+    job's probe of the data model, `__FreeBSD__` and `__linux__` in place
+    of `__CYGWIN__` and `_WIN32`.
+  - The tree, without `.git`, copied in over SSH; CMake with Ninja and
+    FreeBSD's `cc`, sanitizers off; the build; CTest. The notice after
+    CTest: "freebsd LEG: MACHINE, Clang V; MODEL; P of T tests passed".
+    On a failure, the console's last 80 lines and nuageinit's log.
+- **`ci.yml`'s header** names FreeBSD.
+- **The documents**: a row in `docs/architectures.md`, and the Cygwin
+  row's "to come" dropped, its CompCert held since VERIFY-132;
+  `docs/verification.md`'s row of the shipped configurations; the lists
+  of where the tests run in `docs/implementation-defined.md` and
+  `docs/autosar-classic.md`; the workflows' README's row for `ci.yml`.
+  `docs/status.md` waits for the run: it states results, and this job has
+  none yet.
+
+### Read, in the sources
+
+- **FreeBSD's releases** (its releases page, read 2026-11-26): 15.1, of
+  2026-06-16, the production release; 14.5 and 14.4 legacy. 15.1's VM
+  images (download.freebsd.org's listing, read 2026-11-26):
+  BASIC-CLOUDINIT and plain, UFS and ZFS, qcow2 and raw, each about 665 MB
+  compressed; no BASIC-CI. 15.1's announcement, its page and its signed
+  text read as text, the signature not checked here, gives the SHA-256 of
+  `FreeBSD-15.1-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2.xz`,
+  `e4ca4db8…a2ed9e1f`, the job's pin; the two read the same.
+- **The image** (`release/tools/basic-cloudinit.conf`, 15.1): `sshd`,
+  `growfs`, `nuageinit` and `firstboot_pkg_upgrade` enabled, the last from
+  the `FreeBSD-base` repository; DHCP; the console on the serial port and
+  the screen. Its `config-drive` partition has no file system
+  (`release/tools/vmimage.subr`), so that it carries no label nuageinit
+  looks for.
+- **nuageinit** (15.1): its rc script looks for a disk labelled config-2,
+  then cidata, on cd9660 and then msdosfs; for cidata it reads `meta-data`
+  and `user-data`; with no `users` key it creates the default user,
+  `freebsd`, and appends the `ssh_authorized_keys` given to its
+  `authorized_keys`, at 0600; `packages` are installed after the network,
+  by `pkg bootstrap` if needed, then `pkg install -y` each.
+- **FreeBSD's ports**: `devel/cmake` is a meta-port that also pulls in
+  CMake's documentation and man pages; `devel/cmake-core` holds the
+  binaries.
+- **i386** (freebsd-arch, 2025-06, its deprecation for 15.0): no i386
+  release images or packages for 15; the world still buildable; the
+  32-bit libraries of 64-bit FreeBSD not addressed. That is for
+  `x86_32-bsd`, later.
+- **GitHub** (its changelog of 2024-04-02): KVM on its Linux runners, made
+  usable by a udev rule, the job's.
+- **Canon-C**: CMake at `-std=c99` without extensions, with `-Wall -Wextra
+  -Wpedantic -Werror`, `cmake_minimum_required(VERSION 3.10)`, and 61
+  tests, none under a condition; `lifetime_token_test`, the one that needs
+  threads, is not among them. The only branches on a system the tests
+  reach are `diag_test`'s on `__GLIBC__`, which FreeBSD's C library does
+  not define, and `util/time.h`'s `_POSIX_C_SOURCE`.
+
+### Measured here
+
+- **The seed step**, run with stand-ins for `xz`, `qemu-img` and
+  `ssh-keygen`: `seed.iso`'s volume id "cidata", its files `/meta-data`
+  and `/user-data`, read back as written; the helper `vm`, SSH as
+  `freebsd` to port 2222 with the run's key. genisoimage was installed
+  here from Ubuntu's archive for this.
+- **The boot step's wait**, with a stand-in for the guest: SSH refused
+  three times, one boot, a reboot, a second boot: "ready after 90 s",
+  exit 0; never answering: "FreeBSD was not ready in 20 minutes", exit 1.
+- **The test step**, given CTest's "100% tests passed, 0 tests failed out
+  of 61": the notice "... 61 of 61 tests passed", exit 0; given "97% tests
+  passed, 2 tests failed out of 61" and CTest's status 8: "59 of 61 tests
+  passed", exit 8.
+- **The probe**, compiled by the host's GCC 13.3 and Clang 18.1 at the
+  job's flags: Linux's model, "int 4, long 8, long long 8, void * 8,
+  wchar_t 4, long double 16, va_list 24; char signed, __linux__". Clang's
+  target `x86_64-unknown-freebsd15.1` predefines `__FreeBSD__` as 15, a
+  4-byte `wchar_t`, a 16-byte `long double`, and neither
+  `__CHAR_UNSIGNED__` nor `__linux__`.
+- **The copy of the tree**: `.git` and the image's directory left out.
+- **The job's YAML**, parsed; ShellCheck on every step: nothing.
+  `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| M1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| M2 | **FreeBSD boots at both legs**: KVM enabled; the image's SHA-256 matching the pin and download.freebsd.org's `CHECKSUM.SHA256`; the guest ready within 20 minutes; `cc -dumpmachine` "x86_64-unknown-freebsd15.1". | a step failing before the build | L–M: nothing here boots FreeBSD; nuageinit, its packages and a reboot the first boot may ask for rest on reading |
+| M3 | **The notice at each leg**: "freebsd Release: x86_64-unknown-freebsd15.1, Clang V; int 4, long 8, long long 8, void * 8, wchar_t 4, long double 16, va_list 24; char signed; __FreeBSD__ 15, not __linux__; 61 of 61 tests passed", V the base system's Clang, and the same for "freebsd Debug". | another notice, or none | M, given M2: the model is x86-64's System V one, as Clang's FreeBSD target gives it; the passes are M4's |
+| M4 | **Every test passes** at both legs: the build without a warning under `-Werror`, and CTest's "100% tests passed, 0 tests failed out of 61". | a warning, or a failure | M: FreeBSD's C library and its Clang have not built the tests here; their POSIX paths, `log_test`'s `tmpfile` among them, rest on FreeBSD's being POSIX's |
+| M5 | **Nothing else changes**: the other 137 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1, 3, 4, 5 and 6 #116's, 2 #151's, 8 #175's. | another notice, or a failure | H |
+
+**Not predicted**: the version of FreeBSD's Clang; FreeBSD's patch
+level, and whether the first boot upgrades the base system and reboots;
+the packages' versions; the times, the image's download among them.
+
+### What follows
+
+M1 to M5 scored, and the record closes. If both legs pass, the next
+record puts FreeBSD in `docs/status.md` and goes on to CompCert at
+`x86_64-bsd`, in the same image; if a step fails, the next record
+answers it, and after three records without the step done, the author is
+asked.
