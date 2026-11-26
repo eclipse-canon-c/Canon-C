@@ -9,7 +9,7 @@ and those files differ, they are right and this page is wrong; please say
 so in an issue. A record that changes a fact stated here updates this
 page with it.
 
-*Written for VERIFY-118, 2026-11-24; brought up to date by VERIFY-119 to VERIFY-131.*
+*Written for VERIFY-118, 2026-11-24; brought up to date by VERIFY-119 to VERIFY-132.*
 
 ## The words used
 
@@ -60,7 +60,7 @@ With CompCert 3.17, the formally verified compiler (informational):
 | bare-metal PowerPC 32 (`ppc-eabi`), with newlib | run, 56 of 61, pinned: the five use what newlib on bare metal or GDB's simulator does not have, or print `%ls` on big-endian data |
 | big-endian 32-bit Arm Linux (`armeb-linux`), with glibc | run, 61 of 61 |
 | macOS on Apple silicon and Intel (`aarch64-macos`, `x86_64-macos`) | run, 60 of 61 at each (with a header given to CompCert first, `architectures.md` says which and why), pinned: one test needs POSIX barriers, which macOS does not have |
-| Windows under Cygwin (`x86_64-cygwin`), with newlib | to be run: CompCert built under Cygwin (VERIFY-130), where no test compiled, each stopping in newlib's `<stdint.h>` (`architectures.md` says why); with the header that reads it first, to be measured (VERIFY-131) |
+| Windows under Cygwin (`x86_64-cygwin`), with newlib | run, 61 of 61 (with a header given to CompCert first, `architectures.md` says which and why) |
 
 In the GCC jobs on bare metal, each test runs at four levels of
 optimization (`-O0`, `-O2`, `-O3`, `-Os`). Each pinned exception, and

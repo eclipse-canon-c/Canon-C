@@ -3546,8 +3546,12 @@ jobs:
   #   recipe (VERIFY-120), with the feature macro first: newlib fixes what
   #   it declares at its first header, here the header's, so that a file's
   #   own _POSIX_C_SOURCE would come too late (the author's choice of
-  #   2026-11-26). Each runs under timeout(1), 600 s at most. The notice
-  #   says what was compiled and ran; no pin yet.
+  #   2026-11-26). Each runs under timeout(1), 600 s at most.
+  #
+  #   The notice says what was compiled and ran, and whether that is the
+  #   pin, which is held since VERIFY-132: another outcome fails the job,
+  #   as does a failed install, build or unpack; continue-on-error keeps
+  #   it from the workflow's result.
   # -------------------------------------------------------------------------
   compcert-cygwin:
     name: compcert (x86_64-cygwin)
@@ -3563,8 +3567,9 @@ jobs:
       OPAMYES: "1"
       OPAMNODEPEXTS: "1"
       OPAMROOT: /cygdrive/d/cc/opam-root
-      # None yet: run 1 measures (VERIFY-128).
-      PIN: ""
+      # Every test, as under Cygwin's GCC: VERIFY-131's prediction and its
+      # run's outcome; held since VERIFY-132.
+      PIN: "61 / 61 compiled, 61 ran"
     steps:
       - name: Check out with LF line ends
         shell: pwsh
@@ -3791,44 +3796,6 @@ jobs:
             -I integrations/autosar -I test/integrations/autosar/stubs
             -include "$PWD/ccomp-out/canon_cygwin.h"
           )
-          # What VERIFY-130's header, this one without <stdint.h>'s lines,
-          # gave the first test (VERIFY-131): GCC's search path; GCC's own
-          # directories, and its limits, syslimits and stdint headers; the
-          # headers open when newlib's <sys/_stdint.h> was first entered, by
-          # the line markers of ccomp's preprocessing; the first lines that
-          # name __intmax_t.
-          printf '#define _POSIX_C_SOURCE 200809L\n#include <sys/cdefs.h>\n#undef __func__\n' \
-            > ccomp-out/canon_cygwin_130.h
-          gcc -m64 -std=c99 -xc -E -v - < /dev/null 2>&1 \
-            | sed -n '/search starts here/,/End of search list/p'
-          for d in include include-fixed; do
-            p=$(gcc -m64 -print-file-name="$d")
-            names=()
-            for f in "$p"/*/ "$p"/limits.h "$p"/syslimits.h "$p"/stdint.h; do
-              [ -e "$f" ] && names+=("${f#"$p"/}")
-            done
-            echo "GCC's $d, $p: ${names[*]}"
-          done
-          first=$(find test -name '*_test.c' | sort | sed -n 1p)
-          "$ccomp" "${CCOMP_FLAGS[@]/%canon_cygwin.h/canon_cygwin_130.h}" -E "$first" \
-            > ccomp-out/first.i 2>&1 || true
-          echo "Open when <sys/_stdint.h> was first entered, $first:"
-          awk '
-            /^# [0-9]+ "/ {
-              f = $3; gsub(/"/, "", f); push = 0; pop = 0
-              for (i = 4; i <= NF; i++) { if ($i == 1) push = 1; if ($i == 2) pop = 1 }
-              if (push) {
-                st[++n] = f
-                if (f ~ /sys\/_stdint\.h$/) {
-                  for (k = 1; k <= n; k++) {
-                    ind = ""; for (j = 1; j < k; j++) ind = ind "  "
-                    print "  " ind st[k]
-                  }
-                  exit
-                }
-              } else if (pop) { while (n > 0 && st[n] != f) n-- }
-            }' ccomp-out/first.i
-          grep -n -m 4 '__intmax_t' ccomp-out/first.i || true
           total=0; compiled=0; ran=0; failed_compile=(); failed_run=(); status=()
           while IFS= read -r t; do
             total=$((total + 1))
