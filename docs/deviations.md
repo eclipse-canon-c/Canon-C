@@ -46762,3 +46762,128 @@ What it shows:
   Menhir, none built under Cygwin here; the chain stops at the first that
   fails, and VERIFY-130 checks zarith's DLL alone, before Coq, so that
   its run says whether the cause read is the cause.
+
+---
+
+## VERIFY-130: Pre-registration — CompCert under Cygwin, zarith's DLL on OCaml's Search Path
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-130 |
+| **Date**       | 2026-11-26 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | ebd38c9 (VERIFY-129's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #113, `2` #148 and `8` #172, at ebd38c9; `compcert-cygwin` failed at its prerequisites. |
+| **Scope**      | `.github/workflows/analysis.yml`'s `compcert-cygwin`: zarith installed first, its build shown; what OCaml and the switch say of its DLL; a program linked with zarith and run, before and after the directory that holds its DLL goes into OCaml's `ld.conf`; a step that prints, on failure, what opam gave each logged build; the job's comment. No document, library, test or tool file. |
+| **Category**   | VERIFY-129's "What run 1 found", answered: a cause read in the sources, shown and, if it is the cause, removed in the same run; the job as the author chose it. |
+
+### What is missing
+
+`compcert-cygwin` stops at Coq 8.16.1, whose bytecode link of
+`idetop.bc` finds no `dllzarith.so` (VERIFY-129). Flocq, MenhirLib and
+CompCert are not reached.
+
+### What changes
+
+- **zarith first**: `opam install ocamlfind`, then `opam install
+  --verbose zarith`, its build and install in the log, before CompCert's
+  prerequisites.
+- **What is said of its DLL**: `ocamlc -config`'s `system`, `os_type`,
+  `ext_dll` and `supports_shared_libraries`; OCaml's `ld.conf`;
+  CAML_LD_LIBRARY_PATH as `opam env` sets it; every `dllzarith*` under
+  the switch's `lib`; the DLLs and C objects that `zarith.cma` names
+  (`ocamlobjinfo`).
+- **A probe**: a program that prints 2^100 with zarith, linked by
+  `ocamlfind ocamlc -package zarith -linkpkg` and run by `ocamlrun`; it
+  says whether the link or the run failed, and prints their output.
+- **The remedy**: the directory that holds each `dllzarith*` appended to
+  `ld.conf`, on a line of its own, unless it is there. ocamlc and
+  ocamlrun read `ld.conf` whatever the environment; opam sets
+  CAML_LD_LIBRARY_PATH anew for each build, so that the step's own would
+  not reach Coq's. The probe runs before the remedy, and may fail, and
+  after it, and must pass: else the step stops there.
+- **On failure**, a step that prints, for each build opam logged, the
+  CAML_LD_LIBRARY_PATH, OCAMLPATH, OCAMLFIND_* and OCAMLLIB it was given,
+  and lists `lib/stublibs` and `lib/zarith`.
+- **The job's comment.** The cache's keys stay: nothing was saved under
+  them, and `ld.conf`, being Cygwin's, is no part of the archive; no
+  stage after Coq's build links bytecode with zarith.
+
+### Read, in the sources
+
+- **OCaml 4.14.2** (its tag in OCaml's repository): `configure.ac` names
+  stub DLLs `.so` for every host but MSVC's (`*-pc-windows`) and MinGW's
+  (`*-*-mingw32`), which name them `.dll`; for Cygwin it sets
+  `Sys.os_type` to "Cygwin" and makes DLLs with flexlink, its chain
+  `cygwin64` at x86-64. `bytecomp/dll.ml` and `bytelink.ml`: a bytecode
+  link looks for each DLL in CAML_LD_LIBRARY_PATH's directories, then
+  `ld.conf`'s, then the `-I` ones, and opens the bare name when none
+  holds it, VERIFY-129's error; the program records only `-dllpath`'s
+  directories, which ocamlfind passes only when asked, and `ocamlrun`
+  looks in CAML_LD_LIBRARY_PATH's, those and `ld.conf`'s.
+- **zarith 1.14** (its tag): `project.mak` names the DLL `dllzarith.so`
+  unless `ocamlc -config` gives MinGW's `system` or MSVC's `ccomp_type`,
+  builds it by `ocamlmklib -failsafe`, which would leave out a DLL that
+  fails to link with no error, and, ocamlfind present, installs it by
+  `ocamlfind install … -optional dllzarith.so`.
+- **findlib 1.9.8** (its tag): `findlib_config.mlp` takes a file for a
+  DLL if its name ends in `.dll` where `Sys.os_type` is "Win32" or
+  "Cygwin", in `.so` where it is "Unix"; `frontend.ml` installs a DLL
+  into `stublibs` and any other file into the package's directory, and
+  writes `ld.conf` only for a DLL put there for want of `stublibs`. Under
+  Cygwin, then, `dllzarith.so` goes into `lib/zarith`. findlib's main
+  branch (2026-07-18) and its open pull request of Windows fixes (#121)
+  keep the rule; no issue of findlib's names it.
+- **opam's `ocaml` package** sets CAML_LD_LIBRARY_PATH to `ld.conf`'s
+  directories and the switch's `lib/stublibs`; **Coq 8.16.1**'s
+  `Makefile.common` adds its own when Coq is built as bytecode, and
+  **dune 3.22.2** its own (`src/install/roots.ml`); neither clears it.
+- **flexdll 0.39**, Cygwin's DLL linker: `-g`, which zarith gives
+  `ocamlmklib`, is accepted and ignored; `-lgmp` is looked for in `/lib`,
+  `/lib/w32api` and GCC's library directory, `libgmp.dll.a` among the
+  names.
+
+### Measured here
+
+- **The error, with Ubuntu's OCaml 4.14.1 and zarith 1.13** (its
+  development package installed for this from Ubuntu's archive), and an
+  `ld.conf` that names no directory holding `dllzarith.so`: with the DLL
+  in zarith's own directory, a link given `-I` there passes and its
+  program fails at its run ("Fatal error: cannot load shared library
+  dllzarith"); a link given only `zarith.cma`'s path, as dune links
+  Coq's, fails with VERIFY-129's words, "Error: I/O error: dllzarith.so:
+  No such file or directory". With that directory appended to `ld.conf`,
+  both pass, the program printing 1267650600228229401496703205376.
+- **The step**, extracted from `analysis.yml` and run with stand-ins for
+  opam, ocamlc, ocamlfind, ocamlrun and ocamlobjinfo that look for the
+  DLL as read: with `dllzarith.so` in `lib/zarith`, "probe before:
+  linked; the run failed", "ld.conf += …/lib/zarith", "probe after:
+  linked and ran, 1267650600228229401496703205376", exit 0; with an
+  `ld.conf` that has no last newline, the same, the directory on a line
+  of its own; with the DLL in `lib/stublibs` and CAML_LD_LIBRARY_PATH
+  without it, "ld.conf += …/lib/stublibs" and the same end; with no DLL,
+  "the link failed" before and after, exit 1.
+- **The job's YAML**, parsed; ShellCheck on every step: nothing.
+  `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| J1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| J2 | **Cygwin, its tools, opam and dune** as in VERIFY-129's run: the install, each tool Cygwin's, "OCaml 4.14.2, system cygwin", opam 2.6.1 built again, nothing having been saved, dune pinned at 3.22.2. | the install, the check, opam's build or the pin fails | M–H: runs 1 and 2 did each |
+| J3 | **zarith's DLL where findlib's rule puts it**: zarith installs; "os_type: Cygwin", "ext_dll: .so"; "zarith's DLL: /cygdrive/d/cc/opam-root/compcert/lib/zarith/dllzarith.so", and no other; `zarith.cma` names `-lzarith` among its DLLs; "probe before: linked; the run failed". | another place, no DLL, or another probe line | M: read in OCaml's, zarith's and findlib's sources, and reproduced at Linux; nothing run under Cygwin |
+| J4 | **The remedy**: one line, "ld.conf += /cygdrive/d/cc/opam-root/compcert/lib/zarith", then "probe after: linked and ran, 1267650600228229401496703205376". | another line, or none, or the probe after fails | M–H, given J3 |
+| J5 | **The rest of the prerequisites install**, Coq among them, and their archive is saved. | an install fails | L–M: past `idetop.bc`, Coq, Flocq and MenhirLib have not been built under Cygwin here; the step has 240 minutes |
+| J6 | **CompCert 3.17 builds** for `x86_64-cygwin`, `ccomp -version` 3.17, and its archive is saved. | configure, the build or the install fails | M, given J5 |
+| J7 | **The tests**: the notice "compcert x86_64-cygwin: 61 / 61 compiled, 61 ran; no pin yet". | another notice, or none | L–M: H6's reasons |
+| J8 | **Nothing else changes**: the other 136 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1, 3, 4, 5 and 6 #113's, 2 #148's, 8 #172's. | another notice, or a failure | H |
+
+**Not predicted**: the times of each stage; the install's output; what
+`ld.conf` and CAML_LD_LIBRARY_PATH hold before the remedy.
+
+### What follows
+
+J1 to J8 scored, and the record closes. If J3 holds, findlib's rule is
+reported to findlib (item 9c), with this run's lines. If CompCert
+builds, the next record holds its outcome as a pin; if a stage fails,
+the next record answers it. Then item 9b's last step, BSD.
