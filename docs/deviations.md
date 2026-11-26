@@ -46952,6 +46952,7 @@ What it shows:
 | **ID**         | VERIFY-131 |
 | **Date**       | 2026-11-26 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-26 — Scored: K1 to K6 MATCH. CLOSED: six of six ("Scored", below). CompCert came from its cache; VERIFY-130's header gave the chain read and reproduced here, to the level and to the line; under the new header every test compiled under CompCert at `x86_64-cygwin` and passed, 61 of 61. The Status above is the record as committed. |
 | **Baseline**   | 26e51c9 (VERIFY-130's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #114, `2` #149 and `8` #173, at 26e51c9; `compcert-cygwin` built CompCert and compiled no test. |
 | **Scope**      | `.github/workflows/analysis.yml`'s `compcert-cygwin`: the header given first to each test, which now reads newlib's `<stdint.h>` whole before anything else of newlib's but its feature header; before the tests, what VERIFY-130's header gave the first test; the job's comment. `docs/architectures.md`, `docs/status.md`, `docs/verification.md`. No library, test or tool file. |
 | **Category**   | VERIFY-130's "What run 1 found", answered: the chain read and reproduced here, shown by the run and broken in the same run; the job as the author chose it. |
@@ -47083,3 +47084,43 @@ names; the times.
 K1 to K6 scored, and the record closes. If the tests run, the next
 record holds their outcome as a pin; if they fail elsewhere, the next
 record answers it. Then item 9b's last step, BSD.
+
+### Scored (2026-11-26)
+
+The push of dd32455, 0ac36b4 and ffb612c started seven workflows, `1` to
+`6` and `8`, each green at its first attempt: `3` #115 in 6 minutes,
+`compcert (x86_64-cygwin)` among its jobs in 6, where VERIFY-130's run
+took 34; `6` #115 the last, in 80.
+
+| # | scored |
+|---|--------|
+| K1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| K2 | **MATCH.** "Cache restored from key: compcert-3.17-x86_64-cygwin-build-v1", "unpacked cc-compcert.tar"; opam's build, the prerequisites and CompCert's build skipped; "The CompCert C verified compiler, version 3.17". |
+| K3 | **MATCH.** Open when `<sys/_stdint.h>` was first entered, in `any_all_test`, level by level: the header, `/usr/include/sys/cdefs.h`, `/usr/include/machine/_default_types.h`, `/usr/lib/gcc/x86_64-pc-cygwin/14/include/limits.h` and `syslimits.h`, `core/primitives/limits.h`, `core/primitives/types.h`, GCC's `stdint.h`, `/usr/include/stdint.h`; then "95:typedef __intmax_t intmax_t;" before "192:typedef long int __intmax_t;", both lines at the numbers the emulation here gave. |
+| K4 | **MATCH.** No test failed to compile, so that no log names any of the four. |
+| K5 | **MATCH.** "compcert x86_64-cygwin: 61 / 61 compiled, 61 ran; no pin yet". |
+| K6 | **MATCH.** The other 136 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly. |
+
+Six of six. Not predicted, and as they fell: Cygwin's GCC searches its
+own `include`, then `/usr/include`, then `w32api`; its `include` holds
+`limits.h`, `syslimits.h` and `stdint.h`, and a `c++/` directory; it has
+no `include-fixed`.
+
+**Closed.** CompCert at `x86_64-cygwin` compiles every test, and each
+passes, under Windows on Cygwin's newlib, as under Cygwin's GCC; item
+9b's fifth step has its outcome, which VERIFY-132 holds. The close
+changes nothing but this record.
+
+What it shows:
+
+- **A chain read in the sources and rebuilt here came back to the
+  line.** The emulation of Cygwin's headers gave Cygwin's own chain and
+  its line numbers, 95 and 192; the fix was measured on all 61 tests
+  before the run, which had only to confirm it.
+- **The library's own trap, met by another road.**
+  `core/primitives/limits.h`'s comment records that `-I core/primitives`
+  makes it shadow `<limits.h>`; the CompCert jobs' `-iquote` avoids that
+  for `#include <limits.h>`, but not for GCC's `#include_next` from a
+  file found beside its includer, which starts at the quote path. The
+  other CompCert jobs pass with the same flags; under Cygwin's newlib,
+  read without `__GNUC__`, it stopped every test.
