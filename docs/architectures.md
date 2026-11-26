@@ -32,7 +32,7 @@ here for them.
 | PowerPC 32, big-endian, bare metal: the embedded ABI, with the FPU | bare metal: newlib 4.4 | CompCert 3.17 (`ppc-eabi`), the `powerpc` job's toolchain preprocessing, assembling and linking for it | `compcert-ppc` (`analysis.yml`), under psim, GDB 15.1's PowerPC simulator, each test linked as `powerpc` links its tests at `ppc` (below): 56 of 61 run, held to that (VERIFY-120): not built, `lifetime_token_test` and `time_test`, which use what newlib gives only with `_POSIX_BARRIERS` and `_POSIX_TIMERS`, and `impl_defined_test` and `file_test`, psim's system calls having no `link`, which `rename()` needs; `stringbuf_test` failing, its `%ls` on big-endian data, as at `powerpc`; newlib's `__func__` undone for ccomp (below); informational, as `compcert` |
 | 32-bit Arm, big-endian (Armv7-A, hard float) | Linux, glibc 2.39 | CompCert 3.17 (`armeb-linux`), the `armeb` job's toolchain preprocessing, assembling and linking for it | `compcert-armeb` (`analysis.yml`), under qemu-user in that toolchain's sysroot, each binary checked BE8: 61 of 61 run, held to that (VERIFY-122); configure's `__REDIRECT` left as it is, this GCC not defining `_TIME_BITS=64` (below); informational, as `compcert` |
 | AArch64 (Apple silicon) and x86-64 | macOS | CompCert 3.17 (`aarch64-macos`, `x86_64-macos`), built on each runner, Apple's cc preprocessing, assembling and linking for it | `compcert-macos` (`analysis.yml`), on `macos-latest` and `macos-15-intel`, the tests run natively, Apple Clang's on the same runners their baseline: 60 of 61 run at each, held to that (VERIFY-125): `lifetime_token_test` needs POSIX barriers, which macOS does not have, so that no compiler builds it there; each file given first a header of the job's own, for two things Apple's headers give a compiler without GNU C (below); informational, as `compcert` |
-| x86-64 | Windows under Cygwin: newlib's C library, in `cygwin1.dll` | CompCert 3.17 (`x86_64-cygwin`), built under Cygwin on the runner, Cygwin's GCC preprocessing, assembling and linking for it | `compcert-cygwin` (`analysis.yml`), on `windows-latest`, the tests run natively, Cygwin's GCC's on the same runner their baseline (`cygwin`, `ci.yml`): since VERIFY-128, run 1 to measure, no pin yet; each file given first a header of the job's own, newlib's `__func__` undone with the feature macro first (below); informational, as `compcert` |
+| x86-64 | Windows under Cygwin: newlib's C library, in `cygwin1.dll` | CompCert 3.17 (`x86_64-cygwin`), built under Cygwin on the runner, Cygwin's GCC preprocessing, assembling and linking for it | `compcert-cygwin` (`analysis.yml`), on `windows-latest`, the tests run natively, Cygwin's GCC's on the same runner their baseline (`cygwin`, `ci.yml`): since VERIFY-128; CompCert built under VERIFY-130, whose run compiled no test, each stopping in newlib's `<stdint.h>` (below); no pin yet; each file given first a header of the job's own, with the feature macro first, newlib's `<stdint.h>` read whole and its `__func__` undone (below); informational, as `compcert` |
 | x86, 32-bit | Linux, glibc | GCC (`-m32`) | `build-32bit` (`ci.yml`): `size_t` exactly 32 bits |
 | AArch64 | Linux, glibc | GCC, Clang | `build-arm64` (`platforms.yml`), on GitHub's Arm runner, with sanitizers; `char` is unsigned there |
 | AArch64 | macOS | Apple Clang | `build` and `lifetime-debug` (`ci.yml`), `macos-latest` is Apple silicon |
@@ -126,7 +126,23 @@ fixing what it declares at its first header, would then not see:
 `time_test` and `lifetime_token_test` define `_POSIX_C_SOURCE`, for
 `clock_gettime` and the barriers. So the header defines it first, at
 200809, the widest any test asks for. `compcert-cygwin` does so
-(VERIFY-128).
+(VERIFY-128). Under Cygwin, newlib's `<stdint.h>` reads
+`<machine/_default_types.h>` and `<sys/_intsup.h>` before it declares
+anything, and each, where `__GNUC__` is not defined, includes
+`<limits.h>`. GCC's `<limits.h>` reaches the system's through its
+`syslimits.h`, found beside it by `#include "syslimits.h"`; GCC resumes
+an `#include_next` in a file so found at the start of the quote path
+(its `libcpp/files.cc`), where the CompCert jobs' `-iquote
+core/primitives` holds the library's own `limits.h`, the trap that
+file's comment records. That header comes back, by `types.h`, to
+`<stdint.h>`, then half read, and every test stopped at its `intmax_t`,
+not yet declared (VERIFY-130). So the header reads `<sys/features.h>`
+and then `<stdint.h>`, whole, with newlib's `__GNUC_PREREQ` defined as
+true for it alone: newlib then takes GCC's own `__LONG_MAX__` and the
+rest, which GCC defines with or without `__GNUC__`, reads no
+`<limits.h>`, and declares the same types; `__GNUC_PREREQ` is then 0
+again, as newlib defines it there. `compcert-cygwin` does so
+(VERIFY-131).
 On macOS, Apple's headers give a compiler that does not define
 `__GNUC__`, as CompCert's preprocessing leaves it, two things CompCert
 cannot use (VERIFY-124). `NAN` is a call, `__nan()`, which libSystem
