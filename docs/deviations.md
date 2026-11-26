@@ -46942,3 +46942,144 @@ What it shows:
   CompCert's preprocessing leaves `__GNUC__` undefined, and newlib then
   reads headers that Cygwin's GCC never makes it read; the `cygwin` job's
   61 passes say nothing of them.
+
+---
+
+## VERIFY-131: Pre-registration — CompCert under Cygwin, newlib's `<stdint.h>` Read First
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-131 |
+| **Date**       | 2026-11-26 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 26e51c9 (VERIFY-130's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #114, `2` #149 and `8` #173, at 26e51c9; `compcert-cygwin` built CompCert and compiled no test. |
+| **Scope**      | `.github/workflows/analysis.yml`'s `compcert-cygwin`: the header given first to each test, which now reads newlib's `<stdint.h>` whole before anything else of newlib's but its feature header; before the tests, what VERIFY-130's header gave the first test; the job's comment. `docs/architectures.md`, `docs/status.md`, `docs/verification.md`. No library, test or tool file. |
+| **Category**   | VERIFY-130's "What run 1 found", answered: the chain read and reproduced here, shown by the run and broken in the same run; the job as the author chose it. |
+
+### What is missing
+
+Under `compcert-cygwin`, no test compiles: each stops at line 67 of
+newlib's `<sys/_stdint.h>`, `typedef __intmax_t intmax_t;`, with
+`__intmax_t` not yet declared (VERIFY-130).
+
+### The chain
+
+Every test's first header of newlib's opens `<machine/_default_types.h>`,
+which, where `__GNUC__` is not defined, as CompCert's preprocessing
+leaves it, includes `<limits.h>` before its types. GCC's `<limits.h>`
+includes its `syslimits.h` as `"syslimits.h"`, beside it, and that file's
+`#include_next <limits.h>`, meant for the system's, starts at the head of
+the quote path: GCC gives a file found beside its includer a directory
+whose next is that head. The CompCert jobs' flags put `-iquote
+core/primitives` there, whose `limits.h` is the library's own, the
+shadowing that its comment records as a known trap. It includes
+`types.h`, which includes `<stdint.h>`, newlib's, which reads
+`<sys/_stdint.h>` while `<machine/_default_types.h>` is still open,
+before `__intmax_t`. Reading `<machine/_default_types.h>` first alone
+would not do: `<sys/_intsup.h>`, which `<stdint.h>` reads next, includes
+`<limits.h>` the same way, and the library's header then reaches
+`types.h`, whose check of `UINT8_MAX` stops with its `#error` while
+`<stdint.h>` is half read, in each test that reads `<stdint.h>` before
+the library's `types.h` (`memory_test` and `autosar_test`).
+
+### What changes
+
+- **The header**, given first to every test: `_POSIX_C_SOURCE` at 200809,
+  as before; then newlib's `<sys/features.h>`; then newlib's `<stdint.h>`,
+  whole, with newlib's `__GNUC_PREREQ` defined as true for it alone, so
+  that `<machine/_default_types.h>` and `<sys/_intsup.h>` take GCC's own
+  `__LONG_MAX__` and the rest, which GCC defines with or without
+  `__GNUC__`, and include no `<limits.h>`; then `__GNUC_PREREQ` as newlib
+  defines it where `__GNUC__` is not defined, 0; then `<sys/cdefs.h>` and
+  `__func__` undone, as before.
+- **What VERIFY-130's header gave the first test**, printed before the
+  tests: Cygwin's GCC's search path; the directories, and the limits,
+  syslimits and stdint headers, in GCC's own `include` and
+  `include-fixed`; the headers open when newlib's `<sys/_stdint.h>` was
+  first entered, from the line markers of ccomp's preprocessing of the
+  first test with that header; and the first lines that name
+  `__intmax_t`.
+- **The documents**: `architectures.md`'s row and recipe, the chain in
+  short; `status.md`'s row and date line; `verification.md`'s row.
+
+### Read, in the sources
+
+- **newlib at Cygwin 3.6.12** (its tag in Cygwin's repository):
+  `<sys/_stdint.h>`, its guard first, includes `<machine/_default_types.h>`
+  and at line 67 declares `intmax_t` from `__intmax_t`, its first
+  declaration with no condition; `<machine/_default_types.h>` sets its
+  guard at its top, includes `<sys/features.h>` and, where `__GNUC_PREREQ
+  (3, 3)` is false, `<limits.h>`, and only then declares its types,
+  `__intmax_t` with no condition but the guard; `<sys/_intsup.h>` does the
+  same at `__GNUC_PREREQ (3, 2)` and defines `__STDINT_EXP`, which
+  `<stdint.h>`'s pointer and fast limits use; `<stdint.h>` reads those
+  three before its own lines; `<sys/features.h>` includes only newlib's
+  version header and defines `__GNUC_PREREQ` as 0 where `__GNUC__` is not
+  defined, unless it is defined already. Its other uses, in `<math.h>`,
+  `<_ansi.h>`, `<tgmath.h>` and `<sys/cpuset.h>`, are read after the
+  header, which gives 0 again. Cygwin's own `<limits.h>`, winsup's,
+  reaches none of this.
+- **GCC 14.4.0** (its tag): `libcpp/files.cc`, `search_path_head` and
+  `make_cpp_dir`: an `#include "..."` is looked for first beside its
+  includer, in a directory whose next is the head of the quote path, and
+  an `#include_next` resumes after the directory where its file was
+  found; `gcc/limitx.h` includes `"syslimits.h"` unless
+  `_LIBC_LIMITS_H_`, newlib's guard and not Cygwin's, is defined, and
+  `gcc/limity.h` reaches the system's by `#include_next <limits.h>`;
+  `gcc/config.gcc` wraps `<stdint.h>` for x86-64 Cygwin, as for Linux.
+- **The library**: `core/primitives/limits.h` includes `"types.h"`,
+  `<stddef.h>` and `<stdint.h>`, and its comment records the shadowing of
+  `<limits.h>` as a known trap; `types.h` includes `<stdint.h>` and stops
+  with `#error` where `UINT8_MAX` and the rest are not defined.
+
+### Measured here
+
+- **The headers, emulated**: Cygwin 3.6.12's headers assembled from its
+  sources as Cygwin installs them, newlib's, then x86-64's `machine`, then
+  winsup's over them, with `newlib.h` and `_newlib_version.h`, which
+  Cygwin's build generates, written as stand-ins; the host's GCC 13
+  preprocessor and its own headers, as Cygwin's GCC has them (`include`,
+  its `limits.h`, `syslimits.h` and `stdint.h` wrapper); CompCert 3.17's
+  headers; ccomp's options for `x86_64-cygwin` and its macros, Linux's
+  predefined macros undefined and Cygwin's GCC's `__CYGWIN__` and
+  `__declspec` defined; the compcert job's flags. All 61 tests
+  preprocessed: under VERIFY-130's header, `typedef __intmax_t intmax_t;`
+  comes before `__intmax_t`'s declaration in every one, VERIFY-130's run
+  reproduced, and the host GCC's syntax check takes none; the first
+  test's chain is the one above, header, `sys/cdefs.h`,
+  `machine/_default_types.h`, GCC's `limits.h` and `syslimits.h`,
+  `core/primitives/limits.h`, `core/primitives/types.h`, GCC's `stdint.h`,
+  newlib's, `sys/_stdint.h`. With `<machine/_default_types.h>` alone read
+  first, 58 come in order and `memory_test` and `autosar_test` stop at
+  `types.h`'s `#error`. Under the new header, all 61 come in order, and
+  the host GCC's syntax check takes all 61.
+- **The test step**, extracted from `analysis.yml` and run from a copy of
+  the tree with a stand-in for ccomp that preprocesses as above and lets
+  the host GCC's syntax check stand for CompCert's parser: the search
+  path, GCC's `include` ("objc/ sanitizer/ limits.h syslimits.h
+  stdint.h") and `include-fixed` (nothing, the host's GCC having none),
+  the chain above level by level, "95:typedef __intmax_t intmax_t;" and
+  "192:typedef long int __intmax_t;", then "61 / 61 compiled, 61 ran; no
+  pin yet", exit 0.
+- **The job's YAML**, parsed; ShellCheck on every step: nothing.
+  `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| K1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| K2 | **CompCert from its cache**: `compcert-3.17-x86_64-cygwin-build-v1` restored, "unpacked cc-compcert.tar"; opam's build, the prerequisites and CompCert's build skipped; "The CompCert C verified compiler, version 3.17". | a miss, or the restore, the unpack or ccomp fails | M: VERIFY-130's run saved it; its restore and unpack have not run |
+| K3 | **What VERIFY-130's header gave**: open when `<sys/_stdint.h>` was first entered, level by level, the header, `sys/cdefs.h`, `machine/_default_types.h`, GCC's `limits.h` and `syslimits.h`, the library's `core/primitives/limits.h` and `core/primitives/types.h`, GCC's `stdint.h` and newlib's; the first line naming `__intmax_t` is `typedef __intmax_t intmax_t;`, before its declaration. | another chain, or the declaration first | M–H: read in GCC's and newlib's sources and reproduced here; Cygwin's GCC itself not read |
+| K4 | **No test stops in newlib's types or at `types.h`'s check**: no log of a test not compiled names `<sys/_stdint.h>`, `<machine/_default_types.h>`, `<sys/_intsup.h>` or `types.h`. | any such log | M–H, given K3 |
+| K5 | **The tests**: the notice "compcert x86_64-cygwin: 61 / 61 compiled, 61 ran; no pin yet". | another notice, or none | L–M: H6's reasons, and the rest of Cygwin's headers read by CompCert for the first time, the host GCC's syntax check standing for CompCert's parser here |
+| K6 | **Nothing else changes**: the other 136 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1, 3, 4, 5 and 6 #114's, 2 #149's, 8 #173's. | another notice, or a failure | H |
+
+**Not predicted**: Cygwin's GCC's search path and its own headers'
+names; the times.
+
+### What follows
+
+K1 to K6 scored, and the record closes. If the tests run, the next
+record holds their outcome as a pin; if they fail elsewhere, the next
+record answers it. Then item 9b's last step, BSD.
