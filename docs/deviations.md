@@ -47134,6 +47134,7 @@ What it shows:
 | **ID**         | VERIFY-132 |
 | **Date**       | 2026-11-26 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-26 — Scored: L1 to L4 MATCH. CLOSED: four of four ("Scored", below). `compcert (x86_64-cygwin)` held to its pin, 61 of 61, its CompCert restored from its cache; item 9b's fifth step, Cygwin, is done. The Status above is the record as committed. |
 | **Baseline**   | ffb612c (VERIFY-131's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #115, `2` #150 and `8` #174, at ffb612c. |
 | **Scope**      | `.github/workflows/analysis.yml`'s `compcert-cygwin`: its pin, set and held; VERIFY-131's look at VERIFY-130's header, removed; its comments. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`. No library, test or tool file. |
 | **Category**   | VERIFY-131's "What follows": the pin held, as VERIFY-122 held `compcert-armeb`'s and VERIFY-125 `compcert-macos`'s. |
@@ -47192,3 +47193,28 @@ L1 to L4 scored, and the record closes; item 9b's fifth step, Cygwin,
 is then done. Then its last, BSD: CompCert at `x86_64-bsd` and
 `x86_32-bsd` in a FreeBSD virtual machine, GitHub having no BSD runner,
 as `docs/architectures.md` plans it, the author's choices asked first.
+
+### Scored (2026-11-26)
+
+The push of bfc4f0e, 3bd2aef and a608d70 started seven workflows, `1` to
+`6` and `8`, each green at its first attempt: `3` #116 in 5 minutes,
+`compcert (x86_64-cygwin)` among its jobs in 4; `6` #116 the last, in 83.
+
+| # | scored |
+|---|--------|
+| L1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| L2 | **MATCH.** `compcert (x86_64-cygwin)` green, its notice "compcert x86_64-cygwin: 61 / 61 compiled, 61 ran; as pinned". |
+| L3 | **MATCH.** "Cache restored from key: compcert-3.17-x86_64-cygwin-build-v1", "unpacked cc-compcert.tar"; no build step ran. |
+| L4 | **MATCH.** The other 136 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly. |
+
+Four of four. Not predicted, and as they fell: the times.
+
+**Closed.** CompCert under Cygwin is held to its pin, as at the sixteen
+other configurations, and item 9b's fifth step is done; its last is
+BSD. The close changes nothing but this record.
+
+What it shows:
+
+- **A cached stage makes a held pin cheap.** The job built CompCert in
+  34 minutes at VERIFY-130's run; held, it restores it and runs the
+  tests in 4.
