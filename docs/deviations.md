@@ -46648,6 +46648,7 @@ What it shows:
 | **ID**         | VERIFY-129 |
 | **Date**       | 2026-11-26 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-26 — Scored: I1, I2, I3 and I7 MATCH; I4, I5 and I6 MISS. CLOSED: four of seven ("Scored", below). dune 3.22.2 builds and installs under Cygwin, as the maintainer of opam's wrote, in the plan predicted; Coq 8.16.1 does not: its bytecode link of `idetop.bc` finds no `dllzarith.so` ("What run 1 found"); CompCert is not reached. The Status above is the record as committed. |
 | **Baseline**   | 811f254 (VERIFY-128's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #112, `2` #147 and `8` #171, at 811f254; `compcert-cygwin` failed at its prerequisites. |
 | **Scope**      | `.github/workflows/analysis.yml`'s `compcert-cygwin`: dune pinned at 3.22.2 before CompCert's prerequisites, the pin in their cache's key, the job's comment. No document, library, test or tool file. |
 | **Category**   | VERIFY-128's "What run 1 found", answered: a pin of a dependency, which leaves the job as the author chose it. |
@@ -46710,3 +46711,54 @@ and CompCert are not reached.
 I1 to I7 scored, and the record closes. If CompCert builds, the next
 record holds its outcome as a pin; if a stage fails, the next record
 answers it, the stages before it cached. Then item 9b's last step, BSD.
+
+### Scored (2026-11-26)
+
+The push of 9252244, 4b3331b and ebd38c9 started seven workflows, `1` to
+`6` and `8`, each green at its first attempt; `compcert (x86_64-cygwin)`
+failed after 13 minutes at its prerequisites, which `3` #113's green
+does not show.
+
+| # | scored |
+|---|--------|
+| I1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| I2 | **MATCH.** The action installed the job's packages; each tool checked was Cygwin's, `cc` `/usr/bin/cc`; "gcc (GCC) 14.4.0", "OCaml 4.14.2, system cygwin"; neither cache found; opam 2.6.1 built again, in 4 minutes, `opam --version` "2.6.1". |
+| I3 | **MATCH.** "dune is now pinned to version 3.22.2"; the plan, fifteen packages, run 1's but for dune: Coq 8.16.1, Flocq 4.2.2, Menhir and MenhirLib 20260209, ocamlfind 1.9.8, zarith 1.14 and "dune 3.22.2 (pinned)"; "-> installed dune.3.22.2". |
+| I4 | **MISS.** ocamlfind, zarith, dune and Menhir installed; then "[ERROR] The compilation of coq.8.16.1 failed at "make COQ_USE_DUNE= -j3".", its output ocamlc's bytecode link of `ide/coqide/idetop.bc`, `-linkall`, zarith's `zarith.cma` among its archives: "Error: I/O error: dllzarith.so: No such file or directory". Nothing saved. |
+| I5 | **MISS.** Not reached. |
+| I6 | **MISS.** Not reached; no notice. |
+| I7 | **MATCH.** The other 136 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly. |
+
+Four of seven.
+
+### What run 1 found
+
+ocamlc, at a bytecode link, looks for each stub DLL that its archives
+name in CAML_LD_LIBRARY_PATH's directories, then in `ld.conf`'s, then in
+the `-I` ones, and opens the bare name when none holds it: the error is
+that (OCaml 4.14.2's `bytecomp/dll.ml`). opam gives each build the
+switch's `lib/stublibs` in CAML_LD_LIBRARY_PATH, and Coq's Makefile and
+dune add to it, never clear it; so zarith built no `dllzarith.so`, or it
+is not in `lib/stublibs`, and the run does not say which. The sources
+say the second: Cygwin's OCaml names stub DLLs `.so`, and zarith its
+own, but findlib takes a file for a DLL, to install into `stublibs`, only
+if its name ends in `.dll` where `Sys.os_type` is "Cygwin", and installs
+any other into the package's own directory, `lib/zarith` here, which no
+search of Coq's link reaches (VERIFY-130 has the reading, and a
+reproduction at Linux). Nothing in the run shows where the DLL is.
+
+**Closed.** Run 1 builds dune 3.22.2 under Cygwin, and the first of
+CompCert's prerequisites that fails is Coq, at its first bytecode link
+with zarith. The close changes nothing but this record; VERIFY-130
+answers it.
+
+What it shows:
+
+- **The error names the file, not why it is missing.** "dllzarith.so: No
+  such file or directory" is what ocamlc says both when zarith built no
+  DLL and when it is installed where no search looks; the run cannot
+  tell the two apart, and VERIFY-130 prints which.
+- **Each run shows the first failure only.** I4 rested on Coq, Flocq and
+  Menhir, none built under Cygwin here; the chain stops at the first that
+  fails, and VERIFY-130 checks zarith's DLL alone, before Coq, so that
+  its run says whether the cause read is the cause.
