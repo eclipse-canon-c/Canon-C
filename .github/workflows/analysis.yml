@@ -3520,8 +3520,10 @@ jobs:
   #   OCaml; its switch takes that OCaml (ocaml-system) and CompCert's
   #   prerequisites alone (--deps-only), as at macOS, Coq among them, built
   #   under Cygwin, and dune pinned at 3.22.2 (VERIFY-129: 3.23's and
-  #   3.24's own build fails under Cygwin); CompCert comes from opam's
-  #   archive and its digest.
+  #   3.24's own build fails under Cygwin); zarith's DLL, which findlib
+  #   under Cygwin installs off every DLL search path, put on OCaml's own,
+  #   ld.conf, and a program linked with it run, before Coq (VERIFY-130);
+  #   CompCert comes from opam's archive and its digest.
   #   Cygwin's GCC preprocesses, assembles and links for ccomp, with
   #   configure's options for Cygwin, and the tests run natively.
   #
@@ -3653,6 +3655,42 @@ jobs:
           # #15340), and 3.24.2's rules read the same; 3.22.2 is where a
           # maintainer of opam's pinned it, "the latest working version".
           opam pin add --no-action dune 3.22.2
+          # zarith first, its build shown. Coq's bytecode link found no
+          # dllzarith.so in VERIFY-129's run: Cygwin's OCaml names stub
+          # DLLs .so, findlib under Cygwin takes only a .dll for one, and
+          # so would install zarith's into lib/zarith as a plain file, on
+          # no DLL search path. The directory that holds it goes into
+          # ld.conf, which ocamlc and ocamlrun read whatever the
+          # environment, and a program linked with zarith is run before
+          # and after (VERIFY-130).
+          opam install ocamlfind
+          opam install --verbose zarith
+          lib=$(opam var lib)
+          ldconf="$(ocamlc -where)/ld.conf"
+          ocamlc -config | grep -E '^(system|os_type|ext_dll|supports_shared_libraries):' || true
+          echo "ld.conf ($ldconf): $(paste -sd ' ' "$ldconf")"
+          echo "CAML_LD_LIBRARY_PATH: ${CAML_LD_LIBRARY_PATH:-unset}"
+          echo "zarith's DLL: $(find "$lib" -name 'dllzarith*' | paste -sd ' ' -)"
+          ocamlobjinfo "$lib/zarith/zarith.cma" | grep -E '^(Force custom|Extra )' || true
+          mkdir -p /cygdrive/d/cc-build/probe
+          printf 'let () = print_endline (Z.to_string (Z.pow (Z.of_int 2) 100))\n' \
+            > /cygdrive/d/cc-build/probe/probe.ml
+          probe() (
+            cd /cygdrive/d/cc-build/probe
+            if ! ocamlfind ocamlc -package zarith -linkpkg probe.ml -o probe.bc > link.log 2>&1; then
+              echo "probe $1: the link failed"; sed 's/^/    /' link.log; exit 1
+            fi
+            if ! ocamlrun ./probe.bc > run.log 2>&1; then
+              echo "probe $1: linked; the run failed"; sed 's/^/    /' run.log; exit 1
+            fi
+            echo "probe $1: linked and ran, $(cat run.log)"
+          )
+          probe before || true
+          [ -z "$(tail -c 1 "$ldconf")" ] || echo >> "$ldconf"
+          find "$lib" -name 'dllzarith*' -exec dirname {} \; | sort -u | while read -r d; do
+            grep -qxF "$d" "$ldconf" || { echo "$d" >> "$ldconf"; echo "ld.conf += $d"; }
+          done
+          probe after
           opam install coq-compcert.3.17 --deps-only
           # What opam chose, for the record; neither line can fail the step.
           opam list --installed --columns=name,version \
@@ -3660,6 +3698,20 @@ jobs:
             || true
           opam clean --download-cache || true
           tar -C /cygdrive/d -cf /cygdrive/d/cc-deps.tar cc/opam cc/opam-root
+
+      - name: Show opam's build environments, on failure
+        if: failure() && steps.target-cache.outputs.cache-hit != 'true' && steps.deps-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          # The variables opam gave each build it logged, and the DLLs
+          # of the switch and of zarith's directory (VERIFY-130).
+          set +e
+          for e in /cygdrive/d/cc/opam-root/log/*.env; do
+            [ -f "$e" ] || continue
+            echo "--- ${e##*/}"
+            grep -E '^(CAML_LD_LIBRARY_PATH|OCAMLPATH|OCAMLFIND_[A-Z]*|OCAMLLIB)=' "$e" | cut -c1-300
+          done
+          ls /cygdrive/d/cc/opam-root/compcert/lib/stublibs /cygdrive/d/cc/opam-root/compcert/lib/zarith
 
       - name: Save opam and CompCert's prerequisites
         if: steps.target-cache.outputs.cache-hit != 'true' && steps.deps-cache.outputs.cache-hit != 'true'
