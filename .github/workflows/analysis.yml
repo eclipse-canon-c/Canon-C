@@ -3898,12 +3898,17 @@ jobs:
   #   thread-safety attributes; then reads <math.h>, with INFINITY and NAN
   #   as glibc's <math.h> defines them without GNU C (VERIFY-134).
   #
+  #   Each loop reads the tests' names before it starts, and gives each
+  #   call of the helper /dev/null for its input: ssh reads its input,
+  #   and in VERIFY-135's run took the rest of the names (VERIFY-136).
+  #
   #   The notice says what was compiled and ran; no pin yet: run 1
   #   measures. A failed boot, install, build or unpack fails the job;
   #   continue-on-error keeps it from the workflow's result. A last step
   #   compiles every test as the test step does, but without the header,
-  #   and says how many compiled and where each log's first error is; it
-  #   fails nothing (the author's choice of 2026-11-27).
+  #   and says how many compiled and where each log's first error is, in
+  #   CompCert's forms or the preprocessor's; it fails nothing (the
+  #   author's choice of 2026-11-27).
   # -------------------------------------------------------------------------
   compcert-bsd:
     name: compcert (x86_64-bsd)
@@ -4201,8 +4206,12 @@ jobs:
             -I integrations/autosar -I test/integrations/autosar/stubs
             -include "\$HOME/canon/ccomp-out/canon_bsd.h"
           )
+          # The names first, and no input for the helper in the loop: ssh
+          # reads its input, and in a loop fed by find took the rest of the
+          # names (VERIFY-135's run).
+          mapfile -t tests < <(find test -name '*_test.c' | sort)
           total=0; compiled=0; ran=0; failed_compile=(); failed_run=(); status=()
-          while IFS= read -r t; do
+          for t in "${tests[@]}"; do
             total=$((total + 1))
             n=$(basename "$t" .c)
             extra=""; d="${t%_test.c}_defs.c"; [ -f "$d" ] && extra=" $d"
@@ -4213,10 +4222,11 @@ jobs:
               libs=" -lpthread"
             fi
             if "$vm" "cd canon && $ccomp ${CCOMP_FLAGS[*]} -o ccomp-out/$n $t$extra$libs" \
-                 > "ccomp-out/$n.log" 2>&1; then
+                 < /dev/null > "ccomp-out/$n.log" 2>&1; then
               compiled=$((compiled + 1))
               rc=0
-              "$vm" "cd canon && timeout 600 ./ccomp-out/$n" > "ccomp-out/$n.run.log" 2>&1 || rc=$?
+              "$vm" "cd canon && timeout 600 ./ccomp-out/$n" < /dev/null \
+                > "ccomp-out/$n.run.log" 2>&1 || rc=$?
               if [ "$rc" -eq 0 ]; then
                 ran=$((ran + 1))
               else
@@ -4225,7 +4235,7 @@ jobs:
             else
               failed_compile+=("$n")
             fi
-          done < <(find test -name '*_test.c' | sort)
+          done
           line="$compiled / $total compiled, $ran ran"
           [ ${#failed_compile[@]} -gt 0 ] && line="$line; not compiled: ${failed_compile[*]}"
           [ ${#failed_run[@]} -gt 0 ] && line="$line; did not run: ${failed_run[*]}"
@@ -4275,8 +4285,10 @@ jobs:
             -iquote core/primitives -I core -I semantics -I .
             -I integrations/autosar -I test/integrations/autosar/stubs
           )
-          total=0; compiled=0; firsts=()
-          while IFS= read -r t; do
+          # As in the test step: the names first, no input for the helper.
+          mapfile -t tests < <(find test -name '*_test.c' | sort)
+          total=0; compiled=0; firsts=(); unplaced=()
+          for t in "${tests[@]}"; do
             total=$((total + 1))
             n=$(basename "$t" .c)
             extra=""; d="${t%_test.c}_defs.c"; [ -f "$d" ] && extra=" $d"
@@ -4285,29 +4297,40 @@ jobs:
               libs=" -lpthread"
             fi
             if "$vm" "cd canon && $ccomp ${CCOMP_FLAGS[*]} -o ccomp-out/plain/$n $t$extra$libs" \
-                 > "ccomp-out/plain/$n.log" 2>&1; then
+                 < /dev/null > "ccomp-out/plain/$n.log" 2>&1; then
               compiled=$((compiled + 1))
             else
-              # Where the log's first error is: its file and line.
-              f=$(grep -m 1 -oE '^[^ :]+:[0-9]+: error' "ccomp-out/plain/$n.log" | sed 's/: error$//')
-              firsts+=("${f:-unplaced}")
+              # Where the log's first error is, its file and line: from
+              # CompCert's "FILE:LINE: error:", its syntax errors'
+              # "FILE:LINE:COLUMN: syntax error" (cparser/ErrorReports.ml),
+              # or the preprocessor's "FILE:LINE:COLUMN: error:".
+              f=$(grep -m 1 -oE '^[^ :]+:[0-9]+(:[0-9]+)?: (syntax error|fatal error|error)' \
+                "ccomp-out/plain/$n.log" | sed -E 's/^([^ :]+:[0-9]+).*/\1/')
+              if [ -n "$f" ]; then firsts+=("$f"); else firsts+=(unplaced); unplaced+=("$n"); fi
             fi
-          done < <(find test -name '*_test.c' | sort)
+          done
           where="none"
           if [ ${#firsts[@]} -gt 0 ]; then
             where=$(printf '%s\n' "${firsts[@]}" | sort | uniq -c | sort -k1,1nr -k2 \
               | awk '{ printf "%s%s in %s", (NR > 1 ? ", " : ""), $2, $1 }')
           fi
-          # Each place's first error, once, as the first log there gives it.
+          # Each place's first error, once, as the first log there gives it;
+          # and of the logs with no error placed, the first one's first 15
+          # lines, so that this log shows what it says.
           while IFS= read -r p; do
+            [ "$p" = unplaced ] && continue
             for l in ccomp-out/plain/*.log; do
-              if grep -q -F "$p: error" "$l"; then
+              if grep -q -F "$p:" "$l"; then
                 echo "--- $p, first in ${l##*/} ---"
-                grep -m 1 -A 2 -F "$p: error" "$l" | sed 's/^/    /'
+                grep -m 1 -A 2 -F "$p:" "$l" | sed 's/^/    /'
                 break
               fi
             done
           done < <(printf '%s\n' "${firsts[@]}" | sort -u)
+          if [ ${#unplaced[@]} -gt 0 ]; then
+            echo "--- unplaced: ${unplaced[*]}; the first, ${unplaced[0]} ---"
+            head -15 "ccomp-out/plain/${unplaced[0]}.log" | sed 's/^/    /'
+          fi
           echo "::notice title=compcert $TARGET without the header::$compiled / $total compiled; first errors: $where"
 
       - name: Upload the ccomp logs

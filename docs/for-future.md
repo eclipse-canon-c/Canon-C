@@ -38,7 +38,9 @@ not run here, and is not usable on this code today:
   for evaluation, research and education but not commercially;
 - it accepts the subset of C99 that CompCert accepts, and its 2014
   release note says it handles neither recursion nor dynamic allocation;
-- it does not read ACSL, so the library's contracts would not help it.
+- it does not read ACSL, so the library's contracts would not help it;
+- it has no port to a recent CompCert and no successor: asked on
+  2026-11-26, David Monniaux (VERIMAG) knew of neither.
 
 Sources: [its page](https://compcert.inria.fr/verasco/), [the release
 note](https://gallium.inria.fr/blog/papers-verasco/) and [the
