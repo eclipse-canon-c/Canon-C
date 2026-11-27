@@ -3902,13 +3902,14 @@ jobs:
   #   call of the helper /dev/null for its input: ssh reads its input,
   #   and in VERIFY-135's run took the rest of the names (VERIFY-136).
   #
-  #   The notice says what was compiled and ran; no pin yet: run 1
-  #   measures. A failed boot, install, build or unpack fails the job;
-  #   continue-on-error keeps it from the workflow's result. A last step
-  #   compiles every test as the test step does, but without the header,
-  #   and says how many compiled and where each log's first error is, in
-  #   CompCert's forms or the preprocessor's; it fails nothing (the
-  #   author's choice of 2026-11-27).
+  #   The notice says what was compiled and ran, and whether that is the
+  #   pin, which is held since VERIFY-137: another outcome fails the job,
+  #   as does a failed boot, install, build or unpack; continue-on-error
+  #   keeps it from the workflow's result. A last step compiles every test
+  #   as the test step does, but without the header, and says how many
+  #   compiled and where each log's first error is, in CompCert's forms or
+  #   the preprocessor's; it fails nothing (the author's choice of
+  #   2026-11-27).
   # -------------------------------------------------------------------------
   compcert-bsd:
     name: compcert (x86_64-bsd)
@@ -3925,8 +3926,9 @@ jobs:
       # The image's SHA-256, as FreeBSD 15.1's announcement gives it: the
       # freebsd job's pin (ci.yml).
       FREEBSD_SHA256: e4ca4db889f8559c9b9dfcacc70405c038476f4b6d41649b152d3809a2ed9e1f
-      # None yet: run 1 measures (VERIFY-134).
-      PIN: ""
+      # Every test, as under FreeBSD's Clang: VERIFY-136's prediction and
+      # its run's outcome; held since VERIFY-137.
+      PIN: "61 / 61 compiled, 61 ran"
     steps:
       - uses: actions/checkout@v6
       - name: Enable KVM

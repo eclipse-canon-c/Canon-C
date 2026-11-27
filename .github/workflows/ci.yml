@@ -1,7 +1,7 @@
 name: "1 · Build & test"
 # Builds and runs the test suite: Linux, Windows (MSVC, MinGW, Cygwin),
 # FreeBSD and macOS (Apple silicon and Intel), Release and Debug with
-# sanitizers; i386;
+# sanitizers; i386, on Linux and on FreeBSD's 32-bit libraries;
 # Valgrind; libFuzzer; the lifetime token under concurrency and the
 # lifetime-debug build. Start here.
 # Map of every workflow: .github/workflows/README.md (VERIFY-050).
@@ -357,7 +357,8 @@ jobs:
         run: ctest --output-on-failure
 
   # -------------------------------------------------------------------------
-  # 1e. FreeBSD build + test — FreeBSD 15.1, its own Clang (VERIFY-133)
+  # 1e. FreeBSD build + test — FreeBSD 15.1, its own Clang (VERIFY-133);
+  #     at -m32 too, on its 32-bit libraries (VERIFY-137)
   #
   #    FreeBSD on x86-64: its own C library and its base system's Clang,
   #    LP64 as Linux. GitHub has no FreeBSD runner, so the job boots the
@@ -374,6 +375,22 @@ jobs:
   #    Clang, sanitizers off. A notice per leg gives the compiler, its
   #    data model and what CTest passed. It is the baseline that
   #    CompCert's x86_64-bsd is to be read against (item 9b).
+  #
+  #    Two legs more build and test at -m32, as build-32bit does on Linux,
+  #    on the 32-bit libraries of 64-bit FreeBSD, FreeBSD 15 having no
+  #    i386 release: amd64's VM images take the lib32 set, which holds
+  #    them, their development files and the 32-bit runtime linker
+  #    (release/tools/vmimage.subr and release/packages/generate-ucl.lua,
+  #    15.1). FreeBSD's Clang links a 32-bit program against /usr/lib32
+  #    when /usr/lib32/crt1.o is there, and the kernel gives it
+  #    /libexec/ld-elf32.so.1 for its runtime linker. At those legs the
+  #    job checks that cc -m32 is FreeBSD 15's at i386 and lists that
+  #    runtime linker, the C startup file and the C library; runs the
+  #    probe at -m32; and checks that every test CMake builds is a 32-bit
+  #    program for the i386. They are the baseline that CompCert's
+  #    x86_32-bsd is to be read against: the author chose on 2026-11-26
+  #    FreeBSD 14's i386 or these libraries, as the sources show, and
+  #    they show these (VERIFY-137).
   # -------------------------------------------------------------------------
   freebsd:
     needs: build
@@ -385,8 +402,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build_type: [Release, Debug]
+        # Four legs: x86-64 at Release and Debug, as since VERIFY-133, and
+        # the same at -m32 (VERIFY-137). Of a matrix of includes alone,
+        # each is a leg, named by its values: freebsd (Release) and
+        # freebsd (Debug) as before, freebsd (Release, -m32) and freebsd
+        # (Debug, -m32).
+        include:
+          - build_type: Release
+          - build_type: Debug
+          - build_type: Release
+            m32: -m32
+          - build_type: Debug
+            m32: -m32
     env:
+      # -m32 at the 32-bit legs, empty at the others.
+      M32: ${{ matrix.m32 }}
       FREEBSD_URL: https://download.freebsd.org/releases/VM-IMAGES/15.1-RELEASE/amd64/Latest
       FREEBSD_IMAGE: FreeBSD-15.1-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2.xz
       # The image's SHA-256, as FreeBSD 15.1's announcement gives it.
@@ -485,11 +515,21 @@ jobs:
         run: |
           cd freebsd-vm
           ./vm 'freebsd-version -kru; uname -mrs; cc --version | sed -n 1p; cmake --version | sed -n 1p; printf "ninja "; ninja --version'
-          machine=$(./vm 'cc -dumpmachine')
-          case "$machine" in
-            x86_64-unknown-freebsd15.*) echo "cc: $machine" ;;
-            *) echo "::error::cc is '$machine', not FreeBSD 15's at x86-64"; exit 1 ;;
-          esac
+          machine=$(./vm "cc $M32 -dumpmachine")
+          if [ -z "$M32" ]; then
+            case "$machine" in
+              x86_64-unknown-freebsd15.*) echo "cc: $machine" ;;
+              *) echo "::error::cc is '$machine', not FreeBSD 15's at x86-64"; exit 1 ;;
+            esac
+          else
+            case "$machine" in
+              i386-unknown-freebsd15.*) echo "cc $M32: $machine" ;;
+              *) echo "::error::cc $M32 is '$machine', not FreeBSD 15's at i386"; exit 1 ;;
+            esac
+            # What links and runs a 32-bit program, of the lib32 set: the
+            # runtime linker, the C startup file and the C library.
+            ./vm 'ls -l /libexec/ld-elf32.so.1 /usr/lib32/crt1.o /usr/lib32/libc.so'
+          fi
           ./vm 'mkdir -p probe && cat > probe/model.c' <<'PROBE'
           #include <limits.h>
           #include <stdarg.h>
@@ -515,14 +555,29 @@ jobs:
               return 0;
           }
           PROBE
-          ./vm 'cc -std=c99 -Wall -Wextra -Wpedantic -Werror -o probe/model probe/model.c && ./probe/model' \
+          ./vm "cc $M32 -std=c99 -Wall -Wextra -Wpedantic -Werror -o probe/model probe/model.c && ./probe/model" \
             | tee model.txt
       - name: Copy the tree in, configure and build
         run: |
           cd freebsd-vm
           tar -C .. --exclude=./freebsd-vm --exclude=./.git -cf - . \
             | ./vm 'rm -rf canon && mkdir canon && tar -xf - -C canon'
-          ./vm "cd canon && cmake -B build -G Ninja -DCMAKE_C_COMPILER=cc -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DENABLE_SANITIZERS=OFF -S . && cmake --build build -j 2"
+          # At -m32, CMake's C flags and its executables' link flags as
+          # build-32bit gives them; at x86-64, the command as before.
+          ./vm "cd canon && cmake -B build -G Ninja -DCMAKE_C_COMPILER=cc -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} ${M32:+-DCMAKE_C_FLAGS=$M32 -DCMAKE_EXE_LINKER_FLAGS=$M32 }-DENABLE_SANITIZERS=OFF -S . && cmake --build build -j 2"
+          if [ -n "$M32" ]; then
+            # Every test that CMake built, a 32-bit program for the i386:
+            # file(1) says "ELF 32-bit LSB" and "Intel i386", as 5.46,
+            # FreeBSD 15.1's, names it ("Intel 80386" at 5.45, Ubuntu's).
+            ./vm 'cd canon/build && file -b *_test' > elf.txt
+            all=$(wc -l < elf.txt)
+            i386=$(grep -cE '^ELF 32-bit LSB .*, Intel (i386|80386),' elf.txt || true)
+            sed -n 1p elf.txt
+            echo "test binaries: $all; 32-bit programs for the i386: $i386"
+            if [ "$all" = 0 ] || [ "$i386" != "$all" ]; then
+              echo "::error::not every test binary is a 32-bit program for the i386"; exit 1
+            fi
+          fi
       - name: Test
         run: |
           cd freebsd-vm
@@ -535,7 +590,7 @@ jobs:
           failed=$(printf '%s\n' "$summary" | sed -nE 's/^[0-9]+% tests passed, ([0-9]+) tests failed.*/\1/p')
           passed=$(( ${total:-0} - ${failed:-0} ))
           # No title, as cygwin's: the leg is in the message.
-          echo "::notice::freebsd ${{ matrix.build_type }}: $(./vm 'cc -dumpmachine'), Clang $(./vm 'cc -dumpversion'); $(cat model.txt); $passed of ${total:-0} tests passed"
+          echo "::notice::freebsd ${{ matrix.build_type }}${M32:+ $M32}: $(./vm "cc $M32 -dumpmachine"), Clang $(./vm 'cc -dumpversion'); $(cat model.txt); $passed of ${total:-0} tests passed"
           exit "$rc"
       - name: Show FreeBSD's console and nuageinit's log, on failure
         if: failure()

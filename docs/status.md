@@ -9,7 +9,7 @@ and those files differ, they are right and this page is wrong; please say
 so in an issue. A record that changes a fact stated here updates this
 page with it.
 
-*Written for VERIFY-118, 2026-11-24; brought up to date by VERIFY-119 to VERIFY-136.*
+*Written for VERIFY-118, 2026-11-24; brought up to date by VERIFY-119 to VERIFY-137.*
 
 ## The words used
 
@@ -61,7 +61,7 @@ With CompCert 3.17, the formally verified compiler (informational):
 | big-endian 32-bit Arm Linux (`armeb-linux`), with glibc | run, 61 of 61 |
 | macOS on Apple silicon and Intel (`aarch64-macos`, `x86_64-macos`) | run, 60 of 61 at each (with a header given to CompCert first, `architectures.md` says which and why), pinned: one test needs POSIX barriers, which macOS does not have |
 | Windows under Cygwin (`x86_64-cygwin`), with newlib | run, 61 of 61 (with a header given to CompCert first, `architectures.md` says which and why) |
-| FreeBSD (`x86_64-bsd`), its own C library | to be run: CompCert built in FreeBSD's own image (VERIFY-135), where one test has compiled and run so far; with a header given to CompCert first (`architectures.md` says which and why) |
+| FreeBSD (`x86_64-bsd`), its own C library | run, 61 of 61 (with a header given to CompCert first, `architectures.md` says which and why) |
 
 In the GCC jobs on bare metal, each test runs at four levels of
 optimization (`-O0`, `-O2`, `-O3`, `-Os`). Each pinned exception, and
