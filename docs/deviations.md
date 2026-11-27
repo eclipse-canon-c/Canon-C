@@ -47414,3 +47414,197 @@ What it shows:
   build gave no warning under `-Werror`, and the tests' only branches on
   a system, `diag_test`'s on `__GLIBC__` and `util/time.h`'s
   `_POSIX_C_SOURCE`, took FreeBSD's side and passed.
+
+---
+
+## VERIFY-134: Pre-registration — CompCert at x86_64-bsd, in FreeBSD 15.1
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-134 |
+| **Date**       | 2026-11-27 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | fe45ccc (VERIFY-133's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #117, `2` #152 and `8` #176, at fe45ccc. |
+| **Scope**      | `.github/workflows/analysis.yml`: a job, `compcert-bsd`, and its header's first lines. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `docs/compcert-licensing.md`, `.github/workflows/README.md`. No library, test or tool file. |
+| **Category**   | Item 9b's last step, BSD, its second part: CompCert at `x86_64-bsd`, in the image whose baseline VERIFY-133 ran; that record's "What follows". |
+
+### What is missing
+
+CompCert 3.17 runs the tests at every target of its configure but two,
+`x86_64-bsd` and `x86_32-bsd`. VERIFY-133 gave the first its baseline:
+the tests pass on FreeBSD 15.1 under FreeBSD's Clang, 61 of 61.
+`docs/status.md` does not yet name FreeBSD.
+
+### The author's choices (2026-11-27)
+
+Two answers, asked with what is read and emulated below. **The header
+from run 1, and a plain run as a diagnosis**: the test step gives every
+file the job's header, and its notice is what a later pin holds; a last
+step compiles every test without it, with configure's settings alone,
+and reports, failing nothing. **`-lpthread` where a test includes
+`<pthread.h>`**: `lifetime_token_test` alone, the other tests linked as
+before. The choices of 2026-11-26 hold: FreeBSD's own image;
+`x86_64-bsd` first, `x86_32-bsd` after; after three records without the
+step done, the author is asked.
+
+### What changes
+
+- **The job `compcert-bsd`**, "compcert (x86_64-bsd)", in `analysis.yml`
+  after `compcert-cygwin`, under the licensing note's `if:` guard and
+  `continue-on-error`, on `ubuntu-24.04`:
+  - FreeBSD booted as `freebsd` boots it: KVM, QEMU, the image from that
+    job's cache or download.freebsd.org, checked against the same pinned
+    SHA-256 and the mirror's `CHECKSUM.SHA256`; a seed for nuageinit; the
+    wait for the first boot and a reboot it asks for. Four CPUs and 8 GB;
+    the disk grown to 24 GB.
+  - Where CompCert's own cache misses, the seed asks FreeBSD's packages
+    for `ocaml-opam`, `gmp` and `pkgconf`, and the wait asks for their
+    commands. In FreeBSD, as `freebsd`, opam's root under the home, opam
+    asking nothing and leaving packages to the seed: `opam init`, a
+    switch with OCaml 4.14.2, the `coq-released` repository,
+    `coq-compcert.3.17 --deps-only`, as at macOS. The root, as a tar
+    archive made in FreeBSD, cached under
+    `opam-freebsd-15.1-amd64-ocaml-4.14.2-compcert-3.17-deps-v1`.
+  - CompCert 3.17 from opam's archive, its SHA-256 checked on the
+    runner, unpacked in FreeBSD; `./configure x86_64-bsd` with opam's
+    flags but `-prefix`, as at macOS and under Cygwin; `gmake -j4`,
+    `gmake install`; the installation, as a tar archive, cached under
+    `compcert-3.17-x86_64-bsd-freebsd-15.1-build-v1`. Each script run in
+    FreeBSD is written there first and run with its input empty.
+  - The tree copied in, as in `freebsd`; each test compiled and linked by
+    ccomp in FreeBSD with the compcert job's flags, the job's header
+    given first with `-include`, and `-lpthread` where the test includes
+    `<pthread.h>`; run there under `timeout(1)`, 600 s at most. The
+    header: `<sys/cdefs.h>`; `_Nonnull`, `_Nullable`, `_Null_unspecified`,
+    `__NULLABILITY_PRAGMA_PUSH` and `__NULLABILITY_PRAGMA_POP` defined
+    empty; `__lock_annotate(x)` empty; `<math.h>`; `INFINITY` as
+    `1e10000f` and `NAN` as `(0.0f / 0.0f)`. The notice: "compcert
+    x86_64-bsd: LINE; no pin yet", in the other CompCert jobs' form.
+  - The plain run: each test compiled as above, without the header, and
+    not run; the notice "compcert x86_64-bsd without the header: C / T
+    compiled; first errors: PLACE in N, ...", a place being the file and
+    line of a log's first error. The step fails nothing.
+  - The logs uploaded; on a failure, FreeBSD's console and nuageinit's
+    log.
+- **`analysis.yml`'s header**: CompCert at seventeen other
+  configurations, in FreeBSD among them.
+- **The documents**: in `docs/architectures.md`, a row for
+  `compcert-bsd`, the `freebsd` row naming it its baseline, the recipe
+  after macOS's, and the plan left with `x86_32-bsd`; a row in
+  `docs/verification.md`; the list of CompCert jobs in
+  `docs/compcert-licensing.md` and in the workflows' README, and that
+  README's row for `analysis.yml`; in `docs/status.md`, FreeBSD and its
+  Clang in the x86-64 row, CompCert's FreeBSD row "to be run", and the
+  line that dates the page.
+
+### Read, in the sources
+
+- **CompCert 3.17's configure** at `x86_64-bsd`: `cc` preprocesses, with
+  `-m64 -U__GNUC__ -U__SIZEOF_INT128__ -E`, assembles (`-m64 -c`) and
+  links (`-m64`); a test for OpenBSD's `-z nobtcfi` adds it only where
+  `cc` takes it without complaint; GNU make found as `gmake`; the
+  runtime library at x86-64 four assembly files, assembled by `cc`. The
+  driver adds `-std=c99`, its macros and its own include directory,
+  first. Its lexer knows neither `_Nonnull` nor `_Nullable`; a call to a
+  builtin it does not know is an error ("use of unknown builtin"), and
+  its builtins have no `__builtin_inff` or `__builtin_nanf`; an
+  attribute's argument that is an expression is elaborated, and an
+  undeclared identifier there is fatal; unknown pragmas are ignored,
+  their warning off by default; and the whole file is parsed before
+  anything is elaborated (`cparser/Parse.ml`).
+- **FreeBSD 15.1's headers**, at releng/15.1's tip, 15.1-RELEASE-p7,
+  which `git diff` gives identical to the release's tag in `include/`,
+  `sys/sys/cdefs.h` and `lib/msun/src/math.h`: `<sys/cdefs.h>` defines
+  the three nullability qualifiers empty unless `__clang__` is defined
+  and Clang has nullability, and `__lock_annotate(x)` as
+  `__attribute__((x))` where it has thread-safety attributes; `<stdio.h>`
+  declares `FILE`'s `int (* _Nullable _close)(void *);` at its line 135;
+  `<pthread.h>`'s declarations carry 23 lock annotations; `<math.h>`
+  defines `__MATH_BUILTIN_CONSTANTS` for every compiler, `INFINITY` and
+  `NAN` then `__builtin_inff()` and `__builtin_nanf("")`; `__va_list` is
+  `__builtin_va_list`, as CompCert's `va_list` is; where no feature macro
+  is defined, `<sys/_visible.h>` declares everything. libc's symbol map
+  has `pthread_join`, a stub, and neither `pthread_create` nor the
+  barriers, which are libthr's.
+- **opam 2.6.1** on FreeBSD: `gmake` for make; curl for downloads, or
+  the base system's `fetch` where there is no curl; patches applied by
+  opam itself, with no patch command.
+  FreeBSD's `ocaml-opam` is 2.6.1 in 15's
+  quarterly and latest repositories, with curl, gmake, git and rsync
+  (FreshPorts, read 2026-11-27). In opam's repository: zarith's
+  configure finds GMP through `pkg-config`; `conf-gmp` and
+  `conf-pkg-config` ask FreeBSD for `gmp` and `pkgconf`; `conf-clang`
+  runs the base system's `clang`; `conf-findutils` takes FreeBSD's
+  `find`; OCaml 4.14.2's build is its `configure` and opam's make.
+- **Canon-C**: `x86_64-bsd` is the first CompCert configuration here
+  where `__clang__` is defined while ccomp preprocesses. The library's
+  `defined(__GNUC__) || defined(__clang__)` tests, in `checked.h` and
+  `bits.h`, are then true, their builtins kept off by the compcert job's
+  two `FORCE_FALLBACK` flags; sixteen tests' `CANON_MAYBE_UNUSED`
+  becomes `__attribute__((unused))`; `diag_test` and `borrow_test` give
+  ccomp their diagnostic pragmas.
+
+### Measured here
+
+- **The emulation**: every test preprocessed as ccomp 3.17 preprocesses
+  at `x86_64-bsd`, by the host's Clang 18 for
+  `x86_64-unknown-freebsd15.1`, which defines `__FreeBSD__` as 15 and
+  `__FreeBSD_cc_version` as FreeBSD's own Clang does, against FreeBSD
+  15.1's `/usr/include` assembled from its sources as its
+  `include/Makefile` installs it; the search order CompCert's directory,
+  Clang's, FreeBSD's. The host's GCC's syntax check stands for CompCert's
+  parser. Without the header: none of the 61 taken; the first error at
+  `/usr/include/stdio.h:135` in 60, and in `lifetime_token_test` at
+  `<pthread.h>`'s line 209, a lock annotation's `*__mutex`, which GCC
+  elaborates as it parses, its stdio.h:135 coming next; `_Nullable` in
+  all 61. With the header: 61 of 61 taken; no nullability qualifier,
+  `__asm`, `[[`, `_Thread_local`, `__typeof`, `__int128` or statement
+  expression left, and no builtin but CompCert's: `__builtin_expect`,
+  `__builtin_offsetof` and `__builtin_va_*`; `_Generic` in `parse_test`,
+  by `isinf` and `isnan`.
+- **The test step and the plain step**, extracted from `analysis.yml` and
+  run from a copy of the tree, with stand-ins for FreeBSD (a shell in a
+  fake home) and for ccomp (the emulation, and an executable that exits
+  0): "compcert x86_64-bsd: 61 / 61 compiled, 61 ran; no pin yet",
+  `-lpthread` given to `lifetime_token_test` and to no other test; and
+  "compcert x86_64-bsd without the header: 0 / 61 compiled; first
+  errors: /usr/include/stdio.h:135 in 60, /usr/include/pthread.h:209 in
+  1".
+- **The seed step**, with stand-ins for `xz`, `qemu-img` and `ssh-keygen`:
+  CompCert's cache missed, the user-data asks for `ocaml-opam`, `gmp` and
+  `pkgconf`; hit, for no package; `seed.iso` read back, its volume
+  "cidata". **The wait**, with a stand-in guest that refuses three times,
+  boots, reboots and boots again: "ready after 90 s" either way, its
+  probe asking for `opam`, `gmake` and `pkg-config` only where the
+  packages were asked for; a guest that never answers: "FreeBSD was not
+  ready in 20 minutes", exit 1. **The install and build steps**, with a
+  stand-in guest and stubs for opam, Coq, Menhir, GNU make and
+  CompCert's configure: each script written in the guest and run in
+  order, the target passed, the archives of opam's root and of the
+  installation brought back.
+- **The job's YAML**, parsed; ShellCheck on every step, GitHub's
+  expressions given their values, and, as POSIX sh, on the two scripts
+  run in FreeBSD: nothing. `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| N1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| N2 | **FreeBSD boots in `compcert (x86_64-bsd)`**: the image restored from `freebsd-15.1-cloudinit-ufs-e4ca4db8…a2ed9e1f`, the `freebsd` job's cache; its SHA-256 the pin's and the mirror's; the guest ready within 20 minutes, the seed's packages in; "cc: x86_64-unknown-freebsd15.1"; "opam 2.6.1". | the image fetched, or a step failing before opam runs | M: another workflow saved the cache, which GitHub lets a run on the same branch restore; the packages rest on reading |
+| N3 | **CompCert 3.17 builds in FreeBSD**: OCaml 4.14.2 and CompCert's prerequisites installed by opam, their root saved under `opam-freebsd-15.1-amd64-ocaml-4.14.2-compcert-3.17-deps-v1`; CompCert configured for `x86_64-bsd`, built and installed, saved under `compcert-3.17-x86_64-bsd-freebsd-15.1-build-v1`; "The CompCert C verified compiler, version 3.17"; `compcert.ini`'s "prepro=cc", "asm=cc", "linker=cc", "prepro_options=-m64 -U__GNUC__ -U__SIZEOF_INT128__ -E" and "asm_options=-m64 -c". | a failed install, configure or build | L–M: nothing here has built OCaml, Coq or CompCert in FreeBSD; it rests on reading opam's rules for FreeBSD, the packages' and CompCert's configure |
+| N4 | **Every test compiles and passes under CompCert in FreeBSD**: the notice "compcert x86_64-bsd: 61 / 61 compiled, 61 ran; no pin yet", the job green. | another notice, or none | L–M, given N3: GCC's syntax check stood for CompCert's parser, and nothing ran; the runs rest on the System V ABI, which CompCert's `x86_64-bsd` shares with `x86_64-linux`, where the 61 pass, and on FreeBSD's libraries, where the baseline's pass |
+| N5 | **Without the header, nothing compiles**: the notice "compcert x86_64-bsd without the header: 0 / 61 compiled; first errors: /usr/include/stdio.h:135 in 61". | another notice, or none | M, given N3: the emulation has 60 there, and `lifetime_token_test`'s first at `<pthread.h>`'s line 209, an error of elaboration; CompCert parses the whole file first, and `<pthread.h>`'s lines parse |
+| N6 | **Nothing else changes**: the other 139 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1, 3, 4, 5 and 6 #117's, 2 #152's, 8 #176's. | another notice, or a failure | H |
+
+**Not predicted**: the versions opam chooses, Coq's among them, and
+those of GMP and pkgconf; whether configure adds `-z nobtcfi` to the
+linker's options; ccomp's warnings, and the words of its errors; the
+times, the first build's among them.
+
+### What follows
+
+N1 to N6 scored, and the record closes. If every test passes, the next
+record holds the outcome as a pin and goes on to `x86_32-bsd`; if a step
+fails, the next record answers it. This is the first record of CompCert
+at `x86_64-bsd`: after three without its pin, the author is asked.
