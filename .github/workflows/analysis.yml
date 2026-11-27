@@ -3913,14 +3913,13 @@ jobs:
   #   and in VERIFY-135's run took the rest of the names (VERIFY-136).
   #
   #   The notice says what was compiled and ran, and whether that is the
-  #   target's pin: at x86_64-bsd, held since VERIFY-137; at x86_32-bsd,
-  #   none yet, run 1 measuring (VERIFY-138). Another outcome than a pin
-  #   fails the job, as does a failed boot, install, build or unpack;
-  #   continue-on-error keeps it from the workflow's result. A last step
-  #   compiles every test as the test step does, but without the header,
-  #   and says how many compiled and where each log's first error is, in
-  #   CompCert's forms or the preprocessor's; it fails nothing (the
-  #   author's choice of 2026-11-27).
+  #   target's pin, held at x86_64-bsd since VERIFY-137 and at x86_32-bsd
+  #   since VERIFY-139: another outcome fails the job, as does a failed
+  #   boot, install, build or unpack; continue-on-error keeps it from the
+  #   workflow's result. A last step compiles every test as the test step
+  #   does, but without the header, and says how many compiled and where
+  #   each log's first error is, in CompCert's forms or the preprocessor's;
+  #   it fails nothing (the author's choice of 2026-11-27).
   # -------------------------------------------------------------------------
   compcert-bsd:
     name: compcert (${{ matrix.target }})
@@ -3935,9 +3934,10 @@ jobs:
           # and its run's outcome; held since VERIFY-137.
           - target: x86_64-bsd
             pin: "61 / 61 compiled, 61 ran"
-          # None yet: run 1 measures (VERIFY-138).
+          # Every test, as under FreeBSD's Clang at -m32: VERIFY-138's
+          # prediction and its run's outcome; held since VERIFY-139.
           - target: x86_32-bsd
-            pin: ""
+            pin: "61 / 61 compiled, 61 ran"
     defaults:
       run:
         shell: bash
