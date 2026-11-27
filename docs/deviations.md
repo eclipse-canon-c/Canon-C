@@ -48162,6 +48162,7 @@ What it shows:
 | **ID**         | VERIFY-138 |
 | **Date**       | 2026-11-27 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-27 — Scored: R1 to R6 MATCH. CLOSED: six of six ("Scored", below). CompCert 3.17 was built in FreeBSD at `x86_32-bsd` on opam's cached root, and every test compiled under it and passed on 64-bit FreeBSD's 32-bit libraries, 61 of 61, with the job's header and its `size_t` at i386; without the header none compiled, each stopping at `FILE`'s `_Nullable`. `compcert (x86_64-bsd)` held. The Status above is the record as committed. |
 | **Baseline**   | 9cf5923 (VERIFY-137's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #121, `2` #156 and `8` #180, at 9cf5923; `freebsd`'s `-m32` legs 61 of 61; `compcert-bsd` held, 61 of 61. |
 | **Scope**      | `.github/workflows/analysis.yml`'s `compcert-bsd`: a matrix of two targets, `x86_64-bsd` as before and `x86_32-bsd`, each with its pin, its build's cache and its logs; at i386, the header's `size_t`; `OPAMYES` in the build's script; the job's comment; the file's header. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `.github/workflows/README.md`. No library, test or tool file. |
 | **Category**   | Item 9b's last target, read against VERIFY-137's baseline: the first record of CompCert at `x86_32-bsd`, whose three are counted afresh. |
@@ -48292,3 +48293,49 @@ at `x86_32-bsd`, the next record holds the outcome as its pin, and item
 9b is done; if not, the next record answers it. This is the first record
 of CompCert at `x86_32-bsd`: after three without its pin, the author is
 asked.
+
+### Scored (2026-11-27)
+
+The push of 2f7cb39, 9cc464d and 1e93fb9 started seven workflows, `1` to
+`6` and `8`, each green at its first attempt: `3` #122 in 10 minutes,
+`compcert (x86_32-bsd)` the last of its jobs, in 9.5, CompCert built in
+3 and the tests in 3; `6` #122 the last, in 84.
+
+| # | scored |
+|---|--------|
+| R1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| R2 | **MATCH.** `compcert (x86_64-bsd)`, by that name, green: "compcert x86_64-bsd: 61 / 61 compiled, 61 ran; as pinned"; "Cache restored from key: compcert-3.17-x86_64-bsd-freebsd-15.1-build-v1" and "unpacked cc-compcert.tar", the steps that install CompCert's prerequisites and build it skipped; "compcert x86_64-bsd without the header: 0 / 61 compiled; first errors: /usr/include/stdio.h:135 in 61". |
+| R3 | **MATCH.** `compcert (x86_32-bsd)`: "Cache not found for input keys: compcert-3.17-x86_32-bsd-freebsd-15.1-build-v1"; "Cache restored from key: opam-freebsd-15.1-amd64-ocaml-4.14.2-compcert-3.17-deps-v1" and "unpacked cc-deps.tar", the install step skipped; the user-data asking for `ocaml-opam`, `gmp`, `pkgconf` and `bash`; "ready after 105 s"; "Testing linker support for '-no-pie' / '-nopie' option... yes, '-no-pie'"; CompCert built and installed, "Cache saved with key: compcert-3.17-x86_32-bsd-freebsd-15.1-build-v1"; "The CompCert C verified compiler, version 3.17"; and "prepro_options=-m32 -U__GNUC__ -E", "asm_options=-m32 -c" and "linker_options=-m32 -no-pie". |
+| R4 | **MATCH.** "compcert x86_32-bsd: 61 / 61 compiled, 61 ran; no pin yet", the job green. |
+| R5 | **MATCH.** "compcert x86_32-bsd without the header: 0 / 61 compiled; first errors: /usr/include/stdio.h:135 in 61". |
+| R6 | **MATCH.** The other 141 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them, now "1.2 s in all, the slowest 0.14 s (algo/search/search.h)", set aside whole. |
+
+Six of six. Not predicted, and as they fell: FreeBSD's packages as at
+VERIFY-135's run, "opam 2.6.1", "GMP 6.3.0" and bash 5.3.20, so that
+`OPAMYES` had no upgrade to answer; "Testing assembler support for CFI
+directives... yes" and "asm_supports_cfi=true", as at `x86_64-bsd`;
+"Testing Coq... version 9.1.1 -- UNSUPPORTED", taken with
+`-ignore-coq-version`, and Menhir 20260209; and CompCert's words at
+`<stdio.h>`'s line 135, "syntax error after '_Nullable' and before
+'_close'.", as at x86-64.
+
+**Closed.** CompCert 3.17 at `x86_32-bsd` compiles every test in FreeBSD
+15.1 with the job's header, and each passes there on 64-bit FreeBSD's
+32-bit libraries, as under FreeBSD's Clang at `-m32` (VERIFY-137);
+without the header, none compiles. Item 9b's last step has its outcome,
+which VERIFY-139 holds. The close changes nothing but this record.
+
+What it shows:
+
+- **The header's `size_t` lines rest on the sources and the emulation,
+  not on a run.** The run compiled every test with them; without the
+  header, CompCert stops at `_Nullable` first, parsing the whole file
+  before it elaborates, so no run has shown what they answer.
+  CompCert's `Elab.ml` and its `<stddef.h>`, and the emulation, show
+  it.
+- **opam's root, cached in one FreeBSD, served a build in another.** The
+  root made in VERIFY-135's run, unpacked into a fresh FreeBSD with its
+  packages, built CompCert at a second target in 3 minutes.
+- **The order of errors, modelled, gave the run's places.** The
+  stand-in in CompCert's order, a syntax error anywhere first, gave both
+  targets' notices without the header, word for word.
