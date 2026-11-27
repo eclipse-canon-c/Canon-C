@@ -39,8 +39,8 @@ In particular:
   configuration in a **commercial context**, running the CompCert jobs
   (`compcert`, and since VERIFY-114 `compcert-targets`, since
   VERIFY-116 `compcert-bare`, since VERIFY-119 `compcert-ppc`, since
-  VERIFY-121 `compcert-armeb`, since VERIFY-123 `compcert-macos` and since
-  VERIFY-128 `compcert-cygwin`, in
+  VERIFY-121 `compcert-armeb`, since VERIFY-123 `compcert-macos`, since
+  VERIFY-128 `compcert-cygwin` and since VERIFY-134 `compcert-bsd`, in
   `analysis.yml`) constitutes *your own*
   use of CompCert and is **not** covered by this permission. You must
   either **disable the CompCert CI jobs** or obtain an appropriate

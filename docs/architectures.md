@@ -26,7 +26,7 @@ here for them.
 | x86-64 | Linux, musl (Alpine) | GCC | `musl` (`platforms.yml`) |
 | x86-64 | Windows | MSVC; MinGW-w64 GCC | `build`, `mingw` (`ci.yml`) |
 | x86-64 | Windows under Cygwin: its C library, newlib's, in `cygwin1.dll` | Cygwin's GCC | `cygwin` (`ci.yml`), since VERIFY-126: LP64, where Windows' other compilers are LLP64, with Windows' 16-bit `wchar_t` and x64 calling convention; no `_WIN32`, so that the tests take their POSIX branches; the baseline of CompCert's `x86_64-cygwin` |
-| x86-64 | FreeBSD 15.1, its own C library | FreeBSD's Clang | `freebsd` (`ci.yml`), since VERIFY-133: FreeBSD's own VM image under QEMU and KVM on the Ubuntu runner, GitHub having no BSD runner; LP64, as Linux; the baseline of CompCert's `x86_64-bsd` to come |
+| x86-64 | FreeBSD 15.1, its own C library | FreeBSD's Clang | `freebsd` (`ci.yml`), since VERIFY-133: FreeBSD's own VM image under QEMU and KVM on the Ubuntu runner, GitHub having no BSD runner; LP64, as Linux; the baseline of CompCert's `x86_64-bsd` |
 | x86-64 | Linux, glibc | CompCert 3.17 | `compcert` (`analysis.yml`), informational: its result blocks nothing |
 | 32-bit Arm, AArch64, PowerPC 32, x86 and RISC-V 64 | Linux, glibc | CompCert 3.17, built for each with Ubuntu's cross toolchain | `compcert-targets` (`analysis.yml`), the tests under qemu-user, natively at x86: 61 of 61 at each, at 32-bit Arm with `-U__REDIRECT -U__REDIRECT_NTH` (below), each target held to that (VERIFY-115); informational, as `compcert` |
 | 32-bit Arm, bare metal: ARMv7-A (Cortex-A9; the hard-float ABI, and the base ABI), ARMv7-R (Cortex-R5F), ARMv7-M (Cortex-M7, double-precision FPU), ARMv6 (ARM1176) | bare metal: picolibc 1.8.6 | CompCert 3.17 (`arm-eabihf`, `arm-eabi`, `armv7r-eabihf`, `armv7m-eabihf`, `armv6-eabihf`), Ubuntu's `arm-none-eabi` GCC preprocessing, assembling and linking for it | `compcert-bare` (`analysis.yml`), on QEMU's models of the cores through semihosting: 55 of the 61 tests at each, held to that (VERIFY-117); not `lifetime_token_test`, `time_test`, `impl_defined_test` and `file_test`, for what picolibc on bare metal does not give, nor `compare_test` and `parse_test`, whose `<math.h>` CompCert does not take (below); informational, as `compcert` |
@@ -34,6 +34,7 @@ here for them.
 | 32-bit Arm, big-endian (Armv7-A, hard float) | Linux, glibc 2.39 | CompCert 3.17 (`armeb-linux`), the `armeb` job's toolchain preprocessing, assembling and linking for it | `compcert-armeb` (`analysis.yml`), under qemu-user in that toolchain's sysroot, each binary checked BE8: 61 of 61 run, held to that (VERIFY-122); configure's `__REDIRECT` left as it is, this GCC not defining `_TIME_BITS=64` (below); informational, as `compcert` |
 | AArch64 (Apple silicon) and x86-64 | macOS | CompCert 3.17 (`aarch64-macos`, `x86_64-macos`), built on each runner, Apple's cc preprocessing, assembling and linking for it | `compcert-macos` (`analysis.yml`), on `macos-latest` and `macos-15-intel`, the tests run natively, Apple Clang's on the same runners their baseline: 60 of 61 run at each, held to that (VERIFY-125): `lifetime_token_test` needs POSIX barriers, which macOS does not have, so that no compiler builds it there; each file given first a header of the job's own, for two things Apple's headers give a compiler without GNU C (below); informational, as `compcert` |
 | x86-64 | Windows under Cygwin: newlib's C library, in `cygwin1.dll` | CompCert 3.17 (`x86_64-cygwin`), built under Cygwin on the runner, Cygwin's GCC preprocessing, assembling and linking for it | `compcert-cygwin` (`analysis.yml`), on `windows-latest`, the tests run natively, Cygwin's GCC's on the same runner their baseline (`cygwin`, `ci.yml`): 61 of 61 run, held to that (VERIFY-132); each file given first a header of the job's own, with the feature macro first, newlib's `<stdint.h>` read whole and its `__func__` undone (below); informational, as `compcert` |
+| x86-64 | FreeBSD 15.1, its own C library | CompCert 3.17 (`x86_64-bsd`), built in FreeBSD on the runner, FreeBSD's cc preprocessing, assembling and linking for it | `compcert-bsd` (`analysis.yml`), since VERIFY-134, in FreeBSD's own image under QEMU and KVM on the Ubuntu runner, as `freebsd` (`ci.yml`) boots it, whose run of FreeBSD's Clang is the baseline; the tests run in FreeBSD; no pin yet; each file given first a header of the job's own, FreeBSD's nullability qualifiers and lock annotations undone and `INFINITY` and `NAN` given glibc's forms (below), and a test that includes `<pthread.h>` linked with `-lpthread`; informational, as `compcert` |
 | x86, 32-bit | Linux, glibc | GCC (`-m32`) | `build-32bit` (`ci.yml`): `size_t` exactly 32 bits |
 | AArch64 | Linux, glibc | GCC, Clang | `build-arm64` (`platforms.yml`), on GitHub's Arm runner, with sanitizers; `char` is unsigned there |
 | AArch64 | macOS | Apple Clang | `build` and `lifetime-debug` (`ci.yml`), `macos-latest` is Apple silicon |
@@ -166,6 +167,31 @@ GCC, `time_test` and `lifetime_token_test` do not compile so). Apple's
 headers set their level at the first one too, but in full where no such
 macro is defined, and the full level declares `clock_gettime`
 (VERIFY-125, read in Apple's sources).
+On FreeBSD, CompCert's configure has FreeBSD's cc, Clang, preprocess,
+with `-U__GNUC__` and nothing else of the kind, so that `__clang__`
+stays defined, and FreeBSD's `<sys/cdefs.h>` keeps for Clang two things
+CompCert does not take (VERIFY-134, read in FreeBSD 15.1's sources and
+emulated here). Its nullability qualifiers, `_Nonnull`, `_Nullable` and
+`_Null_unspecified`, which `<stdio.h>` and `<stdlib.h>` carry, `FILE`
+among them: every test reads `<stdio.h>`, and at its line 135,
+`int (* _Nullable _close)(void *);`, CompCert sees a declarator named
+`_Nullable` and then `_close`. And its lock annotations, `__attribute__`s
+in `<pthread.h>` whose arguments name a function's parameters, which
+CompCert, elaborating them, finds undeclared. FreeBSD's `<math.h>`, for
+every compiler, gives `INFINITY` and `NAN` as `__builtin_inff()` and
+`__builtin_nanf("")`, which CompCert 3.17 refuses as builtins it does
+not know. Give ccomp, with `-include`, a header that includes
+`<sys/cdefs.h>`, then defines the three qualifiers and the two pragmas
+that go with them empty, as `<sys/cdefs.h>` defines them for a compiler
+without nullability, and `__lock_annotate` empty, as it defines it for
+one without thread-safety attributes; then includes `<math.h>` and
+defines `INFINITY` and `NAN` as glibc's `<math.h>` defines them without
+GNU C, `1e10000f` and `(0.0f / 0.0f)`. `<sys/cdefs.h>`, read first,
+sets FreeBSD's level, in full where no feature macro is defined: a
+file's own, defined after it, asks for less than it gets. And FreeBSD
+keeps `pthread_create` and the barriers in libthr, not in libc: a test
+that includes `<pthread.h>` is linked with `-lpthread`. `compcert-bsd`
+does both (VERIFY-134).
 
 *Planned:*
 
@@ -183,9 +209,10 @@ macro is defined, and the full level declares `clock_gettime`
 - The targets compiled only, run: RISC-V 32 and 64 on bare metal under
   QEMU, AVR under simavr, and ARC where a simulator CI can run turns up.
 - WebAssembly under a runtime.
-- CompCert 3.17 at its last targets, BSD (`x86_64-bsd`, `x86_32-bsd`),
-  each built for it as `compcert-targets` builds it for Linux, in a
-  FreeBSD virtual machine, GitHub having no BSD runner.
+- CompCert 3.17 at its last target, `x86_32-bsd`, in FreeBSD as
+  `compcert-bsd` builds it at `x86_64-bsd`: on FreeBSD 14's i386, or on
+  64-bit FreeBSD's 32-bit libraries, as the sources show (the author's
+  choice of 2026-11-26).
   `ppc-eabi-diab` waits for a compiler (below).
 
 ## Compiled for

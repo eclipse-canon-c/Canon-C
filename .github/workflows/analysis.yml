@@ -1,8 +1,8 @@
 name: "3 · Static analysis & coverage"
 # clang-tidy and Cppcheck, MISRA C:2012 (advisory), MC/DC and branch
-# coverage (GCC 14), and CompCert at x86-64 and at sixteen other
-# configurations, at Linux, on macOS, under Cygwin and on bare metal
-# (informational, upstream only).
+# coverage (GCC 14), and CompCert at x86-64 and at seventeen other
+# configurations, at Linux, on macOS, under Cygwin, in FreeBSD and on
+# bare metal (informational, upstream only).
 # Map: .github/workflows/README.md.
 on:
   push:
@@ -3852,3 +3852,475 @@ jobs:
           path: ccomp-out/*.log
           retention-days: 90
           if-no-files-found: ignore
+
+  # -------------------------------------------------------------------------
+  # 12h. CompCert on FreeBSD, x86-64 — INFORMATIONAL, upstream repository
+  #      only (VERIFY-134)
+  #
+  #   LICENSING — the compcert job's note above holds here word for word:
+  #   docs/compcert-licensing.md, the same `if:` guard and the same
+  #   continue-on-error.
+  #
+  #   CompCert 3.17 built for x86_64-bsd in FreeBSD 15.1, booted as the
+  #   freebsd job boots it (ci.yml, VERIFY-133), whose tests under
+  #   FreeBSD's Clang are this job's baseline: FreeBSD's own VM image under
+  #   QEMU and KVM on the Ubuntu runner, checked against the SHA-256 pinned
+  #   below and against download.freebsd.org's (the author's choices of
+  #   2026-11-26, as is x86_64-bsd first). The seed asks FreeBSD's own
+  #   packages for opam, GMP and pkgconf, as compcert-macos takes them from
+  #   Homebrew; opam's switch builds OCaml 4.14.2 and CompCert's
+  #   prerequisites alone (--deps-only), as at macOS; CompCert comes from
+  #   opam's archive and its digest, fetched on the runner. FreeBSD's cc
+  #   preprocesses, assembles and links for ccomp, with configure's options
+  #   for BSD, and the tests run in FreeBSD.
+  #
+  #   Each stage is cached apart, as a tar archive made in FreeBSD, so that
+  #   a run stopped at one keeps those before it: opam's root, keyed by
+  #   FreeBSD's release, OCaml's version and CompCert's; then CompCert,
+  #   keyed by its version, its target and FreeBSD's release. The image is
+  #   the freebsd job's cache.
+  #
+  #   Each test is compiled and linked by ccomp with the compcert job's
+  #   flags and a header of the job's own given first, and run in FreeBSD
+  #   under timeout(1), 600 s at most; a test that includes <pthread.h> is
+  #   linked with -lpthread, FreeBSD keeping its threads in libthr, not in
+  #   libc (the author's choice of 2026-11-27). configure has FreeBSD's
+  #   Clang preprocess, which leaves __clang__ defined, and FreeBSD's
+  #   <sys/cdefs.h> then keeps for Clang what CompCert does not take: the
+  #   nullability qualifiers, which FILE in <stdio.h> carries, and the lock
+  #   annotations of <pthread.h>, whose arguments name parameters; and its
+  #   <math.h> gives INFINITY and NAN as builtins, which CompCert 3.17
+  #   refuses. So the header reads <sys/cdefs.h>, defines the qualifiers
+  #   and their pragmas empty, as <sys/cdefs.h> does for a compiler without
+  #   nullability, and __lock_annotate empty, as it does for one without
+  #   thread-safety attributes; then reads <math.h>, with INFINITY and NAN
+  #   as glibc's <math.h> defines them without GNU C (VERIFY-134).
+  #
+  #   The notice says what was compiled and ran; no pin yet: run 1
+  #   measures. A failed boot, install, build or unpack fails the job;
+  #   continue-on-error keeps it from the workflow's result. A last step
+  #   compiles every test as the test step does, but without the header,
+  #   and says how many compiled and where each log's first error is; it
+  #   fails nothing (the author's choice of 2026-11-27).
+  # -------------------------------------------------------------------------
+  compcert-bsd:
+    name: compcert (x86_64-bsd)
+    runs-on: ubuntu-24.04
+    if: github.repository == 'eclipse-canon-c/Canon-C'
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    env:
+      TARGET: x86_64-bsd
+      FREEBSD_URL: https://download.freebsd.org/releases/VM-IMAGES/15.1-RELEASE/amd64/Latest
+      FREEBSD_IMAGE: FreeBSD-15.1-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2.xz
+      # The image's SHA-256, as FreeBSD 15.1's announcement gives it: the
+      # freebsd job's pin (ci.yml).
+      FREEBSD_SHA256: e4ca4db889f8559c9b9dfcacc70405c038476f4b6d41649b152d3809a2ed9e1f
+      # None yet: run 1 measures (VERIFY-134).
+      PIN: ""
+    steps:
+      - uses: actions/checkout@v6
+      - name: Enable KVM
+        run: |
+          # GitHub's documented step: /dev/kvm for the runner's user.
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Install QEMU and genisoimage
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils genisoimage
+          qemu-system-x86_64 --version | sed -n 1p
+      - name: Restore FreeBSD's image
+        uses: actions/cache@v5
+        with:
+          path: freebsd-vm/${{ env.FREEBSD_IMAGE }}
+          # The freebsd job's key (ci.yml).
+          key: freebsd-15.1-cloudinit-ufs-${{ env.FREEBSD_SHA256 }}
+      - name: Fetch FreeBSD's image and check it
+        run: |
+          mkdir -p freebsd-vm
+          cd freebsd-vm
+          if [ ! -f "$FREEBSD_IMAGE" ]; then
+            curl -fsSL --retry 3 -o "$FREEBSD_IMAGE" "$FREEBSD_URL/$FREEBSD_IMAGE"
+          fi
+          echo "$FREEBSD_SHA256  $FREEBSD_IMAGE" | sha256sum -c -
+          curl -fsSL --retry 3 -o CHECKSUM.SHA256 "$FREEBSD_URL/CHECKSUM.SHA256"
+          line=$(grep -F "($FREEBSD_IMAGE)" CHECKSUM.SHA256 || true)
+          echo "download.freebsd.org: $line"
+          case "$line" in
+            *"$FREEBSD_SHA256"*) ;;
+            *) echo "::error::CHECKSUM.SHA256 does not give the pinned SHA-256"; exit 1 ;;
+          esac
+
+      - name: Restore CompCert built for the target
+        id: target-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: freebsd-vm/cc-compcert.tar
+          key: compcert-3.17-x86_64-bsd-freebsd-15.1-build-v1
+
+      - name: Restore opam and CompCert's prerequisites
+        id: deps-cache
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v5
+        with:
+          path: freebsd-vm/cc-deps.tar
+          key: opam-freebsd-15.1-amd64-ocaml-4.14.2-compcert-3.17-deps-v1
+
+      - name: Prepare the disk and its seed
+        env:
+          # FreeBSD's packages for opam and the build, wanted only where
+          # CompCert itself must be built: opam (with gmake, curl, git and
+          # rsync), GMP for zarith, and pkgconf, by which zarith finds GMP.
+          PACKAGES: ${{ steps.target-cache.outputs.cache-hit != 'true' && 'ocaml-opam gmp pkgconf' || '' }}
+        run: |
+          cd freebsd-vm
+          xz -dc "$FREEBSD_IMAGE" > disk.qcow2
+          qemu-img resize disk.qcow2 24G
+          ssh-keygen -q -t ed25519 -N '' -C canon-c-ci -f vmkey
+          mkdir -p seed
+          printf 'instance-id: canon-c-ci\nlocal-hostname: canon-freebsd\n' > seed/meta-data
+          {
+            echo '#cloud-config'
+            echo 'ssh_authorized_keys:'
+            echo "  - $(cat vmkey.pub)"
+            if [ -n "$PACKAGES" ]; then
+              echo 'packages:'
+              for p in $PACKAGES; do echo "  - $p"; done
+            fi
+          } > seed/user-data
+          grep -v '^  - ssh-' seed/user-data
+          genisoimage -quiet -output seed.iso -volid cidata -joliet -rock \
+            seed/user-data seed/meta-data
+          # The helper: a command run in FreeBSD, as freebsd, over SSH; the
+          # connection kept alive through the long silent stretches of a
+          # build.
+          cat > vm <<EOF
+          #!/bin/sh
+          exec ssh -q -o BatchMode=yes -o ConnectTimeout=10 \\
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \\
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \\
+            -i "$PWD/vmkey" -p 2222 freebsd@127.0.0.1 "\$@"
+          EOF
+          chmod +x vm
+
+      - name: Boot FreeBSD
+        env:
+          # The packages' commands, where the seed asks for packages.
+          WANTS: ${{ steps.target-cache.outputs.cache-hit != 'true' && 'opam gmake pkg-config' || '' }}
+        run: |
+          cd freebsd-vm
+          qemu-system-x86_64 \
+            -machine q35,accel=kvm -cpu host -smp 4 -m 8192 \
+            -drive file=disk.qcow2,if=virtio,format=qcow2 \
+            -drive file=seed.iso,if=virtio,format=raw,readonly=on \
+            -netdev user,id=n0,hostfwd=tcp:127.0.0.1:2222-:22 \
+            -device virtio-net-pci,netdev=n0 \
+            -display none -serial file:console.log \
+            -daemonize -pidfile qemu.pid
+          # Ready, as in the freebsd job, when SSH answers, the first boot
+          # is over (no /firstboot), the packages' commands are there, and
+          # the boot time reads the same twice, 15 s apart, so that a reboot
+          # asked for at the end of the first boot has come and gone. 20
+          # minutes at most.
+          probe='test ! -e /firstboot'
+          for c in $WANTS; do probe="$probe && command -v $c > /dev/null"; done
+          probe="$probe && sysctl -n kern.boottime"
+          prev=""; t=0; ready=no
+          while [ "$t" -lt 1200 ]; do
+            if now=$(./vm "$probe" 2> /dev/null); then
+              if [ -n "$prev" ] && [ "$now" = "$prev" ]; then ready=yes; break; fi
+              prev=$now
+            else
+              prev=""
+            fi
+            sleep 15; t=$((t + 15))
+          done
+          if [ "$ready" != yes ]; then
+            echo "::error::FreeBSD was not ready in 20 minutes"; exit 1
+          fi
+          echo "ready after $t s"
+
+      - name: Show FreeBSD, its compiler and its tools
+        env:
+          WANTS: ${{ steps.target-cache.outputs.cache-hit != 'true' && 'opam gmake pkg-config' || '' }}
+        run: |
+          cd freebsd-vm
+          ./vm 'freebsd-version -kru; uname -mrs; cc --version | sed -n 1p; sysctl hw.ncpu hw.physmem'
+          machine=$(./vm 'cc -dumpmachine')
+          case "$machine" in
+            x86_64-unknown-freebsd15.*) echo "cc: $machine" ;;
+            *) echo "::error::cc is '$machine', not FreeBSD 15's at x86-64"; exit 1 ;;
+          esac
+          if [ -n "$WANTS" ]; then
+            ./vm 'printf "opam "; opam --version; gmake --version | sed -n 1p; printf "GMP "; pkg-config --modversion gmp'
+          fi
+
+      - name: Unpack what the cache gave
+        run: |
+          cd freebsd-vm
+          for a in cc-compcert.tar cc-deps.tar; do
+            if [ -f "$a" ]; then
+              # Into the home, where the archive was made.
+              ./vm 'tar -xf -' < "$a"
+              echo "unpacked $a"
+            fi
+          done
+
+      - name: Install CompCert's prerequisites with opam
+        if: steps.target-cache.outputs.cache-hit != 'true' && steps.deps-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 150
+        run: |
+          cd freebsd-vm
+          # In FreeBSD: opam asks nothing and leaves FreeBSD's packages to
+          # the seed; its root under the home, where the cache puts it back.
+          # The script is written there first and run with its input empty,
+          # so that nothing it runs can read the rest of it.
+          ./vm 'cat > deps.sh' <<'GUEST'
+          set -e
+          export OPAMROOT="$HOME/cc/opam-root" OPAMYES=1 OPAMNODEPEXTS=1
+          opam init --bare --disable-sandboxing --no-setup
+          opam switch create compcert 4.14.2
+          eval "$(opam env --switch=compcert)"
+          opam repository add coq-released https://coq.inria.fr/opam/released
+          opam install coq-compcert.3.17 --deps-only
+          # What opam chose, for the record; neither line can fail the step.
+          opam list --installed --columns=name,version \
+            ocaml ocaml-base-compiler dune ocamlfind zarith menhir coq coq-core coq-stdlib coq-flocq coq-menhirlib \
+            || true
+          opam clean --download-cache || true
+          GUEST
+          ./vm 'sh deps.sh < /dev/null'
+          ./vm 'tar -cf - cc/opam-root' > cc-deps.tar
+          ls -l cc-deps.tar
+
+      - name: Save opam and CompCert's prerequisites
+        if: steps.target-cache.outputs.cache-hit != 'true' && steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: freebsd-vm/cc-deps.tar
+          key: opam-freebsd-15.1-amd64-ocaml-4.14.2-compcert-3.17-deps-v1
+
+      - name: Build CompCert 3.17 for the target
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 120
+        run: |
+          cd freebsd-vm
+          # opam's coq-compcert.3.17: its archive and its SHA-256, checked
+          # on the runner, then unpacked in FreeBSD.
+          url=https://github.com/AbsInt/CompCert/archive/v3.17.tar.gz
+          sha256=671425695c92d6c3a44d9f0833a803a9fa6b9199675a0b10dfdc131a0e2abffa
+          curl -fsSL --retry 3 -o compcert.tar.gz "$url"
+          echo "$sha256  compcert.tar.gz" | sha256sum -c -
+          ./vm 'rm -rf cc-build && mkdir -p cc-build/compcert && tar -xzf - -C cc-build/compcert --strip-components 1' < compcert.tar.gz
+          # FreeBSD's cc, which configure names for BSD, preprocesses,
+          # assembles (CompCert's runtime library too) and links. opam's
+          # flags, but -prefix and the target, as at macOS; GNU make, as
+          # CompCert's Makefiles need it. Written first, run as deps.sh is.
+          ./vm 'cat > build.sh' <<'GUEST'
+          set -e
+          export OPAMROOT="$HOME/cc/opam-root"
+          eval "$(opam env --switch=compcert)"
+          coqc --version | sed -n 1p
+          menhir --version
+          cd "$HOME/cc-build/compcert"
+          ./configure "$TARGET" -prefix "$HOME/cc/compcert" \
+            -use-external-Flocq -use-external-MenhirLib -ignore-coq-version
+          gmake -j4
+          gmake install
+          GUEST
+          ./vm "env TARGET=$TARGET sh build.sh < /dev/null"
+          ./vm 'tar -cf - cc/compcert' > cc-compcert.tar
+          ls -l cc-compcert.tar
+
+      - name: Save CompCert built for the target
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: freebsd-vm/cc-compcert.tar
+          key: compcert-3.17-x86_64-bsd-freebsd-15.1-build-v1
+
+      - name: Copy the tree in
+        run: |
+          cd freebsd-vm
+          tar -C .. --exclude=./freebsd-vm --exclude=./.git -cf - . \
+            | ./vm 'rm -rf canon && mkdir canon && tar -xf - -C canon'
+
+      - name: Compile and run the test suite with ccomp
+        id: tests
+        run: |
+          vm=freebsd-vm/vm
+          # ccomp and the header, where FreeBSD's shell finds them.
+          ccomp="\$HOME/cc/compcert/bin/ccomp"
+          "$vm" "$ccomp -version"
+          if ! "$vm" "$ccomp -version" | grep -q "version 3.17"; then
+            echo "FAIL: ccomp is not the pinned 3.17"; exit 1
+          fi
+          # The tools configure chose, and their options.
+          "$vm" 'grep -E "^(prepro|asm|linker)" cc/compcert/share/compcert.ini'
+          mkdir -p ccomp-out
+          # The header given first to every file (the job's comment says
+          # why): FreeBSD's nullability qualifiers and lock annotations as
+          # <sys/cdefs.h> defines them for a compiler without them; INFINITY
+          # and NAN as glibc's <math.h> defines them without GNU C.
+          "$vm" 'mkdir -p canon/ccomp-out && cat > canon/ccomp-out/canon_bsd.h' <<'HEADER'
+          #include <sys/cdefs.h>
+          #undef _Nonnull
+          #define _Nonnull
+          #undef _Nullable
+          #define _Nullable
+          #undef _Null_unspecified
+          #define _Null_unspecified
+          #undef __NULLABILITY_PRAGMA_PUSH
+          #define __NULLABILITY_PRAGMA_PUSH
+          #undef __NULLABILITY_PRAGMA_POP
+          #define __NULLABILITY_PRAGMA_POP
+          #undef __lock_annotate
+          #define __lock_annotate(x)
+          #include <math.h>
+          #undef INFINITY
+          #define INFINITY 1e10000f
+          #undef NAN
+          #define NAN (0.0f / 0.0f)
+          HEADER
+          # The compcert job's flags, and its reasons; then the header.
+          CCOMP_FLAGS=(
+            -fall
+            -DCANON_NO_GNU_EXTENSIONS
+            -DCANON_CHECKED_FORCE_FALLBACK
+            -DCANON_BITS_FORCE_FALLBACK
+            -iquote core/primitives -I core -I semantics -I .
+            -I integrations/autosar -I test/integrations/autosar/stubs
+            -include "\$HOME/canon/ccomp-out/canon_bsd.h"
+          )
+          total=0; compiled=0; ran=0; failed_compile=(); failed_run=(); status=()
+          while IFS= read -r t; do
+            total=$((total + 1))
+            n=$(basename "$t" .c)
+            extra=""; d="${t%_test.c}_defs.c"; [ -f "$d" ] && extra=" $d"
+            # FreeBSD's threads are libthr's (the author's choice of
+            # 2026-11-27).
+            libs=""
+            if grep -qE '^[[:space:]]*#[[:space:]]*include[[:space:]]*<pthread\.h>' "$t"; then
+              libs=" -lpthread"
+            fi
+            if "$vm" "cd canon && $ccomp ${CCOMP_FLAGS[*]} -o ccomp-out/$n $t$extra$libs" \
+                 > "ccomp-out/$n.log" 2>&1; then
+              compiled=$((compiled + 1))
+              rc=0
+              "$vm" "cd canon && timeout 600 ./ccomp-out/$n" > "ccomp-out/$n.run.log" 2>&1 || rc=$?
+              if [ "$rc" -eq 0 ]; then
+                ran=$((ran + 1))
+              else
+                failed_run+=("$n"); status+=("$rc")
+              fi
+            else
+              failed_compile+=("$n")
+            fi
+          done < <(find test -name '*_test.c' | sort)
+          line="$compiled / $total compiled, $ran ran"
+          [ ${#failed_compile[@]} -gt 0 ] && line="$line; not compiled: ${failed_compile[*]}"
+          [ ${#failed_run[@]} -gt 0 ] && line="$line; did not run: ${failed_run[*]}"
+          if [ -z "$PIN" ]; then held="no pin yet"
+          elif [ "$line" = "$PIN" ]; then held="as pinned"
+          else held="not the pin"; fi
+          echo "CompCert at $TARGET (INFORMATIONAL): $line; $held"
+          echo "::notice title=compcert $TARGET::$line; $held"   # VERIFY-050
+          # Of each log, the lines that name an error, or its first 15 if
+          # none does, as in compcert-targets (VERIFY-117).
+          for n in "${failed_compile[@]}"; do
+            echo "--- $n: not compiled ---"
+            errs=$(grep -m 12 -E 'error|undefined' "ccomp-out/$n.log" || true)
+            [ -n "$errs" ] || errs=$(head -15 "ccomp-out/$n.log")
+            printf '%s\n' "$errs" | sed 's/^/    /'
+          done
+          # Each with its exit status: 124 where timeout(1) stopped it, and
+          # 128 and the signal's number where a signal did.
+          k=0
+          for n in "${failed_run[@]}"; do
+            echo "--- $n: did not run, status ${status[$k]} ---"
+            tail -15 "ccomp-out/$n.run.log" | sed 's/^/    /'
+            k=$((k + 1))
+          done
+          if [ "$held" = "not the pin" ]; then
+            echo "FAIL: compcert $TARGET is pinned to: $PIN"
+            exit 1
+          fi
+
+      - name: Compile the test suite without the header
+        # The author's choice of 2026-11-27: each test compiled as the test
+        # step compiles it, with configure's settings alone, the header
+        # left out; nothing is run, and the step fails nothing.
+        if: always() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure')
+        continue-on-error: true
+        run: |
+          set +e
+          vm=freebsd-vm/vm
+          ccomp="\$HOME/cc/compcert/bin/ccomp"
+          mkdir -p ccomp-out/plain
+          "$vm" 'mkdir -p canon/ccomp-out/plain'
+          CCOMP_FLAGS=(
+            -fall
+            -DCANON_NO_GNU_EXTENSIONS
+            -DCANON_CHECKED_FORCE_FALLBACK
+            -DCANON_BITS_FORCE_FALLBACK
+            -iquote core/primitives -I core -I semantics -I .
+            -I integrations/autosar -I test/integrations/autosar/stubs
+          )
+          total=0; compiled=0; firsts=()
+          while IFS= read -r t; do
+            total=$((total + 1))
+            n=$(basename "$t" .c)
+            extra=""; d="${t%_test.c}_defs.c"; [ -f "$d" ] && extra=" $d"
+            libs=""
+            if grep -qE '^[[:space:]]*#[[:space:]]*include[[:space:]]*<pthread\.h>' "$t"; then
+              libs=" -lpthread"
+            fi
+            if "$vm" "cd canon && $ccomp ${CCOMP_FLAGS[*]} -o ccomp-out/plain/$n $t$extra$libs" \
+                 > "ccomp-out/plain/$n.log" 2>&1; then
+              compiled=$((compiled + 1))
+            else
+              # Where the log's first error is: its file and line.
+              f=$(grep -m 1 -oE '^[^ :]+:[0-9]+: error' "ccomp-out/plain/$n.log" | sed 's/: error$//')
+              firsts+=("${f:-unplaced}")
+            fi
+          done < <(find test -name '*_test.c' | sort)
+          where="none"
+          if [ ${#firsts[@]} -gt 0 ]; then
+            where=$(printf '%s\n' "${firsts[@]}" | sort | uniq -c | sort -k1,1nr -k2 \
+              | awk '{ printf "%s%s in %s", (NR > 1 ? ", " : ""), $2, $1 }')
+          fi
+          # Each place's first error, once, as the first log there gives it.
+          while IFS= read -r p; do
+            for l in ccomp-out/plain/*.log; do
+              if grep -q -F "$p: error" "$l"; then
+                echo "--- $p, first in ${l##*/} ---"
+                grep -m 1 -A 2 -F "$p: error" "$l" | sed 's/^/    /'
+                break
+              fi
+            done
+          done < <(printf '%s\n' "${firsts[@]}" | sort -u)
+          echo "::notice title=compcert $TARGET without the header::$compiled / $total compiled; first errors: $where"
+
+      - name: Upload the ccomp logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: compcert-logs-x86_64-bsd
+          path: |
+            ccomp-out/*.log
+            ccomp-out/plain/*.log
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: Show FreeBSD's console and nuageinit's log, on failure
+        if: failure()
+        run: |
+          cd freebsd-vm || exit 0
+          if [ -f console.log ]; then tail -n 80 console.log; fi
+          if [ -x vm ]; then ./vm 'tail -n 60 /var/log/nuageinit.log' || true; fi
