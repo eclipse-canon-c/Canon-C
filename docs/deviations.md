@@ -47917,3 +47917,189 @@ What it shows:
 - **A cached CompCert runs in a FreeBSD with no packages.** The build
   made in one boot of the image ran in another, with the base system
   alone: what caching the build is worth.
+
+---
+
+## VERIFY-137: Pre-registration — CompCert at x86_64-bsd Held to Its Pin; the Tests at -m32 on FreeBSD's 32-Bit Libraries
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-137 |
+| **Date**       | 2026-11-27 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 32cbef3 (VERIFY-136's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #120, `2` #155 and `8` #179, at 32cbef3; `compcert-bsd` green, at 61 of 61. |
+| **Scope**      | `.github/workflows/analysis.yml`'s `compcert-bsd`: its pin, set and held; its comment. `.github/workflows/ci.yml`'s `freebsd`: two legs at `-m32`, its matrix, its comment; and the file's header. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `docs/implementation-defined.md`, `docs/autosar-classic.md`, `.github/workflows/README.md`. No library, test or tool file. |
+| **Category**   | VERIFY-136's "What follows": the outcome held as a pin, as VERIFY-132 held `compcert-cygwin`'s; then `x86_32-bsd`, its baseline first, as VERIFY-133 gave `x86_64-bsd` its own. |
+
+### What is missing
+
+`compcert (x86_64-bsd)` printed "61 / 61 compiled, 61 ran; no pin yet"
+at VERIFY-136's run (P3): it measures, and any other outcome would fail
+nothing, its pin being empty. And CompCert's last target, `x86_32-bsd`,
+has no baseline: the tests have never run at 32-bit x86 on a BSD, as
+`freebsd` runs them at x86-64 for `x86_64-bsd`.
+
+### What changes
+
+- **`compcert-bsd`'s pin**: "61 / 61 compiled, 61 ran", its comment
+  naming its source, VERIFY-136's prediction and its run's outcome; the
+  job's comment, the pin held since VERIFY-137, in `compcert-cygwin`'s
+  words. The lines of the test step that print "not the pin" and fail
+  are there since VERIFY-134, as at the other CompCert jobs; the pin set,
+  another outcome fails the job. `continue-on-error`, the `if:` guard and
+  the step without the header stay, as `compcert-macos` keeps its own.
+- **`freebsd`'s matrix**: four legs, a matrix of includes alone. x86-64
+  at Release and Debug, as since VERIFY-133, which keep their names,
+  `freebsd (Release)` and `freebsd (Debug)`; and the same at `-m32`,
+  `freebsd (Release, -m32)` and `freebsd (Debug, -m32)`. The job's `M32`
+  is `-m32` at those two and empty at the others.
+- **At the `-m32` legs** (at x86-64 the commands are as before):
+  - the show step fails unless `cc -m32 -dumpmachine` is FreeBSD 15's
+    at i386, and lists `/libexec/ld-elf32.so.1`, `/usr/lib32/crt1.o` and
+    `/usr/lib32/libc.so`: the 32-bit runtime linker, C startup file and
+    C library;
+  - the probe is compiled with `-m32`;
+  - CMake is given `-DCMAKE_C_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32`,
+    as `build-32bit` gives them on Linux;
+  - after the build, `file -b` reads every test that CMake built; the
+    step prints the first line and "test binaries: N; 32-bit programs
+    for the i386: M", and fails unless each is "ELF 32-bit LSB" and
+    "Intel i386", or "Intel 80386" as file's older magic says;
+  - the notice: "freebsd LEG -m32: MACHINE, Clang V; MODEL; P of T tests
+    passed".
+- **The job's comment**: the `-m32` legs, on what, and why;
+  `ci.yml`'s header names i386 on FreeBSD's 32-bit libraries.
+- **The documents**: in `docs/architectures.md`, a row for the `-m32`
+  legs; `compcert-bsd`'s row, "61 of 61 run, held to that (VERIFY-137)",
+  as `compcert-cygwin`'s says it; the recipe's last sentence, that every
+  test then compiles and passes; and the planned `x86_32-bsd`, on those
+  libraries, the legs its baseline. In `docs/verification.md`,
+  `compcert-bsd`'s row, "61 of 61, held to that (VERIFY-137)", and the
+  `-m32` legs in the row of the platforms' jobs. In `docs/status.md`,
+  the CompCert row "run, 61 of 61", the header named as for Cygwin, and
+  the line that dates the page. The lists of where the tests run in
+  `docs/implementation-defined.md` and `docs/autosar-classic.md`; the
+  workflows' README's row for `ci.yml`. `docs/status.md`'s x86 row waits
+  for the run, as `freebsd`'s did (VERIFY-133): it states results, and
+  these legs have none yet.
+
+### Read, in the sources
+
+- **FreeBSD's VM images** (`release/tools/vmimage.subr`, 15.1):
+  `vm_base_packages_list` gives every image the base set, the kernels,
+  the tests and pkg, and at amd64, aarch64 and powerpc64 the `lib32` set
+  too, with `lib32-dbg` unless `WITHOUT_DEBUG_FILES`. Only EC2's small
+  and builder images (`ec2-small.conf`, `ec2-builder.conf`) filter the
+  `-lib32` packages out; `basic-cloudinit.conf`, the job's image,
+  filters nothing.
+- **The `lib32` set** (`release/packages/generate-ucl.lua`, 15.1): every
+  package whose name ends in `-lib32`, the `-dev-lib32` packages of
+  development files among them; `-dbg-lib32` goes to `lib32-dbg`. Its
+  description (`release/packages/sets/lib32.ucl`): "compatibility
+  libraries required for building and running 32-bit applications on a
+  64-bit host system".
+- **FreeBSD's Clang** (LLVM 19 in FreeBSD's tree,
+  `clang/lib/Driver/ToolChains/FreeBSD.cpp`): for a 32-bit target, the
+  libraries are looked for in `/usr/lib32` where `/usr/lib32/crt1.o`
+  exists, and the dynamic linker named is `/libexec/ld-elf.so.1`. Its
+  CPU for i386 on FreeBSD is i686 (`Arch/X86.cpp`): x87, no SSE.
+- **FreeBSD's kernel** (15.1): amd64's GENERIC has `COMPAT_FREEBSD32`;
+  the ia32 brand (`sys/compat/ia32/ia32_sysvec.c`) gives a 32-bit FreeBSD
+  program `/libexec/ld-elf32.so.1` for `/libexec/ld-elf.so.1`; and a
+  32-bit process starts with the x87 unit's control word
+  `__INITIAL_FPUCW_I386__`, 0x127F, at 53 bits (`ia32_setregs`,
+  `sys/amd64/ia32/ia32_signal.c`; `sys/x86/include/fpu.h`), where Linux
+  starts one at 64.
+- **FreeBSD's headers** at amd64: `/usr/include/i386` holds 13 of
+  i386's machine headers (`include/i386/Makefile`), which amd64's
+  `machine/` reads at `__i386__`; the rest are `x86/`'s, shared by both.
+  FreeBSD's base Clang installs those of its own headers that the base
+  system has too, `<stddef.h>`, `<stdint.h>`, `<limits.h>` and the
+  rest, only where `INSTALL_CONFLICTING_CLANG_HEADERS` is set
+  (`lib/clang/headers/Makefile`).
+- **file(1)**: FreeBSD 15.1's is 5.46 (`contrib/file`), whose magic
+  names `EM_386` "Intel i386"; Ubuntu 24.04's, 5.45, "Intel 80386".
+- **GitHub's matrix** (its documentation, read 2026-11-27): an include
+  that cannot extend one of the matrix's original combinations is a
+  combination of its own, and a later include does not extend it; and,
+  in the documentation of GitHub Enterprise Server 3.9, "If you don't
+  specify any matrix variables, all configurations under `include` will
+  run", one job for each. How a leg is named, neither says.
+
+### Measured here
+
+- **The build at `-m32`, as FreeBSD's cc would compile it**: every
+  compile of CMake's build, 63 at Release and 63 at Debug, by Clang 18
+  targeting FreeBSD 15.1 at x86-64 and given `-m32`, which makes it
+  i386's as on FreeBSD; FreeBSD 15.1's `/usr/include` assembled from its
+  sources, amd64's i386 headers among them, and none of Clang's own
+  headers, as FreeBSD's base system: each compiled, with no warning under
+  `-Werror`, the objects "ELF 32-bit LSB relocatable, Intel 80386,
+  version 1 (FreeBSD)".
+- **The tests at `-m32`, run**: on Linux's 32-bit glibc, Clang 18 at
+  i686, the x87 unit set to 53 bits at start-up as FreeBSD sets it for a
+  32-bit process (GCC's `crtprec64.o`, the control word read back
+  0x027F): CTest's "100% tests passed, 0 tests failed out of 61" at
+  Release and at Debug, no warning; 61 test binaries, each ELF 32-bit for
+  the i386.
+- **The probe at `-m32`**: compiled as FreeBSD's cc would compile it, as
+  above, then linked by Linux's Clang to run here, the sizes it prints
+  being the compiler's: "int 4, long 4, long long 8, void * 4, wchar_t 4,
+  long double 12, va_list 4; char signed; __FreeBSD__ 15, not
+  __linux__". At x86-64, the same way, it gives VERIFY-133's run's model,
+  word for word.
+- **`freebsd`'s steps that change**, extracted from `ci.yml` and run at
+  each of the four legs with stand-ins: the helper, as ssh, in a fake
+  FreeBSD home; `cc`, giving Clang's `-dumpmachine` for FreeBSD 15.1, the
+  probe compiled as above, and anything else built by Linux's Clang 18;
+  `file` reading FreeBSD 15.1's magic, compiled here; the `lib32` set's
+  three files in a fake root. At x86-64: "cc:
+  x86_64-unknown-freebsd15.1", and "freebsd Release:
+  x86_64-unknown-freebsd15.1, Clang 18.1.3; int 4, long 8, long long 8,
+  void * 8, wchar_t 4, long double 16, va_list 24; char signed;
+  __FreeBSD__ 15, not __linux__; 61 of 61 tests passed", and the same
+  for Debug, the stand-in's Clang in FreeBSD's place; the configure
+  command as before, word for word, and the others but for a second
+  space after `cc`. At `-m32`: "cc -m32: i386-unknown-freebsd15.1", the
+  three files listed, "ELF 32-bit LSB pie executable, Intel i386, ...",
+  "test binaries: 61; 32-bit programs for the i386: 61", and "freebsd
+  Release -m32: i386-unknown-freebsd15.1, Clang 18.1.3; int 4, long 4,
+  long long 8, void * 4, wchar_t 4, long double 12, va_list 4; char
+  signed; __FreeBSD__ 15, not __linux__; 61 of 61 tests passed", and the
+  same for Debug. With one test a 64-bit program: "test binaries: 61;
+  32-bit programs for the i386: 60", the error, exit 1. With a `cc` that
+  ignores `-m32` at `-dumpmachine`: "cc -m32 is
+  'x86_64-unknown-freebsd15.1', not FreeBSD 15's at i386", exit 1. With
+  the runtime linker missing: `ls`'s error, exit 2.
+- **`compcert-bsd`'s test step**, extracted from `analysis.yml` and run
+  with VERIFY-136's stand-ins: "61 / 61 compiled, 61 ran; as pinned",
+  exit 0; given another pin, "not the pin", then "FAIL: compcert
+  x86_64-bsd is pinned to: 60 / 61 compiled, 60 ran", exit 1. Its other
+  steps are VERIFY-136's, unchanged.
+- **The jobs' YAML**, parsed; ShellCheck on every step of both jobs,
+  GitHub's expressions given their values: nothing.
+  `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Q1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| Q2 | **`compcert (x86_64-bsd)` holds**: green, its notice "compcert x86_64-bsd: 61 / 61 compiled, 61 ran; as pinned"; its caches serving, "Cache restored from key: compcert-3.17-x86_64-bsd-freebsd-15.1-build-v1" and "unpacked cc-compcert.tar", no install or build step run; and the notice without the header as at VERIFY-136's run, "compcert x86_64-bsd without the header: 0 / 61 compiled; first errors: /usr/include/stdio.h:135 in 61". | a failure, a key missed, or another notice | M–H: no input of the keys changed, and the tests are VERIFY-136's; but the first boot upgrades FreeBSD's base system to its latest patch level, which is not fixed |
+| Q3 | **`freebsd` has four legs**: `freebsd (Release)` and `freebsd (Debug)`, green, their notices as at their last run, word for word, the times aside; and `freebsd (Release, -m32)` and `freebsd (Debug, -m32)`. | another set of legs, or other names | M–H: GitHub's documentation gives one job for each include; how it names a leg from an include's values rests on its runs, not on its documentation |
+| Q4 | **FreeBSD boots at the `-m32` legs, and its Clang targets i386 there**: the image's SHA-256 matching; the guest ready within 20 minutes; "cc -m32: i386-unknown-freebsd15.1"; the `lib32` set's three files listed. | a step failing before the build | M: the `lib32` set in the image rests on reading FreeBSD's release tools and package sets; nothing here boots FreeBSD |
+| Q5 | **The notice at each `-m32` leg**: "freebsd Release -m32: i386-unknown-freebsd15.1, Clang 19.1.7; int 4, long 4, long long 8, void * 4, wchar_t 4, long double 12, va_list 4; char signed; __FreeBSD__ 15, not __linux__; 61 of 61 tests passed", Clang's version as at x86-64, and the same for "freebsd Debug -m32"; before it, "test binaries: 61; 32-bit programs for the i386: 61". | another notice, or none | M, given Q4: the model is i386's System V one, as Clang's FreeBSD target gives it here; the passes are Q6's |
+| Q6 | **Every test passes at `-m32`**, at both legs: the build without a warning under `-Werror`, and CTest's "100% tests passed, 0 tests failed out of 61". | a warning, or a failure | M: FreeBSD's headers took the build at i386 here, and the tests passed at i686 with the x87 unit at 53 bits; FreeBSD's 32-bit C library has not run them |
+| Q7 | **Nothing else changes**: the other 137 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1, 3, 4, 5 and 6 #120's, 2 #155's, 8 #179's. | another notice, or a failure | H |
+
+**Not predicted**: FreeBSD's patch level; what `file` says of the tests
+at `-m32` beyond the words the step looks for; the times.
+
+### What follows
+
+Q1 to Q7 scored, and the record closes. If `compcert-bsd` holds and the
+`-m32` legs pass, `x86_64-bsd` is done and `x86_32-bsd` has its
+baseline: the next record puts the `-m32` legs in `docs/status.md` and
+builds CompCert at `x86_32-bsd` in the same image, and after three
+records without that done, the author is asked, as for `x86_64-bsd`. If
+a leg fails, the next record answers it.
