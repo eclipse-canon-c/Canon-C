@@ -47794,3 +47794,84 @@ What it shows:
 - **The long part of the chain held.** OCaml, Rocq 9.1.1 and its library,
   Flocq, MenhirLib and CompCert built in FreeBSD in eleven minutes, and
   both stages are cached: the next run goes from the boot to the tests.
+
+---
+
+## VERIFY-136: Pre-registration — CompCert at x86_64-bsd: Every Test, the Helper Kept from the Tests' Names
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-136 |
+| **Date**       | 2026-11-27 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | ffcacbe (VERIFY-135's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #119, `2` #154 and `8` #178, at ffcacbe; `compcert-bsd` green, at one test. |
+| **Scope**      | `.github/workflows/analysis.yml`'s `compcert-bsd`: its two loops' input; the plain step's places, and the lines it prints; the job's comment. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`; and item 21, Verasco's line, in `docs/verification.md` and `docs/for-future.md`. No library, test or tool file. |
+| **Category**   | VERIFY-135's "What run 1 found", answered; the third record of CompCert at `x86_64-bsd`. Item 21 of the list, folded in as planned. |
+
+### What is missing
+
+`compcert-bsd` builds CompCert 3.17 in FreeBSD and caches it
+(VERIFY-135), but each of its loops compiles one test: ssh, run in the
+loop, reads the rest of the loop's names. Of the 61, `any_all_test`
+alone has been compiled, with the header and without; and where the
+plain run's first error is, its step cannot say, CompCert's syntax
+errors being printed in a form it does not place.
+
+### What changes
+
+- **The loops**: each step reads the tests' names into an array before
+  it starts, and goes through them with `for`; each call of the helper in
+  a loop is given `/dev/null` for its input.
+- **The plain step's places**: a log's first error is placed by its file
+  and line in any of three forms: CompCert's "FILE:LINE: error:", its
+  syntax errors' "FILE:LINE:COLUMN: syntax error"
+  (`cparser/ErrorReports.ml`), and the preprocessor's
+  "FILE:LINE:COLUMN: error:". A log with none is "unplaced", and the
+  step prints the first 15 lines of the first such log, so that the
+  job's log shows what it says.
+- **The job's comment**: the loops' input, and why.
+- **The documents**: `compcert-bsd`'s rows in `docs/architectures.md`,
+  `docs/verification.md` and `docs/status.md`, VERIFY-135's run in each,
+  and the line that dates `docs/status.md`. Item 21: Verasco has no port
+  to a recent CompCert and no successor, as far as David Monniaux
+  (VERIMAG) knew when the author asked him, on 2026-11-26; in its
+  `docs/for-future.md` entry and in `docs/verification.md`'s line.
+
+### Measured here
+
+- **VERIFY-135's steps**, extracted from `analysis.yml` and run from a
+  copy of the tree, with two stand-ins that now model what VERIFY-134's
+  did not: a helper that, as ssh does, reads its input and passes it to
+  the command; and VERIFY-134's ccomp, which now prints a parse error in
+  the form of CompCert's syntax errors. They give VERIFY-135's run's
+  notices: "1 / 1 compiled, 1 ran; no pin yet" and "0 / 1 compiled;
+  first errors: unplaced in 1".
+- **This record's steps**, with the same stand-ins: "61 / 61 compiled,
+  61 ran; no pin yet", `-lpthread` given to `lifetime_token_test` alone;
+  "0 / 61 compiled; first errors: /usr/include/stdio.h:135 in 60,
+  /usr/include/pthread.h:209 in 1", GCC's order at `lifetime_token_test`,
+  and each place's first error printed. With one log given an error with
+  no place: "unplaced in 1", and that log's lines printed.
+- **The job's YAML**, parsed; ShellCheck on every step, GitHub's
+  expressions given their values: nothing. `tools/which_workflows.py`:
+  1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| P1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| P2 | **The caches serve**: "Cache restored from key: compcert-3.17-x86_64-bsd-freebsd-15.1-build-v1", "unpacked cc-compcert.tar"; the seed asks for no package; the steps that install CompCert's prerequisites and build it skipped; FreeBSD ready within 20 minutes; "The CompCert C verified compiler, version 3.17". | a key missed, an install or build step run, or ccomp not running | M–H: no input of either key changed; ccomp, an OCaml program built in that FreeBSD, wants only what its base system has, and `cc` is the base system's |
+| P3 | **Every test compiles and passes under CompCert in FreeBSD**: the notice "compcert x86_64-bsd: 61 / 61 compiled, 61 ran; no pin yet", the job green. | another notice, or none | M: `any_all_test` compiled and ran in VERIFY-135's run, with the header; the other 60 rest on the emulation, GCC's syntax check standing for CompCert's parser, and on the x86-64 System V ABI, which CompCert's `x86_64-bsd` shares with `x86_64-linux`, where the 61 pass |
+| P4 | **Without the header, nothing compiles, every test stopping at `FILE`'s `_Nullable`**: the notice "compcert x86_64-bsd without the header: 0 / 61 compiled; first errors: /usr/include/stdio.h:135 in 61". | another notice, or none | M: every test reads `<stdio.h>`, and CompCert parses the whole file before it elaborates, so that `lifetime_token_test`'s `<pthread.h>`, whose lines parse, does not come first; a syntax error's place is VERIFY-136's to read, and no run has shown one |
+| P5 | **Nothing else changes**: the other 139 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1, 3, 4, 5 and 6 #119's, 2 #154's, 8 #178's. | another notice, or a failure | H |
+
+**Not predicted**: the words of ccomp's errors and its warnings; the
+times.
+
+### What follows
+
+P1 to P5 scored, and the record closes. This is the third record of
+CompCert at `x86_64-bsd`. If every test compiles and runs, the next
+record holds the outcome as a pin and goes on to `x86_32-bsd`; if not,
+the author is asked before a fourth, as the author chose on 2026-11-26.
