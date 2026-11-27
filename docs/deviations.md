@@ -47672,6 +47672,7 @@ What it shows:
 | **ID**         | VERIFY-135 |
 | **Date**       | 2026-11-27 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-27 — Scored: O1 to O4 and O7 MATCH; O5 and O6 MISS. CLOSED: five of seven ("Scored", below). With bash among the seed's packages, CompCert's prerequisites installed in FreeBSD and CompCert 3.17 built there for `x86_64-bsd`, both stages cached. Then each of the two loops ran once, ssh having read the rest of the tests' names from the loop's input ("What run 1 found"): `any_all_test` compiled under CompCert and ran in FreeBSD, and without the header did not compile. The Status above is the record as committed. |
 | **Baseline**   | b2fab66 (VERIFY-134's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #118, `2` #153 and `8` #177, at b2fab66; `compcert-bsd` failed at its prerequisites. |
 | **Scope**      | `.github/workflows/analysis.yml`'s `compcert-bsd`: `bash` among the seed's packages, the wait asking for it, its version shown; the job's comment. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`. No library, test or tool file. |
 | **Category**   | VERIFY-134's "What run 1 found", answered; the second record of CompCert at `x86_64-bsd`. |
@@ -47729,3 +47730,67 @@ O1 to O7 scored, and the record closes. If every test passes, the next
 record holds the outcome as a pin and goes on to `x86_32-bsd`; if a step
 fails, the next record answers it. This is the second record of CompCert
 at `x86_64-bsd`: after a third without its pin, the author is asked.
+
+### Scored (2026-11-27)
+
+The push of 486611b, 1750bf6 and ffcacbe started seven workflows, `1` to
+`6` and `8`, each green at its first attempt; `compcert (x86_64-bsd)`
+green in 14 minutes, its prerequisites installed in 8 and CompCert built
+in 3; `6` #119 the last, in 84.
+
+| # | scored |
+|---|--------|
+| O1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| O2 | **MATCH.** "Cache restored from key: freebsd-15.1-cloudinit-ufs-e4ca4db8…a2ed9e1f"; "FreeBSD-15.1-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2.xz: OK", and the mirror's line giving the pin; the user-data asking for `ocaml-opam`, `gmp`, `pkgconf` and `bash`; "ready after 120 s"; "cc: x86_64-unknown-freebsd15.1"; "opam 2.6.1"; "GNU bash, version 5.3.20(0)-release (amd64-portbld-freebsd15.1)". |
+| O3 | **MATCH.** VERIFY-134's plan, its twenty packages, each installed: "∗ installed rocq-runtime.9.1.1", then `coqide-server`, `coq-core`, `rocq-core`, `rocq-stdlib`, `coq-stdlib`, `coq`, MenhirLib and Flocq, and "Done."; the root's archive 1.2 GB, "Cache saved with key: opam-freebsd-15.1-amd64-ocaml-4.14.2-compcert-3.17-deps-v1", 447 MB compressed. |
+| O4 | **MATCH.** configure at `x86_64-bsd`: "Testing Coq... version 9.1.1 -- UNSUPPORTED", taken with `-ignore-coq-version`, and "Testing GNU make... version 4.4.1 (command 'gmake') -- good!"; CompCert built and installed, "Cache saved with key: compcert-3.17-x86_64-bsd-freebsd-15.1-build-v1"; "The CompCert C verified compiler, version 3.17"; `compcert.ini`'s "prepro=cc", "linker=cc", "asm=cc", "prepro_options=-m64 -U__GNUC__ -U__SIZEOF_INT128__ -E" and "asm_options=-m64 -c". |
+| O5 | **MISS.** "compcert x86_64-bsd: 1 / 1 compiled, 1 ran; no pin yet": the loop ran once, on `any_all_test`, which compiled and ran. |
+| O6 | **MISS.** "compcert x86_64-bsd without the header: 0 / 1 compiled; first errors: unplaced in 1": once, on `any_all_test`, whose log has no line of the form the step places, "FILE:LINE: error". |
+| O7 | **MATCH.** The other 139 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly. |
+
+Five of seven. Not predicted, and as they fell: bash 5.3.20; "Testing
+linker support for 'nobtcfi' option... no", so that `linker_options` is
+"-m64" alone; `compcert.ini` has "asm_supports_cfi=true" too; the
+prerequisites in 8 minutes and CompCert in 2.5, at four CPUs.
+
+### What run 1 found
+
+ssh reads its standard input and passes it to the command that it runs,
+unless it is given `-n` or another input; the job's helper gives it
+neither. Both loops are `while IFS= read -r t; do ... done < <(find test
+-name '*_test.c' | sort)`, so that each ssh in a loop shares the loop's
+input: the first took the 60 names after the first, and the loop ended at
+its next read, `total` 1. The first name is `test/algo/any_all_test.c`.
+The stand-in for the helper that VERIFY-134 measured with ran its
+command with `sh -c`, which reads nothing of its input, and gave 61; a
+stand-in that passes its input on, as ssh does, gives VERIFY-135's run's
+counts, "1 / 1 compiled, 1 ran" and "0 / 1 compiled".
+
+The place: CompCert prints a syntax error as "FILE:LINE:COLUMN: syntax
+error after 'X' and before 'Y'." (`cparser/ErrorReports.ml`, which the lexer
+hands to `Diagnostics.fatal_error_raw`), with a column and without the "error:"
+that its other errors carry (`Diagnostics.error`), which is the form the
+step looked for. VERIFY-134 read the second and not the first. So a
+syntax error, which the emulation puts at `<stdio.h>`'s line 135, is
+"unplaced" wherever it is; the job's log prints no line of the log, and
+the logs that the job uploads were not fetched for this close, so which
+error it was, the run does not say.
+
+**Closed.** CompCert 3.17 builds in FreeBSD 15.1 at `x86_64-bsd`; with
+the job's header it compiles one test there, which runs, and without it
+that test does not compile; the loops that would have compiled the
+others stopped after it. The close changes nothing but this record;
+VERIFY-136 answers it.
+
+What it shows:
+
+- **A stand-in shows what it models, and no more.** The helper's
+  stand-in ran each command as ssh would, but did not read its input as
+  ssh does; that was the one behaviour that mattered.
+- **A form read in one place was taken for every place.** CompCert's
+  errors share one printer, all but its syntax errors, of which the
+  plain run is made; reading the printer, VERIFY-134 missed the
+  parser's own (`cparser/Lexer.mll`).
+- **The long part of the chain held.** OCaml, Rocq 9.1.1 and its library,
+  Flocq, MenhirLib and CompCert built in FreeBSD in eleven minutes, and
+  both stages are cached: the next run goes from the boot to the tests.
