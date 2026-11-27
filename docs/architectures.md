@@ -35,6 +35,7 @@ here for them.
 | AArch64 (Apple silicon) and x86-64 | macOS | CompCert 3.17 (`aarch64-macos`, `x86_64-macos`), built on each runner, Apple's cc preprocessing, assembling and linking for it | `compcert-macos` (`analysis.yml`), on `macos-latest` and `macos-15-intel`, the tests run natively, Apple Clang's on the same runners their baseline: 60 of 61 run at each, held to that (VERIFY-125): `lifetime_token_test` needs POSIX barriers, which macOS does not have, so that no compiler builds it there; each file given first a header of the job's own, for two things Apple's headers give a compiler without GNU C (below); informational, as `compcert` |
 | x86-64 | Windows under Cygwin: newlib's C library, in `cygwin1.dll` | CompCert 3.17 (`x86_64-cygwin`), built under Cygwin on the runner, Cygwin's GCC preprocessing, assembling and linking for it | `compcert-cygwin` (`analysis.yml`), on `windows-latest`, the tests run natively, Cygwin's GCC's on the same runner their baseline (`cygwin`, `ci.yml`): 61 of 61 run, held to that (VERIFY-132); each file given first a header of the job's own, with the feature macro first, newlib's `<stdint.h>` read whole and its `__func__` undone (below); informational, as `compcert` |
 | x86-64 | FreeBSD 15.1, its own C library | CompCert 3.17 (`x86_64-bsd`), built in FreeBSD on the runner, FreeBSD's cc preprocessing, assembling and linking for it | `compcert-bsd` (`analysis.yml`), since VERIFY-134, in FreeBSD's own image under QEMU and KVM on the Ubuntu runner, as `freebsd` (`ci.yml`) boots it, whose run of FreeBSD's Clang is the baseline; the tests run in FreeBSD: 61 of 61 run, held to that (VERIFY-137); each file given first a header of the job's own, FreeBSD's nullability qualifiers and lock annotations undone and `INFINITY` and `NAN` given glibc's forms (below), and a test that includes `<pthread.h>` linked with `-lpthread`; informational, as `compcert` |
+| x86, 32-bit | FreeBSD 15.1, its own C library: 64-bit FreeBSD's 32-bit libraries | CompCert 3.17 (`x86_32-bsd`), built in FreeBSD on the runner, FreeBSD's cc preprocessing, assembling and linking for it at `-m32` | `compcert-bsd` (`analysis.yml`), since VERIFY-138, in the image of its `x86_64-bsd` leg, whose run of FreeBSD's Clang at `-m32`, `freebsd`'s `-m32` legs, is the baseline; the tests run in FreeBSD; no pin yet: run 1 measures; each file given first the job's header, which at i386 gives `size_t` as FreeBSD's headers do (below), and a test that includes `<pthread.h>` linked with `-lpthread`; informational, as `compcert` |
 | x86, 32-bit | Linux, glibc | GCC (`-m32`) | `build-32bit` (`ci.yml`): `size_t` exactly 32 bits |
 | x86, 32-bit | FreeBSD 15.1, its own C library: 64-bit FreeBSD's 32-bit libraries | FreeBSD's Clang (`-m32`) | `freebsd` (`ci.yml`), its `-m32` legs, since VERIFY-137, in the image of its x86-64 legs: FreeBSD 15 has no i386 release, and its amd64 image holds the 32-bit libraries, their development files and the 32-bit runtime linker; each test checked a 32-bit program for the i386; the baseline of CompCert's `x86_32-bsd` |
 | AArch64 | Linux, glibc | GCC, Clang | `build-arm64` (`platforms.yml`), on GitHub's Arm runner, with sanitizers; `char` is unsigned there |
@@ -193,7 +194,13 @@ file's own, defined after it, asks for less than it gets. And FreeBSD
 keeps `pthread_create` and the barriers in libthr, not in libc: a test
 that includes `<pthread.h>` is linked with `-lpthread`. `compcert-bsd`
 does both (VERIFY-134), and every test then compiles and passes
-(VERIFY-136).
+(VERIFY-136). At `x86_32-bsd`, on 64-bit FreeBSD's 32-bit libraries,
+one thing more: CompCert's own `<stddef.h>` makes `size_t` `unsigned
+long`, where FreeBSD's headers make it `__size_t`, at i386 an `unsigned
+int`, of the same size but another type, and CompCert refuses a
+typedef given again with another type. So at i386 the header also gives
+`size_t` as FreeBSD's headers give it, once, and defines `_SIZE_T`, by
+which CompCert's `<stddef.h>` leaves it be (VERIFY-138).
 
 *Planned:*
 
@@ -211,12 +218,7 @@ does both (VERIFY-134), and every test then compiles and passes
 - The targets compiled only, run: RISC-V 32 and 64 on bare metal under
   QEMU, AVR under simavr, and ARC where a simulator CI can run turns up.
 - WebAssembly under a runtime.
-- CompCert 3.17 at its last target, `x86_32-bsd`, in FreeBSD as
-  `compcert-bsd` builds it at `x86_64-bsd`, on 64-bit FreeBSD's 32-bit
-  libraries in the same image, `freebsd`'s `-m32` legs its baseline
-  (VERIFY-137): the author chose on 2026-11-26 FreeBSD 14's i386 or
-  those libraries, as the sources show, and they show those.
-  `ppc-eabi-diab` waits for a compiler (below).
+- CompCert 3.17 at `ppc-eabi-diab`, which waits for a compiler (below).
 
 ## Compiled for
 

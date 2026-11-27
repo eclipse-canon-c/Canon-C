@@ -1,6 +1,6 @@
 name: "3 · Static analysis & coverage"
 # clang-tidy and Cppcheck, MISRA C:2012 (advisory), MC/DC and branch
-# coverage (GCC 14), and CompCert at x86-64 and at seventeen other
+# coverage (GCC 14), and CompCert at x86-64 and at eighteen other
 # configurations, at Linux, on macOS, under Cygwin, in FreeBSD and on
 # bare metal (informational, upstream only).
 # Map: .github/workflows/README.md.
@@ -3854,33 +3854,37 @@ jobs:
           if-no-files-found: ignore
 
   # -------------------------------------------------------------------------
-  # 12h. CompCert on FreeBSD, x86-64 — INFORMATIONAL, upstream repository
-  #      only (VERIFY-134)
+  # 12h. CompCert on FreeBSD, x86-64 and x86-32 — INFORMATIONAL, upstream
+  #      repository only (VERIFY-134, VERIFY-138)
   #
   #   LICENSING — the compcert job's note above holds here word for word:
   #   docs/compcert-licensing.md, the same `if:` guard and the same
   #   continue-on-error.
   #
-  #   CompCert 3.17 built for x86_64-bsd in FreeBSD 15.1, booted as the
-  #   freebsd job boots it (ci.yml, VERIFY-133), whose tests under
-  #   FreeBSD's Clang are this job's baseline: FreeBSD's own VM image under
+  #   CompCert 3.17 built for x86_64-bsd and, since VERIFY-138, for
+  #   x86_32-bsd in FreeBSD 15.1, booted as the freebsd job boots it
+  #   (ci.yml, VERIFY-133), whose tests under FreeBSD's Clang are this
+  #   job's baselines, at x86-64 and at -m32: FreeBSD's own VM image under
   #   QEMU and KVM on the Ubuntu runner, checked against the SHA-256 pinned
   #   below and against download.freebsd.org's (the author's choices of
-  #   2026-11-26, as is x86_64-bsd first). The seed asks FreeBSD's own
-  #   packages for opam, GMP, pkgconf and bash, as compcert-macos takes
-  #   them from Homebrew: bash for dune, which runs one of Rocq's rules
-  #   with it, FreeBSD's base system having none (VERIFY-134's run,
-  #   VERIFY-135). opam's switch builds OCaml 4.14.2 and CompCert's
-  #   prerequisites alone (--deps-only), as at macOS; CompCert comes from
-  #   opam's archive and its digest, fetched on the runner. FreeBSD's cc
-  #   preprocesses, assembles and links for ccomp, with configure's options
-  #   for BSD, and the tests run in FreeBSD.
+  #   2026-11-26, as is x86_64-bsd first). x86_32-bsd is built and run in
+  #   the same image, on the 32-bit libraries of 64-bit FreeBSD, where the
+  #   freebsd job's -m32 legs run (VERIFY-137): the author chose FreeBSD
+  #   14's i386 or those libraries, as the sources show, and they show
+  #   those. The seed asks FreeBSD's own packages for opam, GMP, pkgconf
+  #   and bash, as compcert-macos takes them from Homebrew: bash for dune,
+  #   which runs one of Rocq's rules with it, FreeBSD's base system having
+  #   none (VERIFY-134's run, VERIFY-135). opam's switch builds OCaml
+  #   4.14.2 and CompCert's prerequisites alone (--deps-only), as at macOS;
+  #   CompCert comes from opam's archive and its digest, fetched on the
+  #   runner. FreeBSD's cc preprocesses, assembles and links for ccomp, with
+  #   configure's options for BSD, and the tests run in FreeBSD.
   #
   #   Each stage is cached apart, as a tar archive made in FreeBSD, so that
   #   a run stopped at one keeps those before it: opam's root, keyed by
-  #   FreeBSD's release, OCaml's version and CompCert's; then CompCert,
-  #   keyed by its version, its target and FreeBSD's release. The image is
-  #   the freebsd job's cache.
+  #   FreeBSD's release, OCaml's version and CompCert's, one for both
+  #   targets; then CompCert, keyed by its version, its target and
+  #   FreeBSD's release. The image is the freebsd job's cache.
   #
   #   Each test is compiled and linked by ccomp with the compcert job's
   #   flags and a header of the job's own given first, and run in FreeBSD
@@ -3896,39 +3900,55 @@ jobs:
   #   and their pragmas empty, as <sys/cdefs.h> does for a compiler without
   #   nullability, and __lock_annotate empty, as it does for one without
   #   thread-safety attributes; then reads <math.h>, with INFINITY and NAN
-  #   as glibc's <math.h> defines them without GNU C (VERIFY-134).
+  #   as glibc's <math.h> defines them without GNU C (VERIFY-134). At i386,
+  #   one thing more: CompCert's own <stddef.h> makes size_t unsigned
+  #   long, where FreeBSD's headers make it __size_t, an unsigned int
+  #   there, and CompCert refuses a typedef given again with another type.
+  #   So at i386 the header gives size_t as FreeBSD's headers give it,
+  #   once, and defines _SIZE_T, by which CompCert's <stddef.h> leaves it
+  #   be (VERIFY-138).
   #
   #   Each loop reads the tests' names before it starts, and gives each
   #   call of the helper /dev/null for its input: ssh reads its input,
   #   and in VERIFY-135's run took the rest of the names (VERIFY-136).
   #
   #   The notice says what was compiled and ran, and whether that is the
-  #   pin, which is held since VERIFY-137: another outcome fails the job,
-  #   as does a failed boot, install, build or unpack; continue-on-error
-  #   keeps it from the workflow's result. A last step compiles every test
-  #   as the test step does, but without the header, and says how many
-  #   compiled and where each log's first error is, in CompCert's forms or
-  #   the preprocessor's; it fails nothing (the author's choice of
-  #   2026-11-27).
+  #   target's pin: at x86_64-bsd, held since VERIFY-137; at x86_32-bsd,
+  #   none yet, run 1 measuring (VERIFY-138). Another outcome than a pin
+  #   fails the job, as does a failed boot, install, build or unpack;
+  #   continue-on-error keeps it from the workflow's result. A last step
+  #   compiles every test as the test step does, but without the header,
+  #   and says how many compiled and where each log's first error is, in
+  #   CompCert's forms or the preprocessor's; it fails nothing (the
+  #   author's choice of 2026-11-27).
   # -------------------------------------------------------------------------
   compcert-bsd:
-    name: compcert (x86_64-bsd)
+    name: compcert (${{ matrix.target }})
     runs-on: ubuntu-24.04
     if: github.repository == 'eclipse-canon-c/Canon-C'
     continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Every test, as under FreeBSD's Clang: VERIFY-136's prediction
+          # and its run's outcome; held since VERIFY-137.
+          - target: x86_64-bsd
+            pin: "61 / 61 compiled, 61 ran"
+          # None yet: run 1 measures (VERIFY-138).
+          - target: x86_32-bsd
+            pin: ""
     defaults:
       run:
         shell: bash
     env:
-      TARGET: x86_64-bsd
+      TARGET: ${{ matrix.target }}
       FREEBSD_URL: https://download.freebsd.org/releases/VM-IMAGES/15.1-RELEASE/amd64/Latest
       FREEBSD_IMAGE: FreeBSD-15.1-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2.xz
       # The image's SHA-256, as FreeBSD 15.1's announcement gives it: the
       # freebsd job's pin (ci.yml).
       FREEBSD_SHA256: e4ca4db889f8559c9b9dfcacc70405c038476f4b6d41649b152d3809a2ed9e1f
-      # Every test, as under FreeBSD's Clang: VERIFY-136's prediction and
-      # its run's outcome; held since VERIFY-137.
-      PIN: "61 / 61 compiled, 61 ran"
+      PIN: ${{ matrix.pin }}
     steps:
       - uses: actions/checkout@v6
       - name: Enable KVM
@@ -3971,7 +3991,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: freebsd-vm/cc-compcert.tar
-          key: compcert-3.17-x86_64-bsd-freebsd-15.1-build-v1
+          key: compcert-3.17-${{ matrix.target }}-freebsd-15.1-build-v1
 
       - name: Restore opam and CompCert's prerequisites
         id: deps-cache
@@ -4134,7 +4154,9 @@ jobs:
           # CompCert's Makefiles need it. Written first, run as deps.sh is.
           ./vm 'cat > build.sh' <<'GUEST'
           set -e
-          export OPAMROOT="$HOME/cc/opam-root"
+          # opam asks nothing, as in deps.sh: a root from the cache that
+          # FreeBSD's opam must upgrade is upgraded, as at compcert-macos.
+          export OPAMROOT="$HOME/cc/opam-root" OPAMYES=1
           eval "$(opam env --switch=compcert)"
           coqc --version | sed -n 1p
           menhir --version
@@ -4153,7 +4175,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: freebsd-vm/cc-compcert.tar
-          key: compcert-3.17-x86_64-bsd-freebsd-15.1-build-v1
+          key: compcert-3.17-${{ matrix.target }}-freebsd-15.1-build-v1
 
       - name: Copy the tree in
         run: |
@@ -4177,7 +4199,9 @@ jobs:
           # The header given first to every file (the job's comment says
           # why): FreeBSD's nullability qualifiers and lock annotations as
           # <sys/cdefs.h> defines them for a compiler without them; INFINITY
-          # and NAN as glibc's <math.h> defines them without GNU C.
+          # and NAN as glibc's <math.h> defines them without GNU C; and at
+          # i386, size_t as FreeBSD's headers give it, _SIZE_T telling
+          # CompCert's <stddef.h> that it is given.
           "$vm" 'mkdir -p canon/ccomp-out && cat > canon/ccomp-out/canon_bsd.h' <<'HEADER'
           #include <sys/cdefs.h>
           #undef _Nonnull
@@ -4197,6 +4221,14 @@ jobs:
           #define INFINITY 1e10000f
           #undef NAN
           #define NAN (0.0f / 0.0f)
+          #ifdef __i386__
+          #include <sys/_types.h>
+          #ifndef _SIZE_T_DECLARED
+          typedef __size_t size_t;
+          #define _SIZE_T_DECLARED
+          #endif
+          #define _SIZE_T
+          #endif
           HEADER
           # The compcert job's flags, and its reasons; then the header.
           CCOMP_FLAGS=(
@@ -4339,7 +4371,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: compcert-logs-x86_64-bsd
+          name: compcert-logs-${{ matrix.target }}
           path: |
             ccomp-out/*.log
             ccomp-out/plain/*.log

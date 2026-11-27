@@ -9,7 +9,7 @@ and those files differ, they are right and this page is wrong; please say
 so in an issue. A record that changes a fact stated here updates this
 page with it.
 
-*Written for VERIFY-118, 2026-11-24; brought up to date by VERIFY-119 to VERIFY-137.*
+*Written for VERIFY-118, 2026-11-24; brought up to date by VERIFY-119 to VERIFY-138.*
 
 ## The words used
 
@@ -32,7 +32,7 @@ With GCC, Clang, MSVC or a vendor's compiler:
 | family | target | compilers | the tests | proved at its type sizes |
 |--------|--------|-----------|-----------|--------------------------|
 | x86-64 | Linux (glibc), Linux (musl), Windows, Windows under Cygwin, FreeBSD, macOS (Intel) | GCC, Clang, MSVC, MinGW, Cygwin's GCC, FreeBSD's Clang, Apple Clang | run, all pass; also with sanitizers, Valgrind and fuzzing | every unit; at Windows' type sizes, `core/` |
-| x86 | Linux, 32-bit | GCC | run, all pass | `core/arena.h` |
+| x86 | Linux, 32-bit; FreeBSD, on its 32-bit libraries | GCC; FreeBSD's Clang | run, all pass | `core/arena.h` |
 | AArch64 | Linux; macOS (Apple silicon) | GCC, Clang; Apple Clang | run, all pass | `core/` (Linux) |
 | AArch64, bare metal | Cortex-A78AE, Cortex-R82 | GCC, picolibc | run, exceptions pinned | planned |
 | 32-bit Arm | Linux (Armv7-A) | GCC | run, all pass | `core/` |
@@ -62,6 +62,7 @@ With CompCert 3.17, the formally verified compiler (informational):
 | macOS on Apple silicon and Intel (`aarch64-macos`, `x86_64-macos`) | run, 60 of 61 at each (with a header given to CompCert first, `architectures.md` says which and why), pinned: one test needs POSIX barriers, which macOS does not have |
 | Windows under Cygwin (`x86_64-cygwin`), with newlib | run, 61 of 61 (with a header given to CompCert first, `architectures.md` says which and why) |
 | FreeBSD (`x86_64-bsd`), its own C library | run, 61 of 61 (with a header given to CompCert first, `architectures.md` says which and why) |
+| FreeBSD at 32 bits (`x86_32-bsd`), on 64-bit FreeBSD's 32-bit libraries | to be run (VERIFY-138), with a header given to CompCert first (`architectures.md` says which and why) |
 
 In the GCC jobs on bare metal, each test runs at four levels of
 optimization (`-O0`, `-O2`, `-O3`, `-Os`). Each pinned exception, and
