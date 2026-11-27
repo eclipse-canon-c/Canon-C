@@ -47804,6 +47804,7 @@ What it shows:
 | **ID**         | VERIFY-136 |
 | **Date**       | 2026-11-27 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-27 — Scored: P1 to P5 MATCH. CLOSED: five of five ("Scored", below). CompCert came from its cache, and with the job's header every test compiled under CompCert at `x86_64-bsd` in FreeBSD 15.1 and passed there, 61 of 61; without it none compiled, each stopping at `FILE`'s `_Nullable`, `<stdio.h>`'s line 135. The Status above is the record as committed. |
 | **Baseline**   | ffcacbe (VERIFY-135's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #119, `2` #154 and `8` #178, at ffcacbe; `compcert-bsd` green, at one test. |
 | **Scope**      | `.github/workflows/analysis.yml`'s `compcert-bsd`: its two loops' input; the plain step's places, and the lines it prints; the job's comment. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`; and item 21, Verasco's line, in `docs/verification.md` and `docs/for-future.md`. No library, test or tool file. |
 | **Category**   | VERIFY-135's "What run 1 found", answered; the third record of CompCert at `x86_64-bsd`. Item 21 of the list, folded in as planned. |
@@ -47875,3 +47876,44 @@ P1 to P5 scored, and the record closes. This is the third record of
 CompCert at `x86_64-bsd`. If every test compiles and runs, the next
 record holds the outcome as a pin and goes on to `x86_32-bsd`; if not,
 the author is asked before a fourth, as the author chose on 2026-11-26.
+
+### Scored (2026-11-27)
+
+The push of f8a80ac, 2ed28ff and 32cbef3 started seven workflows, `1` to
+`6` and `8`, each green at its first attempt: `3` #120 in 5 minutes,
+`compcert (x86_64-bsd)` among its jobs in 5, its tests in 2; `6` #120
+the last, in 87.
+
+| # | scored |
+|---|--------|
+| P1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| P2 | **MATCH.** "Cache restored from key: compcert-3.17-x86_64-bsd-freebsd-15.1-build-v1", "unpacked cc-compcert.tar"; the user-data asking for no package; the steps that install the prerequisites and build CompCert skipped; "ready after 75 s"; "The CompCert C verified compiler, version 3.17". |
+| P3 | **MATCH.** "compcert x86_64-bsd: 61 / 61 compiled, 61 ran; no pin yet", the job green. |
+| P4 | **MATCH.** "compcert x86_64-bsd without the header: 0 / 61 compiled; first errors: /usr/include/stdio.h:135 in 61". |
+| P5 | **MATCH.** The other 139 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly. |
+
+Five of five. Not predicted, and as they fell: CompCert's words at that
+line, "/usr/include/stdio.h:135:19: syntax error after '_Nullable' and
+before '_close'.", then "Up to this point, a declarator has been
+recognized: '* _Nullable'", as VERIFY-134 read it: a declarator named
+`_Nullable`, then `_close`.
+
+**Closed.** CompCert 3.17 at `x86_64-bsd` compiles every test in FreeBSD
+15.1 with the job's header, and each passes there, as under FreeBSD's
+Clang (VERIFY-133); without the header, none compiles. Item 9b's BSD step
+has its first outcome, which VERIFY-137 holds. The close changes nothing
+but this record.
+
+What it shows:
+
+- **The header, read and emulated, held as written.** Before VERIFY-135's
+  one test, nothing of it had run: the other 60 rested on the
+  emulation, GCC's syntax check standing for CompCert's parser, and none
+  failed.
+- **CompCert stopped where the emulation put it, to the line, in every
+  test.** GCC's order differs at `lifetime_token_test`, where an error of
+  elaboration comes first; CompCert's, which parses the whole file
+  before it elaborates, does not.
+- **A cached CompCert runs in a FreeBSD with no packages.** The build
+  made in one boot of the image ran in another, with the base system
+  alone: what caching the build is worth.
