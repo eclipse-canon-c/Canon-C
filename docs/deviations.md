@@ -48152,3 +48152,143 @@ What it shows:
   Clang's i386 target gave a build without a warning here, and the tests
   passed at i686 with the x87 unit at 53 bits; FreeBSD's own 32-bit C
   library then passed them all.
+
+---
+
+## VERIFY-138: Pre-registration — CompCert at x86_32-bsd, on FreeBSD's 32-Bit Libraries, Run 1 Measuring
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-138 |
+| **Date**       | 2026-11-27 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 9cf5923 (VERIFY-137's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #121, `2` #156 and `8` #180, at 9cf5923; `freebsd`'s `-m32` legs 61 of 61; `compcert-bsd` held, 61 of 61. |
+| **Scope**      | `.github/workflows/analysis.yml`'s `compcert-bsd`: a matrix of two targets, `x86_64-bsd` as before and `x86_32-bsd`, each with its pin, its build's cache and its logs; at i386, the header's `size_t`; `OPAMYES` in the build's script; the job's comment; the file's header. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `.github/workflows/README.md`. No library, test or tool file. |
+| **Category**   | Item 9b's last target, read against VERIFY-137's baseline: the first record of CompCert at `x86_32-bsd`, whose three are counted afresh. |
+
+### What is missing
+
+CompCert's `x86_32-bsd` has never been built or run. Its baseline is in:
+the tests pass at `-m32` in FreeBSD 15.1's image, on 64-bit FreeBSD's
+32-bit libraries (VERIFY-137). And `docs/status.md` does not yet name
+those legs.
+
+### What changes
+
+- **`compcert-bsd` at two targets**, a matrix of includes, as
+  `compcert-macos` is: `x86_64-bsd`, its pin "61 / 61 compiled, 61 ran"
+  held since VERIFY-137, and `x86_32-bsd`, its pin empty: run 1
+  measures. The job is named `compcert (${{ matrix.target }})`, so that
+  `compcert (x86_64-bsd)` keeps its name; `TARGET` and `PIN` come from
+  the matrix; the build's cache is keyed by the target,
+  `compcert-3.17-${{ matrix.target }}-freebsd-15.1-build-v1`, the same
+  key at `x86_64-bsd` as before; the logs are uploaded as
+  `compcert-logs-${{ matrix.target }}`. opam's root is one cache for
+  both: at `x86_32-bsd` its first run takes it, unpacks it in FreeBSD,
+  and builds CompCert on it, a path no run has taken.
+- **At i386, the header gives `size_t` as FreeBSD's headers give it.**
+  CompCert's own `<stddef.h>` typedefs `size_t` as `unsigned long` at
+  every target but Diab's; FreeBSD's headers typedef it as `__size_t`,
+  `unsigned int` at i386, and CompCert refuses a typedef given again with
+  another type. Within `#ifdef __i386__`, the header reads
+  `<sys/_types.h>`, typedefs `size_t` as `__size_t` where
+  `_SIZE_T_DECLARED` is not defined, defines that, and defines
+  `_SIZE_T`, by which CompCert's `<stddef.h>` leaves `size_t` be. At
+  x86-64 the lines are skipped. This answers now what the emulation shows
+  CompCert would refuse, the step without the header keeping the
+  diagnosis: the author's choice of 2026-11-27 for this job, taken at its
+  second target.
+- **`OPAMYES=1` in the build's script**, as in `deps.sh`: opam asks
+  nothing, so that a root from the cache that FreeBSD's opam must
+  upgrade is upgraded, as at `compcert-macos`.
+- **The job's comment**: the two targets, the image's 32-bit libraries,
+  the one root, the header at i386, and the pins; `analysis.yml`'s
+  header counts eighteen configurations beside x86-64.
+- **The documents**: in `docs/architectures.md`, a row for CompCert at
+  `x86_32-bsd`, the recipe's sentences for `size_t` at i386, and the
+  planned bullet left to `ppc-eabi-diab`; in `docs/verification.md`,
+  `compcert-bsd`'s row at both targets; in `docs/status.md`, the x86
+  row with FreeBSD's Clang on FreeBSD's 32-bit libraries (VERIFY-137's
+  run), the CompCert row for `x86_32-bsd`, to be run, and the line that
+  dates the page; and the workflows' README's row for `analysis.yml`.
+
+### Read, in the sources
+
+- **CompCert 3.17's `configure`** at `x86_32-bsd`: `cc`, `casm`,
+  `clinker` and `cprepro` all `cc`, each with `-m32`; `cprepro_options`
+  "-m32 -U__GNUC__ -E"; `clinker_needs_no_pie` left at its default, true,
+  so that configure tests `cc -no-pie` and, where that links, adds
+  `-no-pie` to the linker's options; `system` "bsd".
+- **Its machine models** (`cparser/Machine.ml`, `driver/Frontend.ml`):
+  at x86_32 with the system "bsd", `x86_32_bsd`, which is
+  `x86_32_macos`: a struct of 1, 2, 4 or 8 bytes returned in registers
+  (`SR_int1248`), as FreeBSD's i386 ABI and Clang's FreeBSD target
+  return it, where Linux's `x86_32` returns every struct through a
+  reference (`SR_ref`); `long long` and `double` aligned to 4 at both.
+- **Its runtime library** (`runtime/x86_32/sysdeps.h`): `SYS_bsd` beside
+  `SYS_linux`, assembled by `cc -m32 -c`.
+- **Its types** (`cparser/Cutil.ml`, `cparser/Elab.ml`,
+  `runtime/include/stddef.h`): the type of `sizeof` is the unsigned
+  kind of `size_t`'s size, `unsigned int` at x86_32, while its
+  `<stddef.h>` typedefs `size_t` as `unsigned long` but at Diab; a
+  typedef given again is a warning where the types are equal, a C11
+  extension, and else an error, "redefinition of typedef '%s' with
+  different type". The lexer ignores `__extension__`
+  (`cparser/Lexer.mll`), which FreeBSD's `<sys/_types.h>` gives
+  `__int64_t` at i386.
+- **FreeBSD's headers** (15.1): `size_t` is `__size_t` wherever a header
+  declares it, under `_SIZE_T_DECLARED`; none reads `_SIZE_T`.
+
+### Measured here
+
+- **ccomp at `x86_32-bsd`, emulated**: a stand-in that preprocesses as
+  ccomp would there (configure's "cc -m32 -U__GNUC__ -E", the driver's
+  `-std=c99`, its macros and its own include directory), by Clang 18
+  targeting FreeBSD 15.1 at `-m32`, FreeBSD 15.1's headers with amd64's
+  i386 ones, none of Clang's own; GCC's syntax check at `-m32` standing
+  for CompCert's parser, a syntax error anywhere taken before any other
+  error, CompCert parsing the whole file before it elaborates. With the
+  header as at `x86_64-bsd`: "1 / 61 compiled", the other 60 stopping at
+  `size_t`'s second typedef: at `<stdio.h>`'s line 47 in 39,
+  `<strings.h>`'s 36 in 13, CompCert's `<stddef.h>`'s 67 in 5,
+  `<stdlib.h>`'s 42 in 2 and `<sys/types.h>`'s 198 in 1. With this
+  record's header: 61 of 61, `-lpthread` given to
+  `lifetime_token_test` alone. Without a header: "0 / 61 compiled; first
+  errors: /usr/include/stdio.h:135 in 61". The same stand-in at
+  `x86_64-bsd`, in CompCert's order, gives VERIFY-136's and VERIFY-137's
+  runs' notice without the header, word for word, where GCC's order had
+  put `lifetime_token_test` at `<pthread.h>` (VERIFY-136's close).
+- **The steps**, extracted from `analysis.yml` at each target: all but
+  two as VERIFY-137's, word for word; the test step's header has its
+  i386 lines, and the build's script sets `OPAMYES`. The test step at
+  `x86_32-bsd`, with the stand-ins: "61 / 61 compiled, 61 ran; no pin
+  yet". At `x86_64-bsd`, with VERIFY-136's: "61 / 61 compiled, 61 ran;
+  as pinned", and a test's preprocessed text the same, token for token,
+  under the old header and the new. The step without the header at
+  `x86_32-bsd`: "0 / 61 compiled; first errors:
+  /usr/include/stdio.h:135 in 61".
+- **The job's YAML**, parsed: a matrix of the two, their keys and logs
+  named by the target. ShellCheck on every step, GitHub's expressions
+  given their values: nothing. `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| R1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| R2 | **`compcert (x86_64-bsd)` holds**, by that name: green, "compcert x86_64-bsd: 61 / 61 compiled, 61 ran; as pinned"; "Cache restored from key: compcert-3.17-x86_64-bsd-freebsd-15.1-build-v1" and "unpacked cc-compcert.tar", no install or build step run; and "compcert x86_64-bsd without the header: 0 / 61 compiled; first errors: /usr/include/stdio.h:135 in 61". | a failure, another name, a key missed, or another notice | H: its key is the same, and the header's new lines are skipped at x86-64, the preprocessed text the same |
+| R3 | **CompCert builds at `x86_32-bsd`**, in a job named `compcert (x86_32-bsd)`: "Cache not found for input keys: compcert-3.17-x86_32-bsd-freebsd-15.1-build-v1"; "Cache restored from key: opam-freebsd-15.1-amd64-ocaml-4.14.2-compcert-3.17-deps-v1" and "unpacked cc-deps.tar", the install step skipped; the seed asking for `ocaml-opam`, `gmp`, `pkgconf` and `bash`; FreeBSD ready within 20 minutes; configure's "Testing linker support for '-no-pie' / '-nopie' option... yes, '-no-pie'"; CompCert built and installed, "Cache saved with key: compcert-3.17-x86_32-bsd-freebsd-15.1-build-v1"; "The CompCert C verified compiler, version 3.17"; and `compcert.ini`'s "prepro_options=-m32 -U__GNUC__ -E", "asm_options=-m32 -c" and "linker_options=-m32 -no-pie". | a step failing, a key missed, or other options | M: no run has unpacked opam's root in a fresh FreeBSD and built on it; FreeBSD's packages may have moved since VERIFY-135's run |
+| R4 | **Every test compiles and passes under CompCert at `x86_32-bsd`**: "compcert x86_32-bsd: 61 / 61 compiled, 61 ran; no pin yet", the job green. | another notice, or none | M, given R3: the emulation compiles all 61 with the header; CompCert's x86_32 code passes them at `x86_32-linux`, and FreeBSD's 32-bit C library under Clang (VERIFY-137); but no run has shown CompCert's code returning structs in registers, as at BSD |
+| R5 | **Without the header, nothing compiles at `x86_32-bsd`, every test stopping at `FILE`'s `_Nullable`**: "compcert x86_32-bsd without the header: 0 / 61 compiled; first errors: /usr/include/stdio.h:135 in 61". | another notice, or none | M–H, given R3: `<stdio.h>` is as at x86-64, and CompCert parses the whole file before it elaborates, so that `size_t`'s second typedef comes after |
+| R6 | **Nothing else changes**: the other 141 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1, 3, 4, 5 and 6 #121's, 2 #156's, 8 #180's. | another notice, or a failure | H |
+
+**Not predicted**: the versions of FreeBSD's packages; the words of
+ccomp's errors and its warnings; the times.
+
+### What follows
+
+R1 to R6 scored, and the record closes. If every test compiles and runs
+at `x86_32-bsd`, the next record holds the outcome as its pin, and item
+9b is done; if not, the next record answers it. This is the first record
+of CompCert at `x86_32-bsd`: after three without its pin, the author is
+asked.
