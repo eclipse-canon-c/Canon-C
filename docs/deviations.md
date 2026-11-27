@@ -47662,3 +47662,70 @@ What it shows:
   seed's packages, FreeBSD's opam was 2.6.1 and built with gmake, and
   zarith found GMP through pkgconf: what N2 and the start of N3 rested
   on, none of it run here before.
+
+---
+
+## VERIFY-135: Pre-registration — CompCert at x86_64-bsd, with bash for Rocq's Build
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-135 |
+| **Date**       | 2026-11-27 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | b2fab66 (VERIFY-134's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #118, `2` #153 and `8` #177, at b2fab66; `compcert-bsd` failed at its prerequisites. |
+| **Scope**      | `.github/workflows/analysis.yml`'s `compcert-bsd`: `bash` among the seed's packages, the wait asking for it, its version shown; the job's comment. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`. No library, test or tool file. |
+| **Category**   | VERIFY-134's "What run 1 found", answered; the second record of CompCert at `x86_64-bsd`. |
+
+### What is missing
+
+`compcert-bsd` stops at Rocq 9.1.1's `rocq-runtime`, whose build runs a
+rule with bash, which FreeBSD's base system lacks (VERIFY-134). The rest
+of CompCert's prerequisites, CompCert and the tests are not reached.
+
+### What changes
+
+- **`bash`** among the seed's packages, with `ocaml-opam`, `gmp` and
+  `pkgconf`, where CompCert's own cache misses; the wait asks for its
+  command, as for theirs; the step that shows FreeBSD's tools prints its
+  version's line.
+- **The job's comment**: the packages, and why bash.
+- **The documents**: `compcert-bsd`'s rows in `docs/architectures.md`,
+  `docs/verification.md` and `docs/status.md`, VERIFY-134's run in each,
+  and the line that dates `docs/status.md`.
+
+### Measured here
+
+- **The seed step**, with VERIFY-134's stand-ins for `xz`, `qemu-img` and
+  `ssh-keygen`: CompCert's cache missed, the user-data asks for
+  `ocaml-opam`, `gmp`, `pkgconf` and `bash`; hit, for no package;
+  `seed.iso`'s volume "cidata". **The wait**, with VERIFY-134's stand-in
+  guest: "ready after 90 s" either way, its probe asking for `opam`,
+  `gmake`, `pkg-config` and `bash` only where the packages were asked
+  for; a guest that never answers: "FreeBSD was not ready in 20
+  minutes", exit 1.
+- **The job's YAML**, parsed; ShellCheck on every step, GitHub's
+  expressions given their values: nothing. `tools/which_workflows.py`: 1
+  to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| O1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| O2 | **FreeBSD boots in `compcert (x86_64-bsd)`**, as at VERIFY-134's run: the image from the `freebsd` job's cache, its SHA-256 the pin's and the mirror's; the guest ready within 20 minutes, the seed's four packages in; "cc: x86_64-unknown-freebsd15.1"; "opam 2.6.1"; a line beginning "GNU bash, version". | the image fetched, or a step failing before opam runs | M–H: VERIFY-134's run; `bash` is a package of FreeBSD's, as the other three are |
+| O3 | **CompCert's prerequisites install in FreeBSD**: VERIFY-134's plan, its twenty packages, each installed, `rocq-runtime` 9.1.1 among them; opam's root saved under `opam-freebsd-15.1-amd64-ocaml-4.14.2-compcert-3.17-deps-v1`. | an install failing | L–M: Rocq, its library, Flocq and MenhirLib have not built in FreeBSD here; their builds rest on reading |
+| O4 | **CompCert 3.17 builds in FreeBSD**: configured for `x86_64-bsd`, built and installed, saved under `compcert-3.17-x86_64-bsd-freebsd-15.1-build-v1`; "The CompCert C verified compiler, version 3.17"; `compcert.ini`'s "prepro=cc", "asm=cc", "linker=cc", "prepro_options=-m64 -U__GNUC__ -U__SIZEOF_INT128__ -E" and "asm_options=-m64 -c". | a failed configure or build | L–M, given O3: VERIFY-134's N3 for CompCert itself, which no run has reached |
+| O5 | **Every test compiles and passes under CompCert in FreeBSD**: the notice "compcert x86_64-bsd: 61 / 61 compiled, 61 ran; no pin yet", the job green. | another notice, or none | L–M, given O4: VERIFY-134's N4 |
+| O6 | **Without the header, nothing compiles**: the notice "compcert x86_64-bsd without the header: 0 / 61 compiled; first errors: /usr/include/stdio.h:135 in 61". | another notice, or none | M, given O4: VERIFY-134's N5 |
+| O7 | **Nothing else changes**: the other 139 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1, 3, 4, 5 and 6 #118's, 2 #153's, 8 #177's. | another notice, or a failure | H |
+
+**Not predicted**: the versions of bash, GMP and pkgconf; whether
+configure adds `-z nobtcfi` to the linker's options; ccomp's warnings,
+and the words of its errors; the times, the first build's among them.
+
+### What follows
+
+O1 to O7 scored, and the record closes. If every test passes, the next
+record holds the outcome as a pin and goes on to `x86_32-bsd`; if a step
+fails, the next record answers it. This is the second record of CompCert
+at `x86_64-bsd`: after a third without its pin, the author is asked.
