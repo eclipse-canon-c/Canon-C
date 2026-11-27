@@ -47228,6 +47228,7 @@ What it shows:
 | **ID**         | VERIFY-133 |
 | **Date**       | 2026-11-26 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-27 — Scored: M1 to M5 MATCH. CLOSED: five of five ("Scored", below). FreeBSD 15.1 booted from its own image at both legs, the image matching the pinned SHA-256 and download.freebsd.org's; FreeBSD's Clang, 19.1.7, built the tests without a warning, and every test passed, 61 of 61, at Release and at Debug. The Status above is the record as committed. |
 | **Baseline**   | a608d70 (VERIFY-132's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #116, `2` #151 and `8` #175, at a608d70. |
 | **Scope**      | `.github/workflows/ci.yml`: a job, `freebsd`, and its header's first lines. `docs/architectures.md`, `docs/verification.md`, `docs/implementation-defined.md`, `docs/autosar-classic.md`, `.github/workflows/README.md`. No library, test or tool file. |
 | **Category**   | Item 9b's last step, BSD, as the author chose on 2026-11-26: its baseline first, alone, on FreeBSD's own image; CompCert at `x86_64-bsd` next, `x86_32-bsd` after. |
@@ -47369,3 +47370,47 @@ record puts FreeBSD in `docs/status.md` and goes on to CompCert at
 `x86_64-bsd`, in the same image; if a step fails, the next record
 answers it, and after three records without the step done, the author is
 asked.
+
+### Scored (2026-11-27)
+
+The push of d0232fc, 565e5a0 and fe45ccc started seven workflows, `1` to
+`6` and `8`, each green at its first attempt: `1` #117 in 20 minutes,
+`freebsd (Release)` among its jobs in 3 and `freebsd (Debug)` in 4; `6`
+#117 the last, in 88.
+
+| # | scored |
+|---|--------|
+| M1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| M2 | **MATCH.** At both legs: `/dev/kvm` "crw-rw-rw-"; "FreeBSD-15.1-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2.xz: OK" against the pin, and download.freebsd.org's "SHA256 (FreeBSD-15.1-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2.xz) = e4ca4db8…a2ed9e1f"; "ready after 90 s" at Release, "ready after 150 s" at Debug; "cc: x86_64-unknown-freebsd15.1". |
+| M3 | **MATCH.** "freebsd Release: x86_64-unknown-freebsd15.1, Clang 19.1.7; int 4, long 8, long long 8, void * 8, wchar_t 4, long double 16, va_list 24; char signed; __FreeBSD__ 15, not __linux__; 61 of 61 tests passed", and the same for "freebsd Debug". |
+| M4 | **MATCH.** No warning in either build; CTest's "100% tests passed, 0 tests failed out of 61" at both legs, in 0.40 s. |
+| M5 | **MATCH.** The other 137 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly. |
+
+Five of five. Not predicted, and as they fell: FreeBSD's Clang is
+19.1.7. `freebsd-version -kru` gave 15.1-RELEASE-p7 for the installed
+kernel, the running one and the userland: the image's release kernel
+was no longer the one running, so that the first boot had upgraded the
+base system, as the image's `firstboot_pkg_upgrade` does, and rebooted
+into it, within the job's wait. CMake 3.31.12, Ninja 1.13.2, QEMU 8.2.2.
+The image was fetched at both legs, its cache empty, and saved by one:
+Release's save took the key, Debug's found it taken.
+
+**Closed.** The tests build and pass on FreeBSD 15.1, with its own C
+library and its Clang, at Release and Debug, in FreeBSD's own image
+booted on GitHub's Ubuntu runner: item 9b's BSD step has its baseline,
+which CompCert at `x86_64-bsd` is to be read against. The close changes
+nothing but this record.
+
+What it shows:
+
+- **A system that GitHub does not offer, booted from its project's own
+  image.** QEMU with KVM, FreeBSD's image checked against its
+  announcement and its mirror, and a seed that nuageinit read brought
+  FreeBSD up in two and a half minutes at most, a first boot's upgrade
+  and reboot among them; the rule that the boot time read the same twice
+  is what waited out the reboot.
+- **FreeBSD's x86-64 data model is Linux's, and the tests found nothing
+  between them.** Every size the probe printed is the System V one; the
+  build gave no warning under `-Werror`, and the tests' only branches on
+  a system, `diag_test`'s on `__GLIBC__` and `util/time.h`'s
+  `_POSIX_C_SOURCE`, took FreeBSD's side and passed.
