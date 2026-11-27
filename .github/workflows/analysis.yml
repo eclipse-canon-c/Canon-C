@@ -3867,8 +3867,10 @@ jobs:
   #   QEMU and KVM on the Ubuntu runner, checked against the SHA-256 pinned
   #   below and against download.freebsd.org's (the author's choices of
   #   2026-11-26, as is x86_64-bsd first). The seed asks FreeBSD's own
-  #   packages for opam, GMP and pkgconf, as compcert-macos takes them from
-  #   Homebrew; opam's switch builds OCaml 4.14.2 and CompCert's
+  #   packages for opam, GMP, pkgconf and bash, as compcert-macos takes
+  #   them from Homebrew: bash for dune, which runs one of Rocq's rules
+  #   with it, FreeBSD's base system having none (VERIFY-134's run,
+  #   VERIFY-135). opam's switch builds OCaml 4.14.2 and CompCert's
   #   prerequisites alone (--deps-only), as at macOS; CompCert comes from
   #   opam's archive and its digest, fetched on the runner. FreeBSD's cc
   #   preprocesses, assembles and links for ccomp, with configure's options
@@ -3976,8 +3978,9 @@ jobs:
         env:
           # FreeBSD's packages for opam and the build, wanted only where
           # CompCert itself must be built: opam (with gmake, curl, git and
-          # rsync), GMP for zarith, and pkgconf, by which zarith finds GMP.
-          PACKAGES: ${{ steps.target-cache.outputs.cache-hit != 'true' && 'ocaml-opam gmp pkgconf' || '' }}
+          # rsync), GMP for zarith, pkgconf, by which zarith finds GMP, and
+          # bash, with which dune runs Rocq's rule for its revision file.
+          PACKAGES: ${{ steps.target-cache.outputs.cache-hit != 'true' && 'ocaml-opam gmp pkgconf bash' || '' }}
         run: |
           cd freebsd-vm
           xz -dc "$FREEBSD_IMAGE" > disk.qcow2
@@ -4012,7 +4015,7 @@ jobs:
       - name: Boot FreeBSD
         env:
           # The packages' commands, where the seed asks for packages.
-          WANTS: ${{ steps.target-cache.outputs.cache-hit != 'true' && 'opam gmake pkg-config' || '' }}
+          WANTS: ${{ steps.target-cache.outputs.cache-hit != 'true' && 'opam gmake pkg-config bash' || '' }}
         run: |
           cd freebsd-vm
           qemu-system-x86_64 \
@@ -4048,7 +4051,7 @@ jobs:
 
       - name: Show FreeBSD, its compiler and its tools
         env:
-          WANTS: ${{ steps.target-cache.outputs.cache-hit != 'true' && 'opam gmake pkg-config' || '' }}
+          WANTS: ${{ steps.target-cache.outputs.cache-hit != 'true' && 'opam gmake pkg-config bash' || '' }}
         run: |
           cd freebsd-vm
           ./vm 'freebsd-version -kru; uname -mrs; cc --version | sed -n 1p; sysctl hw.ncpu hw.physmem'
@@ -4058,7 +4061,7 @@ jobs:
             *) echo "::error::cc is '$machine', not FreeBSD 15's at x86-64"; exit 1 ;;
           esac
           if [ -n "$WANTS" ]; then
-            ./vm 'printf "opam "; opam --version; gmake --version | sed -n 1p; printf "GMP "; pkg-config --modversion gmp'
+            ./vm 'printf "opam "; opam --version; gmake --version | sed -n 1p; printf "GMP "; pkg-config --modversion gmp; bash --version | sed -n 1p'
           fi
 
       - name: Unpack what the cache gave
