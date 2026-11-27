@@ -48339,3 +48339,66 @@ What it shows:
 - **The order of errors, modelled, gave the run's places.** The
   stand-in in CompCert's order, a syntax error anywhere first, gave both
   targets' notices without the header, word for word.
+
+---
+
+## VERIFY-139: Pre-registration — CompCert at x86_32-bsd Held to Its Pin
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-139 |
+| **Date**       | 2026-11-27 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 1e93fb9 (VERIFY-138's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #122, `2` #157 and `8` #181, at 1e93fb9; `compcert-bsd` green at both targets, 61 of 61 at each. |
+| **Scope**      | `.github/workflows/analysis.yml`'s `compcert-bsd`: `x86_32-bsd`'s pin, set and held; the job's comment. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`. No library, test or tool file. |
+| **Category**   | VERIFY-138's "What follows": the outcome held as a pin, as VERIFY-137 held `x86_64-bsd`'s; the last step of item 9b. |
+
+### What is missing
+
+`compcert (x86_32-bsd)` printed "61 / 61 compiled, 61 ran; no pin yet"
+at VERIFY-138's run (R4): it measures, and any other outcome would fail
+nothing, its pin being empty.
+
+### What changes
+
+- **`x86_32-bsd`'s pin** in `compcert-bsd`'s matrix: "61 / 61 compiled,
+  61 ran", its comment naming its source, VERIFY-138's prediction and its
+  run's outcome; the job's comment, the pins held at both targets. The
+  pin set, another outcome fails the job, as at `x86_64-bsd`;
+  `continue-on-error`, the `if:` guard and the step without the header
+  stay.
+- **The documents**: `docs/architectures.md`'s row for CompCert at
+  `x86_32-bsd`, "61 of 61 run, held to that (VERIFY-139)", and the
+  recipe's sentence that every test then compiles and passes there too;
+  `docs/verification.md`'s `compcert-bsd` row, "61 of 61 at each, held to
+  that (VERIFY-137, VERIFY-139)"; `docs/status.md`'s row for
+  `x86_32-bsd`, "run, 61 of 61", the header named as for the others, and
+  the line that dates the page.
+
+### Measured here
+
+- **`compcert-bsd`'s test step at `x86_32-bsd`**, extracted from
+  `analysis.yml` and run with VERIFY-138's stand-ins: "61 / 61 compiled,
+  61 ran; as pinned", exit 0; given another pin, "not the pin", then
+  "FAIL: compcert x86_32-bsd is pinned to: 60 / 61 compiled, 60 ran",
+  exit 1. Every step of the job, extracted at each target, is
+  VERIFY-138's, word for word.
+- **The job's YAML**, parsed: both targets pinned.
+  `tools/which_workflows.py`: 1 to 6 and 8.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| S1 | **1 to 6 and 8 run**, and no other. | another set | H |
+| S2 | **`compcert (x86_32-bsd)` holds**: green, "compcert x86_32-bsd: 61 / 61 compiled, 61 ran; as pinned"; its build's cache serving for the first time, "Cache restored from key: compcert-3.17-x86_32-bsd-freebsd-15.1-build-v1" and "unpacked cc-compcert.tar", the seed asking for no package, and the restore of opam's root, the install and the build skipped; and "compcert x86_32-bsd without the header: 0 / 61 compiled; first errors: /usr/include/stdio.h:135 in 61". | a failure, a key missed, or another notice | M–H: the inputs are VERIFY-138's, and a cached ccomp has run in a FreeBSD without packages at `x86_64-bsd` (VERIFY-136), not yet at `x86_32-bsd`; the first boot upgrades FreeBSD's base system to its latest patch level, which is not fixed |
+| S3 | **Nothing else changes**: the other 142 jobs green, `compcert (x86_64-bsd)` among them, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1, 3, 4, 5 and 6 #122's, 2 #157's, 8 #181's. | another notice, or a failure | H |
+
+**Not predicted**: FreeBSD's patch level; the times.
+
+### What follows
+
+S1 to S3 scored, and the record closes. If `compcert-bsd` holds at both
+targets, item 9b is done: CompCert at each target it names, bare-metal
+Arm, `ppc-eabi`, `armeb`, macOS, Cygwin and BSD, held to its outcome. If
+not, the next record answers it.
