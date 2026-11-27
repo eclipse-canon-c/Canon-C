@@ -47424,6 +47424,7 @@ What it shows:
 | **ID**         | VERIFY-134 |
 | **Date**       | 2026-11-27 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-27 — Scored: N1, N2 and N6 MATCH; N3, N4 and N5 MISS. CLOSED: three of six ("Scored", below). FreeBSD booted from the `freebsd` job's cached image, the seed's packages in, opam 2.6.1 among them; the switch built OCaml 4.14.2 in FreeBSD, and opam installed CompCert's prerequisites as far as Menhir, then stopped at Rocq 9.1.1, whose build runs a rule with bash, which FreeBSD's base system lacks ("What run 1 found"); CompCert is not reached. The Status above is the record as committed. |
 | **Baseline**   | fe45ccc (VERIFY-133's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #117, `2` #152 and `8` #176, at fe45ccc. |
 | **Scope**      | `.github/workflows/analysis.yml`: a job, `compcert-bsd`, and its header's first lines. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`, `docs/compcert-licensing.md`, `.github/workflows/README.md`. No library, test or tool file. |
 | **Category**   | Item 9b's last step, BSD, its second part: CompCert at `x86_64-bsd`, in the image whose baseline VERIFY-133 ran; that record's "What follows". |
@@ -47608,3 +47609,56 @@ N1 to N6 scored, and the record closes. If every test passes, the next
 record holds the outcome as a pin and goes on to `x86_32-bsd`; if a step
 fails, the next record answers it. This is the first record of CompCert
 at `x86_64-bsd`: after three without its pin, the author is asked.
+
+### Scored (2026-11-27)
+
+The push of f8e3a9d, 8382aa1 and b2fab66 started seven workflows, `1` to
+`6` and `8`, each green at its first attempt; `compcert (x86_64-bsd)`
+failed after 9 minutes at its prerequisites, which `3` #118's green does
+not show. `6` #118 the last, in 90 minutes.
+
+| # | scored |
+|---|--------|
+| N1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| N2 | **MATCH.** "Cache restored from key: freebsd-15.1-cloudinit-ufs-e4ca4db8…a2ed9e1f", 634 MB; "FreeBSD-15.1-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2.xz: OK", and the mirror's line giving the pin; "ready after 240 s", the seed's packages in; "cc: x86_64-unknown-freebsd15.1"; "opam 2.6.1". |
+| N3 | **MISS.** The switch built OCaml 4.14.2 in FreeBSD, in 2 minutes; the plan, twenty packages: Coq 9.1.1, with Rocq 9.1.1's `rocq-runtime` and `rocq-core`, `rocq-stdlib` 9.0.0, Flocq 4.2.2, Menhir and MenhirLib 20260209, dune 3.23.1, ocamlfind 1.9.8 and zarith 1.14; the three `conf-` packages, ocamlfind, zarith, dune and Menhir installed; then "[ERROR] The compilation of rocq-runtime.9.1.1 failed at "dune build -p rocq-runtime -j 3 --promote-install-files=false @install".", dune's "Error: I need bash to interpret (bash ...) actions but I couldn't find it :(", at Rocq's `dune`, its lines 35 to 39. opam's exit, 31; nothing saved. |
+| N4 | **MISS.** Not reached; no notice. |
+| N5 | **MISS.** Not reached; no notice. |
+| N6 | **MATCH.** The other 139 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly. |
+
+Three of six. Not predicted, and as they fell: FreeBSD 15.1-RELEASE-p7
+again, its Clang 19.1.7; 4 CPUs and 8 GB, as FreeBSD counts them; GNU
+Make 4.4.1, GMP 6.3.0; Coq 9.1.1 in opam's plan, where Cygwin's switch
+had 8.16.1.
+
+### What run 1 found
+
+dune runs a `(bash ...)` action with the bash it finds on the PATH, and
+stops where there is none, as its message says. FreeBSD's base system
+has `sh` and no bash; neither the seed nor `ocaml-opam`'s dependencies,
+curl, gmake, git and rsync, bring one. Rocq 9.1.1's top `dune` installs a
+file, `revision`, with `rocq-runtime`, and makes it by such an action,
+`dev/tools/make_git_revision.sh` run by bash, in fallback mode: only
+where the source has no `revision`, and opam's archive has none, the
+rule having run. The script prints a git revision in a git checkout, and
+nothing anywhere else (Rocq's tag V9.1.1, read here). Rocq's other
+`(bash ...)` actions, and rocq-stdlib 9.0.0's, are in documentation, test
+suites and development shims, none of them installed; rocq-stdlib
+builds with `rocq makefile` under GNU make. Linux's, macOS's and
+Cygwin's runners have bash, so that no CompCert job met this before.
+
+**Closed.** Run 1 boots FreeBSD with the seed's packages, builds OCaml
+4.14.2 and the first of CompCert's prerequisites in FreeBSD, and stops at
+Rocq, for want of bash. The close changes nothing but this record;
+VERIFY-135 answers it.
+
+What it shows:
+
+- **A shell is a prerequisite that no package names.** Neither opam's
+  packages nor CompCert's configure ask for bash: a rule in Rocq's `dune`
+  does, and FreeBSD is the first system here without it.
+- **The run's first half held as read.** The cache another workflow
+  saved came back, the image matched both pins, nuageinit installed the
+  seed's packages, FreeBSD's opam was 2.6.1 and built with gmake, and
+  zarith found GMP through pkgconf: what N2 and the start of N3 rested
+  on, none of it run here before.
