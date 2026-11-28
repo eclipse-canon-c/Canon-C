@@ -48435,3 +48435,190 @@ What it shows:
 - **The BSD step took seven records**, VERIFY-133 to VERIFY-139: a
   baseline; three runs of `x86_64-bsd`, to its every test; its pin, with
   `x86_32-bsd`'s baseline; one run of `x86_32-bsd`; and its pin.
+
+---
+
+## VERIFY-140: Pre-registration — core/primitives/limits.h Split into types.h, sizes.h and ptr.h, and Removed
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-140 |
+| **Date**       | 2026-11-28 |
+| **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Baseline**   | ace0ec7 (VERIFY-139's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #123, `2` #158 and `8` #182, at ace0ec7, all green. For the workflows that did not run there, each one's last run, green: `7` #36, `11` #15, `14` #28 and `15` #7, at fd36206; `9` #40 at fd36206, and #36 at e9f39de for the four probes #40 skipped (`g4`, `g13`, `char`, `evaerror`); `12` #9 at 5ba6712; `13` #17 and `16` #3 at a7b4d87, the last to run all 27 units (#18 and #4, at fd36206, ran three, as #17 and #3 had them); `17` #9 at f109c1e. By their own filters, nothing they read has changed since. |
+| **Scope**      | `core/primitives/limits.h`, split and removed: `core/primitives/types.h`, `core/primitives/ptr.h`, and `core/primitives/sizes.h`, new. The other 14 headers, three tests and two coverage drivers that included it; `test/core/primitives/limits_test.c`, renamed `sizes_test.c`; `CMakeLists.txt`. The pins and tools that name either: `tools/misra/pins.txt`, `tools/size/pins.txt`, `tools/msp430/` (its pins, script and README), `tools/tier_check.sh`, `tools/idioms/catalogue.json`. Comments in `.github/workflows/analysis.yml`. The documents that name them. Here: MCDC-003's and MISRA-TOOL-001's sites, the Overview's list of files renamed or removed, and bracketed notes in the closed records beside each mention of `limits.h`. No check of a test, no proof, and no count of a pin changes. |
+| **Category**   | Item 20 of the to-do list, as the author chose on 2026-11-28: the first of three records. VERIFY-141 takes `checked.h` to Tier 0, measured at 16 bits; VERIFY-142 renames `util/time.h` and adds a check of the headers' names. |
+
+### What was decided
+
+A header whose file name is a C library header's stands for that header
+under a `-I` of its directory. `core/primitives/limits.h` did, under the
+build's `-I core/primitives`: from any file of a translation unit,
+`#include <limits.h>` was Canon-C's, and the C library's was never read.
+Its own comment recorded the trap, and kept every Canon-C header off the
+system `<limits.h>`'s names; VERIFY-114, VERIFY-115 and VERIFY-131 met
+it under CompCert, whose jobs put `core/primitives` on the quote path
+for it. Asked to think long term about the names, the author chose on
+2026-11-28, of the options put:
+
+- **Split it**: the integer type limits and the platform information
+  into `types.h`, where the types are; the pointer-tagging constants into
+  `ptr.h`; the size literals, alignments, capacity limits, small-buffer
+  thresholds and growth factor, all Tier 1, into a new
+  `core/primitives/sizes.h`. `limits.h` is removed, with no header in its
+  place.
+- `util/time.h`, which stands for `<time.h>` under `-I util` (VERIFY-110),
+  renamed `util/stopwatch.h`;
+- and a check in CI that fails when a header's file name is a C23 or
+  POSIX header's, with a list of the clashes known, which may only shrink.
+
+This record is the split; VERIFY-142 the rest. Then, asked whether the
+closed records' mentions of `limits.h` keep their text, with one note in
+this file's Overview, or each get a note of their own, the author chose
+on 2026-11-28 that each does: the first time a closed record's text is
+changed, its findings, predictions and scores aside.
+
+### What changes
+
+- **`types.h`**, at its end: the integer type limits (`CANON_U8_MAX` …
+  `CANON_I64_MAX`), the size type limits (`CANON_USIZE_MAX`,
+  `CANON_ISIZE_MAX`, `CANON_ISIZE_MIN`) and the platform information
+  (`CANON_POINTER_SIZE`, `CANON_BITS_PER_BYTE`, `CANON_POINTER_BITS`),
+  defined as `limits.h` defined them, under Tier 0's headings, their
+  comments true at 16 bits. Its comments that named `limits.h`, in place,
+  line for line: its `#error` stays at line 102 (MISRA-TOOL-001's site).
+- **`ptr.h`**, at its end: the pointer-tagging constants
+  (`CANON_PTR_TAG_BITS`, `CANON_PTR_TAG_MASK`, `CANON_PTR_ADDR_MASK`), as
+  `limits.h` gave them. It includes `sizes.h` in `limits.h`'s place, and
+  its lines before them keep their numbers (Eva's pins name
+  `ptr.h:495`).
+- **`sizes.h`**, new, Tier 1: the rest of `limits.h`. From its `#error`
+  to `CANON_MIN_ALLOCATION`, `limits.h`'s lines byte for byte, the
+  message's among them: the tier checks find a refusal by its first
+  words, and cppcheck's rule 4.1 reads its line splices by their offsets
+  (MISRA-TOOL-001). Its docblock says what it holds, where the rest went,
+  and that `limits.h` is gone.
+- **`limits.h`**, removed. A program that includes it no longer compiles:
+  it includes `types.h` for the limits, `sizes.h` for the sizes, `ptr.h`
+  for the tags.
+- **Every file that included it** includes `sizes.h` in its place, on
+  the same line: 13 more headers; `checked.h`, whose limits are
+  `types.h`'s now, but which keeps its tier until it is run at 16 bits
+  (VERIFY-141); three tests; two coverage drivers. Each keeps every name
+  it had, and its tier; which of them need `sizes.h` at all is
+  VERIFY-141's question. Comments that named `limits.h` for a limit name
+  `types.h`, in place.
+- **`limits_test.c`** is `sizes_test.c`, its checks as they were; it
+  includes `ptr.h` too, for the tags, and `CMakeLists.txt`'s `sizes_test`
+  adds the root to its paths, for `ptr.h`'s own includes. Still 61 tests.
+- **The pins and tools**: misra's `core/primitives/limits.h 4.1 1` is
+  `sizes.h`'s; the size pins' row of `limits.h` is `sizes.h`'s, its
+  figures as they were, in its sorted place; MSP430's `limits_test
+  not-built` is `sizes_test`'s; `tools/tier_check.sh`'s Tier 1 list
+  names `sizes.h`; so does the idioms catalogue's closure.
+- **The documents**: the README's tiers, CHEATSHEET, SECURITY, and
+  CONTRIBUTING, whose section on the shadow is its history now, the
+  rules it gave kept; `docs/architectures.md`, `implementation-defined.md`,
+  `code-size.md` (the row), `traceability.md`, `verification.md`,
+  `vmacros.md` and `tools/msp430/README.md`; in this file, MCDC-003's
+  constant and MISRA-TOOL-001's site, `sizes.h:112`; the comments of the
+  `compcert` and `compcert-cygwin` jobs that told of the trap, in the
+  past. The `-iquote` of the CompCert jobs, and `compcert-cygwin`'s
+  header, which avoids `<limits.h>`, stay: whether they are still needed
+  is not measured.
+- **Every mention of `limits.h` that stays says what became of it**: in
+  the comments of `types.h`, `ptr.h`, `sizes.h`, the two tests and the
+  coverage driver that tell of the shadow, in the workflow's comments and
+  in the documents, each says that VERIFY-140 split it into `types.h`,
+  `sizes.h` and `ptr.h` and removed it. This file's Overview gains a
+  list of the files renamed or removed since the records that name them,
+  `limits.h` and `limits_test.c` its first entry. In the closed records,
+  34 notes in square brackets, each in its line: beside each of the 29
+  mentions of the library's `limits.h`, where the part it speaks of went
+  ("[`sizes.h` since VERIFY-140]", "[in `ptr.h` since VERIFY-140]",
+  "[split by VERIFY-140]"), and after each of the six statements that
+  `<limits.h>` was the library's ("[until VERIFY-140 split `limits.h`]");
+  one note serves a mention and a statement in one sentence. GCC's own
+  `limits.h`, named six times in VERIFY-131, and the C library's
+  `<limits.h>`, where a record speaks of it, keep their text. No line is
+  added or removed in a closed record.
+
+### Measured here
+
+- **Every translation unit, preprocessed in both trees, gives the same
+  code**: each public header alone, the five hashmap headers after their
+  setup, and every `.c` file of `test/`, `vmacros/coverage/` and
+  `tools/eva/programs/`, 186 units, each with the embedded job's paths
+  (`-I util` among them), with and without `CANON_NO_GNU_EXTENSIONS`, by
+  GCC 13 and 14, Clang 18, GCC at `-m32`, `arm-none-eabi-gcc` (newlib at
+  Cortex-M0+, picolibc at Cortex-M4), `riscv64-unknown-elf-gcc`
+  (picolibc at RV32IMAC) and `avr-gcc`; and by GCC with
+  `CANON_NO_REQUIRE` and `NDEBUG`. `gcc -E -P`'s output is the same for
+  every unit but `sizes_test.c`, which is `limits_test.c`'s with
+  `checked.h`'s and `ptr.h`'s declarations and its `__LINE__`s two
+  further down; `limits.h` alone gives `sizes.h`'s. No system header of
+  these toolchains reached `limits.h`, then.
+- **Frama-C 25 (Ubuntu's), `-print`, in both trees**: each `frama-c-*`
+  job's unit, as `tools/idioms/extract.py` reads the 28 from the
+  workflows; the seven `-CC` drivers of `7`; the nine units
+  `tools/machdeps/check.sh` parses; and the 27 Eva programs, with
+  `eva.py`'s preprocessing. The same code and annotations for each, and
+  the same messages; Eva's `diag` aside, whose `__FILE__`, an absolute
+  path, is each tree's own. `frama-c-priority-queue` stops at an
+  annotation Frama-C 25 does not read, in both trees, as before. Frama-C
+  25's libc includes its `limits.h` with quotes, beside it.
+- **The builds**: CMake at Debug with GCC and at Release with Clang, 61
+  tests each, all passed; `sizes_test`: "95 passed, 0 failed", as
+  `limits_test`; its functions `limits_test`'s, by `nm`, at Debug and
+  with the coverage job's flags. `sizes_test.c` compiled under the
+  warning flags at `-O0`, `-Os` and `-O2` for the embedded job's six
+  targets, and by GCC at `-m32` and GCC 14.
+- **MISRA**, the misra job's command, with Ubuntu's cppcheck 2.13.0, the
+  runner's: 60 findings in each tree, the same but one, the 4.1 at
+  `core/primitives/limits.h:183`, at `core/primitives/sizes.h:112` now;
+  `misra.py report` against the pins: "as pinned: 57 real finding(s) in
+  32 file and rule pair(s)".
+- **The static-analysis job's cppcheck step** (2.13.0) over `test/`: no
+  finding. clang-tidy with the project's checks, over `sizes_test.c` and
+  four tests beside it: none; its CERT checks over `sizes_test.c`: "0
+  finding(s) in the library's code".
+- **The tier check at AVR** (`tools/avr_tier_check.sh`): the same output
+  in both trees but the Tier 1 line, which names `sizes.h`; "80 headers:
+  29 compile, 49 refused by Tier 1, 2 other; 0 check(s) failed". `dspic`'s
+  log at #158 lists AVR's 29 as compiling, and its two others: XC-DSC's
+  headers reached no `limits.h` either.
+- **The rest of `2`'s tools, in the new tree**: `size.py run` (Ubuntu's
+  cross compilers, the runner's): "as pinned: 57 rows, 798 figures", and
+  "418582 tokens"; `size.py table` gives `docs/code-size.md`'s rows.
+  `metrics.py run`: #158's three notices. `finite_math_check.py`: #158's
+  two. `tools/readme/examples.py`: `17` #9's notice.
+- **After the notes, measured again**: the 186 units at every toolchain
+  above, the 41 Frama-C units and 30 programs, and MISRA's findings, as
+  before them; `record_coverage.py` passes, strict and complete.
+- **`8`'s checks**, all thirteen: "0 problem(s)". `which_workflows.py`: 1
+  to 9 and 11 to 17.
+- **The idioms catalogue**, rebuilt in both trees: the same features and
+  units; the closure names `sizes.h` for `limits.h`. The committed
+  catalogue was behind the workflows before this change, without
+  `frama-c-hashmap` and `frama-c-compare-order`, their five files and
+  two ACSL built-ins; this change leaves that so.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| T1 | **1 to 9 and 11 to 17 run**, 9's closed experiments, and no other: not `10`, not 9's manual probes. | another set | H |
+| T2 | **The builds, the platforms, the analysis and the records hold**: every job of `1`, `2`, `3`, `8` and `17` green, and every notice as #123, #158, #182 and `17` #9 printed it, word for word, the times aside, and `embedded`'s report of them wholly. Among them misra's "real 57; canary 3; total 60" and "as pinned: 57 real finding(s) in 32 file and rule pair(s)", the tier checks' "80 headers" at AVR and dsPIC, "as pinned: 57 rows, 798 figures", and each platform's and compiler's 61 tests; and in misra's log, its 4.1 at `core/primitives/sizes.h:112` and none at `limits.h`. | another notice, a failure, or the 4.1 elsewhere | H: every unit preprocessed the same here, at every toolchain here. MSVC's, Apple's, Cygwin's, FreeBSD's, MSP430's, ARC's, Renesas's, XC-DSC's and CompCert's preprocessing is not measured here |
+| T3 | **The proofs hold**: every job of `4`, `5`, `6`, `7`, `9`, `11`, `12`, `14` and `15` green, and every notice as their last runs printed it, word for word, the times aside: #123 for `4` to `6`; for `7`, `11`, `14` and `15`, #36, #15, #28 and #7; `12` #9; `9` #40, and #36 for `g4`, `g13`, `char` and `evaerror`. | another notice, or a failure | H: Frama-C 25 prints each unit and program the same in both trees; CI's is Frama-C 29 |
+| T4 | **13 and 16 at all 27 units, as #17 and #3**: "27 unit(s)", the units in #17's order; every job green, and every notice as #17's and #3's, word for word, the times aside, and the goals over CVC5's 30 s, which go with them; 13's total "27 of 27 units: 77138 goals", "76456 / 77138" proved with Terminating and Unreachable. | another notice, or a failure | M–H: as T3; but the 27 have not run together since #17 and #3, and `frama-c-priority-queue`'s goals over 30 s differed between #17 and #18 |
+
+**Not predicted**: the times; which goals CVC5 takes over 30 s.
+
+### What follows
+
+T1 to T4 scored, and the record closes. If they hold, VERIFY-141 takes
+`checked.h` to Tier 0: its include of `sizes.h` dropped, and it and the
+headers that then need no Tier 1 header measured at 16 bits (MSP430, AVR,
+dsPIC); the tests of the type limits moved to `types_test.c`. Then
+VERIFY-142: `util/time.h` renamed `util/stopwatch.h`, and the check of
+the headers' names, with its list of known clashes.
