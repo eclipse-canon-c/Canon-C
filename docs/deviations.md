@@ -48349,6 +48349,7 @@ What it shows:
 | **ID**         | VERIFY-139 |
 | **Date**       | 2026-11-27 |
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-28 — Scored: S1 to S3 MATCH. CLOSED: three of three ("Scored", below). `compcert (x86_32-bsd)` held its pin, 61 of 61, CompCert from its own cache in a FreeBSD with no package added; item 9b is done. The Status above is the record as committed. |
 | **Baseline**   | 1e93fb9 (VERIFY-138's change; its close, a record, is pushed with this): `1`, `3`, `4`, `5` and `6` #122, `2` #157 and `8` #181, at 1e93fb9; `compcert-bsd` green at both targets, 61 of 61 at each. |
 | **Scope**      | `.github/workflows/analysis.yml`'s `compcert-bsd`: `x86_32-bsd`'s pin, set and held; the job's comment. `docs/architectures.md`, `docs/verification.md`, `docs/status.md`. No library, test or tool file. |
 | **Category**   | VERIFY-138's "What follows": the outcome held as a pin, as VERIFY-137 held `x86_64-bsd`'s; the last step of item 9b. |
@@ -48402,3 +48403,35 @@ S1 to S3 scored, and the record closes. If `compcert-bsd` holds at both
 targets, item 9b is done: CompCert at each target it names, bare-metal
 Arm, `ppc-eabi`, `armeb`, macOS, Cygwin and BSD, held to its outcome. If
 not, the next record answers it.
+
+### Scored (2026-11-28)
+
+The push of 5b4d085, 14c57f8 and ace0ec7 started seven workflows, `1` to
+`6` and `8`, each green at its first attempt: `3` #123 in 7 minutes,
+`compcert (x86_32-bsd)` among its jobs in 5; `6` #123 the last, in 78.
+
+| # | scored |
+|---|--------|
+| S1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
+| S2 | **MATCH.** "compcert x86_32-bsd: 61 / 61 compiled, 61 ran; as pinned", the job green; "Cache restored from key: compcert-3.17-x86_32-bsd-freebsd-15.1-build-v1" and "unpacked cc-compcert.tar"; the user-data asking for no package; the restore of opam's root, the install and the build skipped; "compcert x86_32-bsd without the header: 0 / 61 compiled; first errors: /usr/include/stdio.h:135 in 61". |
+| S3 | **MATCH.** The other 142 jobs green, `compcert (x86_64-bsd)` "as pinned" among them, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them, now "1.3 s in all, the slowest 0.04 s (algo/any_all/any_all.h)", set aside whole. |
+
+Three of three. Not predicted, and as they fell: "ready after 60 s" at
+`x86_32-bsd`, with no package to install, and 75 at `x86_64-bsd`;
+FreeBSD 15.1-RELEASE-p7 at both, as before.
+
+**Closed.** CompCert 3.17 at `x86_32-bsd` holds its pin in FreeBSD, 61 of
+61, from its own cache, as `x86_64-bsd` holds its own. Item 9b is done:
+CompCert at each target it names, bare-metal Arm, `ppc-eabi`, `armeb`,
+macOS, Cygwin and BSD, held to its outcome. The close changes nothing but
+this record.
+
+What it shows:
+
+- **A cached ccomp at 32 bits runs in a FreeBSD with no packages, as at
+  64.** Built in one boot of the image on opam's root from another, it
+  ran in a third with the base system alone, the 32-bit libraries among
+  it.
+- **The BSD step took seven records**, VERIFY-133 to VERIFY-139: a
+  baseline; three runs of `x86_64-bsd`, to its every test; its pin, with
+  `x86_32-bsd`'s baseline; one run of `x86_32-bsd`; and its pin.
