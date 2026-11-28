@@ -62,7 +62,7 @@
 #define CANON_CONTRACT_IMPL
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
+#include "core/primitives/sizes.h"
 #include "core/primitives/compare.h"
 #include "core/slice.h"
 #include "semantics/option/option.h"

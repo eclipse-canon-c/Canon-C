@@ -913,7 +913,7 @@ jobs:
         #      both functions. Both subconditions are structurally
         #      unreachable under the arena_invariant predicate:
         #        - arena_invariant requires capacity <= CANON_ARENA_MAX_SIZE
-        #        - CANON_ARENA_MAX_SIZE = CANON_GB = 2^30 (limits.h)
+        #        - CANON_ARENA_MAX_SIZE = CANON_GB = 2^30 (sizes.h)
         #        - pad <= CANON_DEFAULT_ALIGN - 1 <= 15
         #        - therefore offset + pad <= 2^30 + 15, well below
         #          CANON_USIZE_MAX on both 32-bit and 64-bit platforms,
@@ -2111,10 +2111,11 @@ jobs:
           #
           # core/primitives is on the quote path only (-iquote, VERIFY-115):
           # the bare primitives are included with quotes, and with -I its
-          # limits.h would stand for the system's <limits.h>, which
-          # picolibc's <stdint.h> includes where __GNUC__ is undefined, as
-          # under ccomp (the trap core/primitives/limits.h records). With
-          # glibc the tests' preprocessed code is the same either way.
+          # limits.h stood for the system's <limits.h>, which picolibc's
+          # <stdint.h> includes where __GNUC__ is undefined, as under ccomp.
+          # VERIFY-140 split that header into types.h, sizes.h and ptr.h
+          # and removed it; the quote path stays. With glibc the tests'
+          # preprocessed code is the same either way.
           CCOMP_FLAGS=(
             -fall
             -DCANON_NO_GNU_EXTENSIONS
@@ -3538,11 +3539,12 @@ jobs:
   #   whole, with newlib's __GNUC_PREREQ true for it alone, so that it
   #   takes GCC's own __LONG_MAX__ and the rest and reads no <limits.h>:
   #   GCC's, through its syslimits.h, whose #include_next GCC resumes at
-  #   the quote path, reaches the library's core/primitives/limits.h,
-  #   which comes back to <stdint.h> half read (VERIFY-130's run: no test
-  #   compiled; VERIFY-131); then newlib's <sys/cdefs.h>; then __func__
-  #   undefined, which newlib defines as NULL where __GNUC__ is not
-  #   defined, as ccomp's preprocessing leaves it. That is compcert-ppc's
+  #   the quote path, reached the library's core/primitives/limits.h, and
+  #   so <stdint.h> again, half read (VERIFY-130's run: no test compiled;
+  #   VERIFY-131), until VERIFY-140 split that header into types.h,
+  #   sizes.h and ptr.h and removed it; then newlib's <sys/cdefs.h>; then
+  #   __func__ undefined, which newlib defines as NULL where __GNUC__ is
+  #   not defined, as ccomp's preprocessing leaves it. That is compcert-ppc's
   #   recipe (VERIFY-120), with the feature macro first: newlib fixes what
   #   it declares at its first header, here the header's, so that a file's
   #   own _POSIX_C_SOURCE would come too late (the author's choice of

@@ -13,7 +13,7 @@
 #   has a flag for it (XC-DSC's -fno-short-double); without, in a scratch
 #   copy with only that one check removed (avr-gcc 7 has none):
 #   - the README's Tier 0 headers must compile;
-#   - the Tier 1 headers must be refused by limits.h's Tier 1 #error.
+#   - the Tier 1 headers must be refused by sizes.h's Tier 1 #error.
 #   The classification of every public header is printed.
 # Compile only. Nothing is linked or run.
 #
@@ -41,7 +41,7 @@ FAILS=0
 
 TIER0=(core/primitives/types.h core/primitives/bits.h core/primitives/compare.h
        core/scope.h core/primitives/contract.h)
-TIER1=(core/primitives/limits.h core/primitives/checked.h core/primitives/ptr.h
+TIER1=(core/primitives/sizes.h core/primitives/checked.h core/primitives/ptr.h
        core/memory.h core/arena.h core/pool.h core/region.h data/stringbuf.h)
 
 compile() {  # dir header [flag...] -> sets $OUT/err; returns the compiler's status

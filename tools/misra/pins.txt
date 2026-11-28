@@ -10,7 +10,7 @@ algo/reverse/reverse_impl.h   10.3         2  MISRA-TOOL-003
 algo/search/search_impl.h     8.7          2  MISRA-TOOL-007
 core/memory.h                 21.16        2  MISRA-DEV-024
 core/primitives/contract.h    21.8         1  MISRA-DEV-025
-core/primitives/limits.h      4.1          1  MISRA-TOOL-001
+core/primitives/sizes.h       4.1          1  MISRA-TOOL-001
 core/primitives/types.h       4.1          1  MISRA-TOOL-001
 core/region.h                 11.4         1  MISRA-DEV-023
 core/region.h                 11.9         1  MISRA-TOOL-002

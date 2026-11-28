@@ -81,7 +81,7 @@
  * NOT-FOUND SENTINEL
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * algo_find_index_slice_##type returns CANON_USIZE_MAX (from limits.h)
+ * algo_find_index_slice_##type returns CANON_USIZE_MAX (from types.h)
  * when no element matches. This is the maximum value of usize — it is
  * never a valid index into any array that fits in memory.
  *
@@ -139,7 +139,7 @@
  * @sa find_defn.h    — definition for separate compilation
  * @sa find_impl.h    — pure logic (do not include directly)
  * @sa core/primitives/compare.h  — algo_pred_fn definition
- * @sa core/primitives/limits.h   — CANON_USIZE_MAX
+ * @sa core/primitives/types.h    — CANON_USIZE_MAX
  * @sa semantics/option/option.h  — option_##type returned by slice variant
  */
 
@@ -147,7 +147,7 @@
 #define CANON_ALGO_FIND_H
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
+#include "core/primitives/sizes.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/compare.h"
 #include "core/primitives/ptr.h"

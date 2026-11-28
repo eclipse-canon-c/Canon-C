@@ -735,7 +735,7 @@ static inline Error diag_latest_code(const Diag *d)
  * printf has. Where size_t is wider it is %llu, with a cast to unsigned
  * long long: C99's long long, which newlib-nano's printf has not. Either
  * cast keeps the value. SIZE_MAX is read under defined(), as
- * core/primitives/limits.h reads it, for the static analyzers that do
+ * core/primitives/sizes.h reads it, for the static analyzers that do
  * not read system headers. DIAG_FRAME_FMT_ is a frame's line, which
  * diag_print, diag_render_frame and diag_render share. */
 #if defined(SIZE_MAX) && (SIZE_MAX > 0xFFFFFFFF)

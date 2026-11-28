@@ -17,7 +17,7 @@
 #define CANON_CORE_POOL_H
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
+#include "core/primitives/sizes.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/checked.h"   /* checked_mul */
 #include "core/primitives/ptr.h"

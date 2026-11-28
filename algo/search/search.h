@@ -153,14 +153,14 @@
  * @sa search_impl.h   — pure logic (do not include directly)
  * @sa core/slice.h    — slice_##type used by DEFINE_ALGO_SEARCH
  * @sa core/primitives/compare.h — algo_cmp_fn definition
- * @sa core/primitives/limits.h  — CANON_USIZE_MAX sentinel value
+ * @sa core/primitives/types.h   — CANON_USIZE_MAX sentinel value
  */
 
 #ifndef CANON_ALGO_SEARCH_H
 #define CANON_ALGO_SEARCH_H
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
+#include "core/primitives/sizes.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/compare.h"
 #include "core/primitives/ptr.h"

@@ -59,7 +59,7 @@
  * search_impl.h includes only:
  *   - search_mangle.h
  *   - core/primitives/types.h
- *   - core/primitives/limits.h   (for CANON_USIZE_MAX)
+ *   - core/primitives/sizes.h    (Tier 1; CANON_USIZE_MAX is types.h's)
  *   - core/primitives/contract.h
  *   - core/primitives/compare.h
  *   - core/primitives/ptr.h
@@ -81,7 +81,7 @@
 #include "search_mangle.h"
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
+#include "core/primitives/sizes.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/compare.h"
 #include "core/primitives/ptr.h"

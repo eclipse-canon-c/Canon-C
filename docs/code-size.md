@@ -116,8 +116,8 @@ turn it off with `CANON_NO_REQUIRE`.
 | `core/primitives/compare.h` | 24 | 752 | 690 | 752 | 690 | 856 | 1,295 |
 | `core/primitives/contract.h` | 2 | 192 | 196 | 246 | 196 | 212 | 309 |
 | `core/primitives/lifetime.h` | 0 | 0 | 0 | 0 | 0 | 0 | 106 |
-| `core/primitives/limits.h` | 0 | 0 | 0 | 0 | 0 | 0 | 90 |
 | `core/primitives/ptr.h` | 21 | 992 | 948 | 1,282 | 218 | 1,204 | 4,069 |
+| `core/primitives/sizes.h` | 0 | 0 | 0 | 0 | 0 | 0 | 90 |
 | `core/primitives/types.h` | 0 | 0 | 0 | 0 | 0 | 0 | 90 |
 | `core/region.h` | 12 | 780 | 758 | 1,082 | 162 | 802 | 10,278 |
 | `core/scope.h` | 0 | 0 | 0 | 0 | 0 | 0 | 4 |

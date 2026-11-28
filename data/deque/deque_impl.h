@@ -17,7 +17,7 @@
 #define CANON_DATA_DEQUE_IMPL_H
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"      /* CANON_DEQUE_MAX_CAPACITY fallback: CANON_VEC_MAX_CAPACITY */
+#include "core/primitives/sizes.h"       /* CANON_DEQUE_MAX_CAPACITY fallback: CANON_VEC_MAX_CAPACITY */
 #include "core/primitives/contract.h"    /* require_msg, ensure_msg */
 #include "core/ownership.h"              /* borrowed() */
 #include "semantics/result/result.h"     /* CANON_RESULT */
@@ -102,7 +102,7 @@
 /**
  * @brief Maximum capacity for any deque instance
  *
- * Reuses CANON_VEC_MAX_CAPACITY from limits.h (both are 1GB by default).
+ * Reuses CANON_VEC_MAX_CAPACITY from sizes.h (both are 1GB by default).
  * Override by defining CANON_DEQUE_MAX_CAPACITY before including this file.
  *
  * Must be defined before any IMPL_DEQUE_INIT expansion.

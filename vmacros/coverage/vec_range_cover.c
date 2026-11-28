@@ -49,7 +49,7 @@
 #include "semantics/result/result.h"
 #include "data/vec/vec_defn.h"
 #include "data/vec/vec_range.h"
-#include "core/primitives/limits.h"
+#include "core/primitives/sizes.h"
 
 DEFINE_VEC_STRUCTS(int)
 DEFINE_VEC_RANGE(static inline, int)
@@ -69,7 +69,7 @@ static void observe(result__Bool_Error r)
 
 int main(void)
 {
-    /* int's bounds, computed: <limits.h> is shadowed on this include path. */
+    /* int's bounds, computed: <limits.h> was core/primitives/limits.h here, until VERIFY-140 split it into types.h, sizes.h and ptr.h. */
     const isize imax = (isize)(int)(~0u >> 1);
 
     int buf[8] = { 0 };

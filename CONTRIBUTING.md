@@ -56,7 +56,7 @@ requirement it introduces — at its origin, once.
 - Tier 0 (8-bit bytes, C99 exact-width types, a 4-byte `float` and an
   8-byte `double`) is enforced in `types.h`. Every header inherits it by
   inclusion.
-- Tier 1 (`size_t` >= 32 bits) is enforced in `limits.h`, beside the size
+- Tier 1 (`size_t` >= 32 bits) is enforced in `sizes.h`, beside the size
   literals that need it.
 - Tier 2 (hosted libc: working malloc, retargeted stdio, OS clocks —
   memory.h, data/convenience, file.h, log, parse.h, time.h) is enforced
@@ -66,7 +66,7 @@ requirement it introduces — at its origin, once.
   works). The linker enforces the rest.
 - CI checks the guards where they bite: `tools/avr_tier_check.sh` (job
   `embedded`) compiles the Tier 0 headers at AVR's 16-bit `size_t` and
-  expects every Tier 1 header refused by `limits.h`'s `#error`. A new
+  expects every Tier 1 header refused by `sizes.h`'s `#error`. A new
   Tier 1 header belongs in its `TIER1` list.
 - Never duplicate a guard downstream. Never centralize guards in a shared
   platform header. One requirement, one home, inherited by inclusion.
@@ -78,20 +78,24 @@ requirement it introduces — at its origin, once.
 - Tier guards are not overridable. Tuning constants use the
   `#ifndef CANON_*` override pattern; contracts do not.
 
-### The limits.h name shadow
+### `<limits.h>` and the former limits.h
 
-`core/primitives/limits.h` shadows the system `<limits.h>` under the
-build's `-I core/primitives` flag (angle includes search `-I` before
-system directories; MSVC `/I` likewise). Therefore:
+Until VERIFY-140, `core/primitives/limits.h` shadowed the system
+`<limits.h>` under the build's `-I core/primitives` flag (angle includes
+search `-I` before system directories; MSVC `/I` likewise). It was split,
+as the author chose: the integer type limits and the platform information
+into `types.h` (Tier 0), the size literals, alignments and capacity
+constants into `sizes.h` (Tier 1), and the pointer-tagging constants into
+`ptr.h`; `limits.h` is gone, with no header in its place. The rules it
+gave stand:
 
-- No Canon-C header, test, or doc example may use symbols only the system
+- No Canon-C header, test, or doc example uses symbols only the system
   `<limits.h>` provides: `CHAR_BIT`, `INT_MAX`, `INT_MIN`, `UCHAR_MAX`, etc.
 - All limits come from `<stdint.h>` (`INT32_MAX`, `SIZE_MAX`, ...), which
-  is sufficient and never shadowed.
+  suffices, or from `types.h`'s names for them (`CANON_U8_MAX` …
+  `CANON_ISIZE_MIN`).
 - `types.h` enforces 8-bit bytes by implication from `uint8_t`'s existence
-  (C99 7.18.1.1) for exactly this reason.
-- Renaming the file would remove the shadow but is a breaking include-path
-  change — recorded as a known constraint instead.
+  (C99 7.18.1.1), without `CHAR_BIT`.
 
 Re-audit (run from the repo root; both should return only comments and
 documentation):

@@ -20,8 +20,8 @@
 #include <stdint.h>                     /* uintptr_t */
 #include <stdlib.h>                     /* malloc, free */
 
-#include "core/primitives/types.h"      /* u8, usize, bool */
-#include "core/primitives/limits.h"     /* CANON_USIZE_MAX, CANON_DEFAULT_ALIGN */
+#include "core/primitives/types.h"      /* u8, usize, bool, CANON_USIZE_MAX */
+#include "core/primitives/sizes.h"      /* CANON_DEFAULT_ALIGN */
 #include "core/primitives/contract.h"   /* require_msg, ensure_msg */
 #include "core/primitives/checked.h"    /* checked_mul */
 #include "core/primitives/ptr.h"        /* align_up, ptr_is_aligned, is_power_of_two */

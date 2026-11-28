@@ -20,7 +20,7 @@ exit status to the host. Two memory models:
 The run prints the memory regions of the model's linker script, as the
 toolchain has it.
 
-A size_t below 32 bits is Tier 1's refusal (limits.h): a test that
+A size_t below 32 bits is Tier 1's refusal (sizes.h): a test that
 includes a Tier 1 header is not built, and those that build are the tests
 of the headers below it. Each model is built at the four build types of
 CMake: Debug (-O0), Release (-O3), RelWithDebInfo (-O2) and MinSizeRel

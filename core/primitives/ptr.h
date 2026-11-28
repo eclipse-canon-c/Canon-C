@@ -127,7 +127,7 @@
  *   caller may use
  *
  * @sa types.h
- * @sa limits.h
+ * @sa sizes.h
  * @sa contract.h
  * @sa checked.h
  */
@@ -138,13 +138,13 @@
 #include <stddef.h>          /* offsetof */
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
+#include "core/primitives/sizes.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/checked.h"
 
 /* Compile-time invariant: CANON_USIZE_MAX must equal SIZE_MAX.
  * Every overflow check in this file depends on CANON_USIZE_MAX being
- * the true maximum value representable in usize. If limits.h drifts,
+ * the true maximum value representable in usize. If types.h drifts,
  * catch it at compile time rather than at runtime. */
 /* cppcheck-suppress misra-c2012-2.3 ; MISRA-DEV-017 */
 static_require(CANON_USIZE_MAX == SIZE_MAX,
@@ -154,7 +154,7 @@ static_require(CANON_USIZE_MAX == SIZE_MAX,
  * Compiler Attributes
  *
  * PACKED        - removes all padding between struct members
- * CACHE_ALIGNED - aligns to cache line size (from limits.h)
+ * CACHE_ALIGNED - aligns to cache line size (from sizes.h)
  * ALIGNAS(n)    - aligns to exactly n bytes
  *
  * Disabled when CANON_NO_GNU_EXTENSIONS is defined (strict C99 mode).
@@ -1291,5 +1291,50 @@ static inline bool ptr_is_valid(const void* p) {
  */
 #define PTR_CONTAINER_OF(ptr, type, member) \
     ((type*)((u8*)(ptr) - PTR_OFFSET_OF(type, member)))
+
+/* ============================================================================
+ * Pointer Tagging Constants
+ *
+ * Until VERIFY-140 these were core/primitives/limits.h's. VERIFY-140
+ * split that header, its integer limits and platform information into
+ * types.h, its sizes into sizes.h and these here, and removed it.
+ * ========================================================================= */
+
+/**
+ * @brief Number of low-order bits available for pointer tagging.
+ *
+ * Aligned pointers have low bits that are always zero and can carry metadata.
+ * This value reflects minimum pointer alignment on each platform width.
+ *
+ * - 64-bit: 8-byte alignment → 3 tag bits
+ * - 32-bit: 4-byte alignment → 2 tag bits
+ * - other:  conservative 1 tag bit, as where there is no uintptr_t, which
+ *   C99 makes optional (7.18.1.4): UINTPTR_MAX is then not defined, and is
+ *   tested for first (MISRA C:2012 rule 20.9, VERIFY-068)
+ */
+#if defined(UINTPTR_MAX) && (UINTPTR_MAX == UINT64_MAX)
+#  define CANON_PTR_TAG_BITS 3
+#elif defined(UINTPTR_MAX) && (UINTPTR_MAX == UINT32_MAX)
+#  define CANON_PTR_TAG_BITS 2
+#else
+#  define CANON_PTR_TAG_BITS 1
+#endif
+
+/**
+ * @brief Mask for extracting the tag stored in the low bits of a pointer.
+ *
+ * Always typed as uintptr_t to match pointer arithmetic.
+ *
+ * Example:
+ * ```c
+ * usize      tag     = (uintptr_t)ptr & CANON_PTR_TAG_MASK;
+ * void      *untagged = (void*)((uintptr_t)ptr & CANON_PTR_ADDR_MASK);
+ * uintptr_t  tagged   = ((uintptr_t)untagged & CANON_PTR_ADDR_MASK) | tag;
+ * ```
+ */
+#define CANON_PTR_TAG_MASK  ((uintptr_t)((uintptr_t)1 << CANON_PTR_TAG_BITS) - (uintptr_t)1)
+
+/** @brief Mask for stripping tag bits and recovering the original address. */
+#define CANON_PTR_ADDR_MASK ((uintptr_t)(~CANON_PTR_TAG_MASK))
 
 #endif /* CANON_CORE_PRIMITIVES_PTR_H */

@@ -651,7 +651,7 @@ proof admits.
   `CANON_BITS_FORCE_FALLBACK` are set. An MSVC build takes checked.h's
   fallback, whose builtin test names only GCC and Clang, and bits.h's MSVC
   intrinsics.
-- **limits.h:** `CANON_DEFAULT_ALIGN` is 16, as in a C99 build, because
+- **sizes.h:** `CANON_DEFAULT_ALIGN` is 16, as in a C99 build, because
   Frama-C does not support `_Alignof`. A C11 or later build uses
   `_Alignof(max_align_t)`, which is 16 on x86_64 and need not be elsewhere.
 - **memory.h:** `mem_secure_zero`'s volatile loop. A build whose C library
@@ -672,7 +672,7 @@ proof admits.
 
 **The standard and the compiler.** Frama-C's preprocessor is GCC at its
 default standard, where the CMake builds are C99. Under Frama-C,
-`__STDC_VERSION__` is C11 or later (limits.h records it; Frama-C 25 with
+`__STDC_VERSION__` is C11 or later (sizes.h records it; Frama-C 25 with
 GCC 13, the runner's version, gives 201710L), and `__GNUC__` is defined. A
 branch on either that is not also gated on `__FRAMAC__` takes its C11 or
 its GCC arm under Frama-C. The C11 arms reached are compile-time only:
@@ -708,7 +708,7 @@ checks (CMake's `CANON_LIFETIME=debug`) are outside the proofs; the
 `CANON_NO_REGION_PARENT`, `CANON_RESULT_ANON_UNION`, and
 `CANON_NO_GNU_EXTENSIONS`, which the CompCert job sets, and two of
 `lifetime-token-concurrency`'s runs. Overridable bounds are proved at their
-defaults (in memory.h, region.h, deque_impl.h, diag.h and limits.h).
+defaults (in memory.h, region.h, deque_impl.h, diag.h and sizes.h).
 
 ### Generic code: the instantiations proved
 
@@ -786,7 +786,7 @@ What these proofs rest on, and what they do not show:
   and RV32 bare-metal compilers make it `long`: the same size and sign, so
   the same arithmetic, but not the same type compatibility (an `int32_t *`
   there is a `long *`), which the proofs do not see.
-- **The default alignment is a C99 build's.** Under `__FRAMAC__` limits.h
+- **The default alignment is a C99 build's.** Under `__FRAMAC__` sizes.h
   gives `CANON_DEFAULT_ALIGN` its C99 value, 16, at every model (see "What
   the preprocessor gives Frama-C"). A C11 or later build uses
   `_Alignof(max_align_t)`, which is 8 for Cortex-M4 and 32-bit Arm Linux
@@ -5727,8 +5727,8 @@ procedure.
 | bits.h       | ✅ Fully verified | 757/757   | 745 automatic, and the 12 documented residuals, all true (VERIFY-003, VERIFY-039 batch 6), proved in Coq as WP states them, at x86_64 and the nine machine models (VERIFY-061, `12 · Coq: bits.h`); 15 residuals before VERIFY-039 G15 closed three false postconditions |
 | compare.h    | ✅ Fully verified | 208/208   | 100% automatic, 0 timeouts         |
 | ptr.h        | ✅ Verified       | 1966/1972 | VERIFY-059's pin (+12, ptr.h's bounds checks' results, proved); before it VERIFY-058's 1954/1960, the full run with checked.h's goals: CI #1373's 1952/1958 and ptr_elem's and ptr_elem_const's two `in_object` calls, proved; 6 documented residuals, all true: checked.h's 2 and `align_up`'s and `align_down`'s formulas (VERIFY-039's fixed-width block), and `align_padding`'s formula and `ptr_align_padding`'s bound (VERIFY-008 Category 2); 16 before VERIFY-039 G14 and G16 closed the handler's pair, two calls and six pointer postconditions, none of which held for every admitted call; own baseline 1729/1739 with 10 (VERIFY-006), not re-measured after VERIFY-023 |
-| types.h      | N/A              |           | Type definitions only              |
-| limits.h     | N/A              |           | Constant definitions only          |
+| types.h      | N/A              |           | Type definitions and their limits  |
+| sizes.h      | N/A              |           | Constant definitions only          |
 | lifetime.h   | ✅ Verified at level 4 only | 4/4 | **Enforced at CI #1275** (VERIFY-021; name-identical #1271/#1273/#1274, pinned 4/4 with 0 unproved). Layout convention plus one `CANON_LIFETIME_DEBUG`-gated function, `canon_lifetime_next_id_`, the single token generator consolidated from eleven private copies at CI #1243–#1245 (5b45aeb → ca909c7). The former N/A disposition — "one function, excluded from every verified configuration" — was retired on 2026-09-02 not by weakening the argument but by satisfying it: rather than annotate an untranslated block, a configuration that TRANSLATES it was added (`frama-c-lifetime`, `CANON_LIFETIME_DEBUG` + `CANON_LIFETIME_NO_ATOMICS`, ladder level 4). **Levels 1–3 remain excluded permanently** — WP has no concurrency model for `atomic_fetch_add_explicit`, `__atomic_fetch_add` or `_InterlockedIncrement64` — and the contract is `#if`-gated on level 4 so it cannot acquire authority over them. Note the asymmetry: the verified path is the only one that is NOT race-free; verification followed the tool's reach, not the risk. Claim is `ensures \result != REGION_ID_STATIC` only. **No `assigns` clause: it cannot be written.** `counter_` is a function-local static and so is not in scope where a function contract is parsed; `assigns \nothing` would be FALSE (the historical defect, two of the eleven superseded copies) and hoisting the variable would verify a different program, so no frame is claimed and WP assumes `\everything` (VERIFY-021 F1, a specification-strength ceiling in the VERIFY-020 F4 family). Instrument integrity only — says nothing about whether callers obey the borrow discipline (issue #7). Zero inherited residuals (closure is `<stdbool.h>` + types.h), so nothing here bears on the composition result. Atomic-ladder deviation: MISRA-DEV-018; concurrency contract: docs/thread-safety.md. MCDC-013 (1/2 outcomes, one platform-dead justification row). Exercised through `lifetime_test.c`, `lifetime_token_test.c`, borrow_test.c and per-container tests. |
 | contract.h   | ✅ Annotated      |           | Handler contract used by ptr.h; since VERIFY-039 G14 it states `terminates \false;` and its loop carries no invariant, so no unit pins a handler goal |
 

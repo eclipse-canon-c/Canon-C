@@ -74,7 +74,7 @@
 #endif
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
+#include "core/primitives/sizes.h"
 #include "data/range.h"
 
 /* NOTE: CANON_OPTION(isize) is already called inside range.h — do not repeat */

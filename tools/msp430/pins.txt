@@ -13,7 +13,7 @@
 #
 # TEST                       MODELS  BUILDS  OUTCOME
 
-# Tier 1: limits.h's #error refuses a size_t below 32 bits, 16 bits at the
+# Tier 1: sizes.h's #error refuses a size_t below 32 bits, 16 bits at the
 # small model and 20 at the large; each of these includes a Tier 1 header.
 any_all_test               all     all     not-built
 arena_test                 all     all     not-built
@@ -34,7 +34,6 @@ hashmap_test               all     all     not-built
 header_combination_test    all     all     not-built
 impl_defined_test          all     all     not-built
 intern_test                all     all     not-built
-limits_test                all     all     not-built
 map_test                   all     all     not-built
 memory_test                all     all     not-built
 pool_test                  all     all     not-built
@@ -46,6 +45,7 @@ region_test                all     all     not-built
 reverse_test               all     all     not-built
 search_test                all     all     not-built
 separate_compilation_test  all     all     not-built
+sizes_test                 all     all     not-built
 smallvec_test              all     all     not-built
 sort_test                  all     all     not-built
 stack_test                 all     all     not-built

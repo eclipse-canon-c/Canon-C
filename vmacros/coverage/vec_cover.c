@@ -76,7 +76,7 @@
 #include "data/vec/vec.h"      /* facade: pulls vec_defn.h + slice.h + ptr.h */
 #include "core/slice.h"
 #include "core/arena.h"
-#include "core/primitives/limits.h"   /* CANON_VEC_MAX_CAPACITY, CANON_USIZE_MAX */
+#include "core/primitives/sizes.h"    /* CANON_VEC_MAX_CAPACITY; CANON_USIZE_MAX by types.h */
 
 CANON_OPTION(int)
 DEFINE_VEC(static inline, int)

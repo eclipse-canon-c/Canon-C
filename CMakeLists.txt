@@ -274,9 +274,9 @@ canon_c_test(
 )
 
 canon_c_test(
-    NAME     limits_test
-    SRC      test/core/primitives/limits_test.c
-    INCLUDES core/primitives
+    NAME     sizes_test
+    SRC      test/core/primitives/sizes_test.c
+    INCLUDES core/primitives .
 )
 
 canon_c_test(

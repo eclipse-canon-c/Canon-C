@@ -17,7 +17,7 @@
 #define CANON_DATA_RANGE_H
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
+#include "core/primitives/sizes.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/checked.h"
 #include "semantics/option/option.h"

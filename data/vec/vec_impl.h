@@ -17,7 +17,7 @@
 #define CANON_DATA_VEC_IMPL_H
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
+#include "core/primitives/sizes.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/checked.h"
 #include "core/memory.h"

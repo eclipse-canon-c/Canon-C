@@ -40,7 +40,7 @@
  *   isolate each subcondition independently. The pattern follows
  *   checked_test.c — see docs/deviations.md for the established convention.
  *
- *   All tests are C99-pure: no _Alignof (we follow limits.h's C99 fallback
+ *   All tests are C99-pure: no _Alignof (we follow sizes.h's C99 fallback
  *   constant of 16 for default alignment, asserting only the 8-byte floor
  *   that C99 §7.20.3 guarantees for malloc).
  *

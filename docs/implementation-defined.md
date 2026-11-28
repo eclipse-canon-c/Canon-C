@@ -62,7 +62,7 @@ optional (7.18.1.1). **Canon-C** uses `u8` to `i64` throughout. **Checked**:
 ### 2. `size_t` of at least 32 bits
 
 **C**: `SIZE_MAX` is at least 65535 (7.18.3). **Canon-C**'s size constants
-and capacity limits need 32 bits. **Checked**: `core/primitives/limits.h`
+and capacity limits need 32 bits. **Checked**: `core/primitives/sizes.h`
 refuses a smaller `size_t` (`#error`, Tier 1), and `2 · Platforms` checks
 the refusal with AVR's 16-bit `size_t` (`tools/avr_tier_check.sh`), and
 with dsPIC's (`dspic`, `tools/tier_check.sh`, VERIFY-107), enforced since
@@ -183,7 +183,7 @@ be given finite bounds. MSVC defines no such macro, and is not checked.
 **C**: where a quoted `#include` looks is implementation-defined (6.10.2p3,
 J.3.11). **Canon-C**'s headers include their siblings by name:
 `core/primitives/`'s headers include `"types.h"`, `checked.h` includes
-`"limits.h"`, and the generic modules include their own fragments
+`"sizes.h"`, and the generic modules include their own fragments
 (`_mangle.h`, `_impl.h`, `_decl.h`, `_defn.h`). Everything else is included
 from the root, as in `"core/arena.h"`, so the root must be on the include
 path (README, "Usage").
@@ -193,12 +193,13 @@ the same directory as the file that contains the #include statement", then
 in those of the files that included it, then along `/I`. **Checked**: every
 build.
 
-One consequence is worth knowing. The project's own builds also put
-`core/primitives/` on the include path, and there `<limits.h>` names
-Canon-C's `limits.h`, not the C library's: Canon-C's headers use no macro
-of the system's `<limits.h>` (`core/primitives/limits.h`, its header
-comment). A program that adds only the root, as the README says, is not
-affected.
+One consequence was worth knowing until VERIFY-140. The project's own
+builds also put `core/primitives/` on the include path, and there
+`<limits.h>` named Canon-C's `limits.h`, not the C library's; Canon-C's
+headers use no macro of the system's `<limits.h>` (CONTRIBUTING.md). That
+header was split into `types.h`, `sizes.h` and `ptr.h`, and no file of
+`core/primitives/` has a C library header's name now. A program that
+adds only the root, as the README says, was never affected.
 
 ### 9. `volatile` stores are kept
 

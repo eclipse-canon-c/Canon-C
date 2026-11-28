@@ -53,7 +53,7 @@
 #include "search_mangle.h"
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
+#include "core/primitives/sizes.h"
 #include "core/primitives/compare.h"
 #include "core/ownership.h"
 

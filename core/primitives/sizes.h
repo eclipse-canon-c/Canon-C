@@ -14,138 +14,62 @@
  **************************************************************************/
 
 /**
- * @file limits.h
- * @brief Common constants and limits for Canon-C
+ * @file sizes.h
+ * @brief Size literals, alignment, capacity and growth constants for Canon-C
  *
- * Provides numeric limits, alignment constants, capacity thresholds,
- * and platform-specific values. Centralizes magic numbers to improve
- * readability and maintainability.
+ * The constants that the allocators and the collections size themselves
+ * by: the size literals, the alignments, the capacity limits, the small
+ * buffer thresholds and the growth factor. Centralizes magic numbers to
+ * improve readability and maintainability.
+ *
+ * Until VERIFY-140 these were core/primitives/limits.h's, with the integer
+ * type limits, the platform information and the pointer-tagging constants.
+ * The limits and the platform information are types.h's now (Tier 0), and
+ * the tagging constants ptr.h's. limits.h, whose name under the build's
+ * -I core/primitives was the C library's <limits.h>, is gone.
  *
  * Design:
  * ────────────────────────────────────────────────────────────────────────────
  * - Explicit: named constants replace magic numbers
- * - Portable: integer type limits work on any Tier-0 target; the size
- *   literals and capacity constants (Tier 1) require size_t >= 32 bits,
- *   enforced at compile time below — see "Platform tiers"
  * - Overridable: define any CANON_* tuning constant before including to
- *   override (tuning constants only — the tier contracts are not
- *   overridable; see "Platform tiers")
+ *   override (tuning constants only — the tier contract is not
+ *   overridable; see "Platform tier")
  * - Zero overhead: all constants are compile-time, no code generated
  *
- * Platform tiers:
+ * Platform tier:
  * ────────────────────────────────────────────────────────────────────────────
- * This header spans two of Canon-C's platform tiers:
- *
- * - Integer Type Limits and Size Type Limits (top of file) are Tier 0 —
- *   their definitions are width-correct on any target satisfying the
- *   types.h platform contract. Note, however, that the Tier 1 #error
- *   below refuses inclusion of this FILE on sub-32-bit size_t targets;
- *   16-bit code takes the exact-width macros from <stdint.h> directly.
- *
- * - Size Literals and everything below them are Tier 1 — they require
- *   size_t >= 32 bits. On a 16-bit size_t target, CANON_MB and CANON_GB
- *   would wrap to 0 under well-defined unsigned arithmetic, silently
- *   zeroing every capacity constant derived from them (CANON_ARENA_MAX_SIZE,
- *   CANON_VEC_MAX_CAPACITY, ...) and rendering the allocator and
- *   collection layers unusable with no diagnostic. The #error guard below
- *   converts that silent breakage into a named compile-time refusal.
- *   The guard is deliberately not overridable — an escape hatch into
- *   silently-zero constants is a footgun, not a configuration.
+ * This header is Tier 1: it requires size_t >= 32 bits. On a 16-bit size_t
+ * target, CANON_MB and CANON_GB would wrap to 0 under well-defined unsigned
+ * arithmetic, silently zeroing every capacity constant derived from them
+ * (CANON_ARENA_MAX_SIZE, CANON_VEC_MAX_CAPACITY, ...) and rendering the
+ * allocator and collection layers unusable with no diagnostic. The #error
+ * guard below converts that silent breakage into a named compile-time
+ * refusal. The guard is deliberately not overridable — an escape hatch
+ * into silently-zero constants is a footgun, not a configuration.
  *
  * 16-bit size_t targets retain use of the Tier-0 subset: types.h, bits.h,
- * compare.h, scope.h, and contract.h. (checked.h is conceptually Tier 0
- * but currently rides Tier 1 because it includes this header for the
- * CANON_*SIZE_* aliases — to be revisited with the 16-bit trigger.) See
- * the README's bare-metal section for the tier model.
+ * compare.h, scope.h, and contract.h. (checked.h is conceptually Tier 0,
+ * its limits being types.h's, but it still includes this header and so
+ * rides Tier 1 until it is measured at 16 bits.) See the README's
+ * bare-metal section for the tier model.
  *
  * Override pattern (define BEFORE including this header):
  * ────────────────────────────────────────────────────────────────────────────
  *   #define CANON_PAGE_SIZE          16384   // Android 15+, some ARM64 servers
  *   #define CANON_CACHE_LINE         128     // Apple M-series L2+
  *   #define CANON_VEC_MAX_CAPACITY   (CANON_GB * 4)
- *   #include "core/primitives/limits.h"
+ *   #include "core/primitives/sizes.h"
  *
  * @sa types.h — Tier 0 platform contract (8-bit bytes, exact-width types)
+ *     and the integer type limits (CANON_U8_MAX .. CANON_ISIZE_MIN)
  */
 
-#ifndef CANON_CORE_PRIMITIVES_LIMITS_H
-#define CANON_CORE_PRIMITIVES_LIMITS_H
+#ifndef CANON_CORE_PRIMITIVES_SIZES_H
+#define CANON_CORE_PRIMITIVES_SIZES_H
 
 #include "types.h"
-/* WARNING — header-name shadowing: under the build's -I core/primitives
- * flag, `#include <limits.h>` from anywhere in a translation unit resolves
- * to THIS file, not the system header (angle-bracket includes search -I
- * directories before system directories; MSVC's /I behaves the same).
- * From inside this file the include would resolve to itself and become a
- * no-op via the include guard — the system <limits.h> is never reached.
- * Consequently NOTHING in this header (or in any header relying on this
- * one) may use system-<limits.h>-only symbols: CHAR_BIT, INT_MAX, UCHAR_MAX,
- * and friends are NOT available. Every limit used here comes from
- * <stdint.h> (UINT8_MAX .. INT64_MAX per C99 7.18.2, SIZE_MAX and
- * PTRDIFF_MAX/MIN per C99 7.18.3), which is not shadowed. types.h enforces
- * the 8-bit-byte requirement by implication from uint8_t's existence for
- * the same reason. The former `#include <limits.h>` line was removed as
- * inert; a rename of this file (e.g. canon_limits.h) would eliminate the
- * shadow entirely but is a breaking include-path change — recorded here
- * as a known trap instead. */
 #include <stddef.h>
 #include <stdint.h>
-
-/* ============================================================================
- * Integer Type Limits
- *
- * Tier 0 — definitions are width-correct on any target satisfying the
- * types.h platform contract (the Tier 1 guard below refuses inclusion of
- * this file on sub-32-bit size_t targets; see the docblock).
- * ========================================================================= */
-
-/** @brief Max value of u8  — 255 */
-#define CANON_U8_MAX   UINT8_MAX
-/** @brief Max value of u16 — 65,535 */
-#define CANON_U16_MAX  UINT16_MAX
-/** @brief Max value of u32 — 4,294,967,295 */
-#define CANON_U32_MAX  UINT32_MAX
-/** @brief Max value of u64 — 18,446,744,073,709,551,615 */
-#define CANON_U64_MAX  UINT64_MAX
-
-/** @brief Min value of i8  — -128 */
-#define CANON_I8_MIN   INT8_MIN
-/** @brief Max value of i8  — 127 */
-#define CANON_I8_MAX   INT8_MAX
-/** @brief Min value of i16 — -32,768 */
-#define CANON_I16_MIN  INT16_MIN
-/** @brief Max value of i16 — 32,767 */
-#define CANON_I16_MAX  INT16_MAX
-/** @brief Min value of i32 — -2,147,483,648 */
-#define CANON_I32_MIN  INT32_MIN
-/** @brief Max value of i32 — 2,147,483,647 */
-#define CANON_I32_MAX  INT32_MAX
-/** @brief Min value of i64 — -9,223,372,036,854,775,808 */
-#define CANON_I64_MIN  INT64_MIN
-/** @brief Max value of i64 — 9,223,372,036,854,775,807 */
-#define CANON_I64_MAX  INT64_MAX
-
-/* ============================================================================
- * Size Type Limits (Platform-Dependent)
- *
- * Tier 0 — these track the platform's own size_t / ptrdiff_t at any width.
- * ========================================================================= */
-
-/**
- * @brief Max value of usize — SIZE_MAX (2^32-1 or 2^64-1)
- *
- * Example — overflow guard:
- * ```c
- * if (size > CANON_USIZE_MAX - arena->offset) { return ERROR_OVERFLOW; }
- * ```
- */
-#define CANON_USIZE_MAX  SIZE_MAX
-
-/** @brief Max value of isize — PTRDIFF_MAX */
-#define CANON_ISIZE_MAX  PTRDIFF_MAX
-
-/** @brief Min value of isize — PTRDIFF_MIN */
-#define CANON_ISIZE_MIN  PTRDIFF_MIN
 
 /* ============================================================================
  * Platform contract (Tier 1) — size_t >= 32 bits
@@ -159,8 +83,9 @@
  * indication of why. This guard makes the boundary loud and names it.
  *
  * The requirement is enforced here — beside the constants that introduce
- * it — rather than in types.h, so that the Tier-0 portions of this header
- * and the freestanding primitives remain fully usable on 16-bit targets.
+ * it — rather than in types.h, so that types.h, with the integer type
+ * limits, and the freestanding primitives remain fully usable on 16-bit
+ * targets.
  *
  * This contract is NOT overridable. If a concrete 16-bit target ever
  * needs the capacity-managed layers, that is a recorded design decision
@@ -178,6 +103,10 @@
  * C99 7.18.3 makes SIZE_MAX MANDATORY in <stdint.h> — unlike the optional
  * exact-width types — so every conforming toolchain, including every
  * 16-bit one, defines it and the guard still fires exactly where it must.
+ *
+ * The message below is limits.h's, byte for byte (VERIFY-140): the tier
+ * checks find a refusal by its first words, and cppcheck's rule 4.1 reads
+ * its line splices by their offsets (MISRA-TOOL-001).
  * ========================================================================= */
 #if defined(SIZE_MAX) && (SIZE_MAX < 0xFFFFFFFF)
 #  error "Canon-C platform contract (Tier 1): the size literals and \
@@ -416,58 +345,4 @@ bare-metal section."
 #  define CANON_MIN_ALLOCATION ((usize)32)
 #endif
 
-/* ============================================================================
- * Pointer Tagging Constants
- * ========================================================================= */
-
-/**
- * @brief Number of low-order bits available for pointer tagging.
- *
- * Aligned pointers have low bits that are always zero and can carry metadata.
- * This value reflects minimum pointer alignment on each platform width.
- *
- * - 64-bit: 8-byte alignment → 3 tag bits
- * - 32-bit: 4-byte alignment → 2 tag bits
- * - other:  conservative 1 tag bit, as where there is no uintptr_t, which
- *   C99 makes optional (7.18.1.4): UINTPTR_MAX is then not defined, and is
- *   tested for first (MISRA C:2012 rule 20.9, VERIFY-068)
- */
-#if defined(UINTPTR_MAX) && (UINTPTR_MAX == UINT64_MAX)
-#  define CANON_PTR_TAG_BITS 3
-#elif defined(UINTPTR_MAX) && (UINTPTR_MAX == UINT32_MAX)
-#  define CANON_PTR_TAG_BITS 2
-#else
-#  define CANON_PTR_TAG_BITS 1
-#endif
-
-/**
- * @brief Mask for extracting the tag stored in the low bits of a pointer.
- *
- * Always typed as uintptr_t to match pointer arithmetic.
- *
- * Example:
- * ```c
- * usize      tag     = (uintptr_t)ptr & CANON_PTR_TAG_MASK;
- * void      *untagged = (void*)((uintptr_t)ptr & CANON_PTR_ADDR_MASK);
- * uintptr_t  tagged   = ((uintptr_t)untagged & CANON_PTR_ADDR_MASK) | tag;
- * ```
- */
-#define CANON_PTR_TAG_MASK  ((uintptr_t)((uintptr_t)1 << CANON_PTR_TAG_BITS) - (uintptr_t)1)
-
-/** @brief Mask for stripping tag bits and recovering the original address. */
-#define CANON_PTR_ADDR_MASK ((uintptr_t)(~CANON_PTR_TAG_MASK))
-
-/* ============================================================================
- * Platform Read-Only Information
- * ========================================================================= */
-
-/** @brief Size of a pointer in bytes — 4 on 32-bit, 8 on 64-bit. */
-#define CANON_POINTER_SIZE  ((usize)sizeof(void*))
-
-/** @brief Number of bits in a byte — always 8 per the Tier 0 contract in types.h. */
-#define CANON_BITS_PER_BYTE ((usize)8)
-
-/** @brief Number of bits in a pointer — 32 or 64. */
-#define CANON_POINTER_BITS  (CANON_POINTER_SIZE * CANON_BITS_PER_BYTE)
-
-#endif /* CANON_CORE_PRIMITIVES_LIMITS_H */
+#endif /* CANON_CORE_PRIMITIVES_SIZES_H */

@@ -6,6 +6,17 @@ This document records all deviations from full compliance in Canon-C's
 verification, coverage, and MISRA analysis. Each deviation has a unique
 ID, rationale, and mitigation strategy.
 
+A record keeps the names of its time. Where a file it names was renamed
+or removed later, the record that did it says so, and this list carries
+it:
+
+- `core/primitives/limits.h`: split by VERIFY-140 and removed. Its
+  integer type limits and platform information are `types.h`'s; its size
+  literals, alignments, capacity limits, small-buffer thresholds, growth
+  factor and Tier 1 `#error` are `sizes.h`'s; its pointer-tagging
+  constants are `ptr.h`'s. Its test, `test/core/primitives/limits_test.c`,
+  is `sizes_test.c`.
+
 ---
 
 ## VERIFY-001: Compiler Intrinsic Path Not Verified
@@ -1868,7 +1879,7 @@ not substitute for doing it.
 **Scope.** This is arena only. pool, region and vec inherit arena's surface
 transitively and are the natural next candidates; slice, memory and ptr sit
 below it. Nothing here evidences those units at 32-bit, and nothing here
-says anything about 16-bit, which the Tier 1 guard in `limits.h` refuses
+says anything about 16-bit, which the Tier 1 guard in `limits.h` [in `sizes.h` since VERIFY-140] refuses
 outright.
 
 
@@ -5544,7 +5555,7 @@ each comparison used the same local flags, so the diffs are like-for-like.
 
 **F1 — a prose spec referenced a symbol its header cannot see.** The
 retained `Spec:` for `slice_T_as_bytes` bounded `s.len * sizeof(type)` by
-`CANON_USIZE_MAX`, defined in `core/primitives/limits.h`, which `slice.h`
+`CANON_USIZE_MAX`, defined in `core/primitives/limits.h` [in `types.h` since VERIFY-140], which `slice.h`
 does not include (`arena.h` does). Frama-C: *unbound logic variable
 CANON_USIZE_MAX*. Unfindable while the spec was a comment; found the moment
 it became a contract. Replaced by `SIZE_MAX` (in scope via `types.h` →
@@ -6598,10 +6609,10 @@ if (arena->offset > CANON_USIZE_MAX - pad ||           // cond 0
 gcov reports cond 0 and cond 1 as `not covered (true)` in both
 functions — four outcomes total. Both subconditions are structurally
 unreachable under the `arena_invariant` predicate combined with the
-`CANON_ARENA_MAX_SIZE` constant from `core/primitives/limits.h`.
+`CANON_ARENA_MAX_SIZE` constant from `core/primitives/sizes.h`.
 
 **Cond 0 unreachability**: `arena_invariant` requires `capacity <=
-CANON_ARENA_MAX_SIZE`. `core/primitives/limits.h` defines
+CANON_ARENA_MAX_SIZE`. `core/primitives/sizes.h` defines
 `CANON_ARENA_MAX_SIZE = CANON_GB = (usize)1024 * (usize)1024 *
 (usize)1024 = 2^30`. The alignment pad is bounded by
 `CANON_DEFAULT_ALIGN - 1`, which is at most 15 (since
@@ -9054,7 +9065,7 @@ marks them: the test is the caller's.
 
 | ID | Date | Scope | Category |
 |----|------|-------|----------|
-| MISRA-TOOL-001 | 2026-11-11 | 2 sites: `core/primitives/limits.h:183`, `core/primitives/types.h:102` | cppcheck 2.13 false positive (VERIFY-068) |
+| MISRA-TOOL-001 | 2026-11-11 | 2 sites: `core/primitives/sizes.h:112` (`core/primitives/limits.h:183` until VERIFY-140 split that header into `types.h`, `sizes.h` and `ptr.h`; the same message), `core/primitives/types.h:102` | cppcheck 2.13 false positive (VERIFY-068) |
 
 **Description**: each site is an `#error` whose message runs over several
 lines, each ending in a backslash: a line splice, which translation phase 2
@@ -9395,7 +9406,7 @@ is a gap in the contract, not in the code.
 `range_next`, `range_reset`, `range_skip`. `RANGE_FOR` is a call-site macro:
 parked per `docs/vmacros.md`, the `DIAG_*` precedent.
 
-Closure: `types.h`, `limits.h`, `contract.h`, `checked.h`, `option.h`. No
+Closure: `types.h`, `limits.h` [split by VERIFY-140], `contract.h`, `checked.h`, `option.h`. No
 `ptr.h`, no `slice.h`, no `memory.h` — the smallest closure of any data/ unit.
 It is **not** zero core-substrate inheritance: checked.h is core substrate in
 bitset's own breakdown (58 = bits 15 + memory 20 + slice 13 + ptr 6 +
@@ -26854,7 +26865,7 @@ refused there. Only `scope.h`, which includes nothing, compiles.
 
 **H2 — the README put `slice.h` in Tier 1, and it compiles at a 16-bit
 `size_t`.** The README said Tier 1 covers "everything built on [limits.h,
-checked.h, ptr.h]: arenas, pools, slices, collections". `slice.h`
+checked.h, ptr.h]: arenas, pools, slices, collections" [`sizes.h` for `limits.h` since VERIFY-140]. `slice.h`
 includes only `types.h` and `contract.h`. On AVR, with H1's pin removed in
 a scratch copy, it compiles. **Fix**: the README no longer lists slices
 under Tier 1. It says `slice.h` compiles at a 16-bit `size_t`, and that no
@@ -26867,8 +26878,8 @@ test or proof covers it there. This changes no code.
   each by the f64 pin. `scope.h` compiles.
 - **With only the f64 pin removed** (one line, in a scratch copy):
   - the README's five Tier 0 headers compile;
-  - eight Tier 1 headers are refused, each by `limits.h`'s `#error`
-    "Canon-C platform contract (Tier 1) …": `limits.h`, `checked.h`,
+  - eight Tier 1 headers are refused, each by `limits.h`'s `#error` [`sizes.h`'s since VERIFY-140]
+    "Canon-C platform contract (Tier 1) …": `limits.h` [`sizes.h` since VERIFY-140], `checked.h`,
     `ptr.h`, `memory.h`, `arena.h`, `pool.h`, `region.h`, `stringbuf.h`.
 - **Every public header** (80; the hashmap headers that need a key type
   are left out, as in the other script):
@@ -30041,7 +30052,7 @@ phases A to A3, so that the predictions say why:
   only in ACSL validity casts in compare.h; `long` only in bits.h's MSVC
   branch, which `__FRAMAC__` excludes. No proved header tests an
   architecture or byte-order macro (phase A).
-- **`CANON_DEFAULT_ALIGN` is 16 at every model:** limits.h takes its C99
+- **`CANON_DEFAULT_ALIGN` is 16 at every model:** limits.h [`sizes.h` since VERIFY-140] takes its C99
   value under `__FRAMAC__` (Frama-C 25 here gives 16 at `x86_64`,
   `gcc_x86_32`, `ppc_32` and `msvc_x86_64`). The targets' compilers give
   `_Alignof(max_align_t)` 8 at Cortex-M4 and 32-bit Arm Linux and 16 at the
@@ -33235,7 +33246,7 @@ read and argued, and each program's line pinned; then run 3, enforced.
 | **Status**     | PREDICTED. This record is committed before its change, which is pushed with it; neither has run in CI. |
 | **Status update** | 2026-11-11 — Run 1 scored: the push of 076b1c9 and 7ecd37c matched all eleven predictions, M1 to M11; CI's 57 findings are the 57 measured here, rule, file and line. Run 2 scored: the push of 0fde881 and 63b346a matched N1 to N6; the job reads its 57 findings as pinned. 2026-11-12 — CLOSED: run 3, the push of ab2812c and 79ab1ca, matched E1 to E6; the misra job is enforced, and its 57 findings are as pinned. The Status above is the record as committed. |
 | **Baseline**   | 9427017 (`README: a Usage section that compiles; packaging waits for a stable release`), which changes documentation only. The workflows' last runs: `1 · Build & test` #46, `3 · Static analysis & coverage` #46 (`misra`: real 66; canary 3; total 69), `4`, `5`, `6` #46, `7` #27, `11` #11 and `13` #8, on b5042af; `2 · Platforms` #62 on b0e644d; `8 · Records` #70 and `14 · Eva` #7 on 1fd064e; the probes g4, g13 and pointer last ran in `9 · Probes` #15, on b5042af. |
-| **Scope**      | Ten findings fixed, in `core/primitives/contract.h`, `core/primitives/limits.h`, `core/memory.h`, `data/range.h`, `data/convenience/dynstring.h`, `data/vec/vec_impl.h`, `util/parse.h` and `algo/sort/sort_impl.h`, with a test of `parse_f64`'s `errno` (`test/util/parse_test.c`); the others argued in MISRA-DEV-019 to 027 and MISRA-TOOL-001 to 007; the `misra` job's text (`analysis.yml`). The job stays advisory in this run: no gate changes. |
+| **Scope**      | Ten findings fixed, in `core/primitives/contract.h`, `core/primitives/limits.h` [split by VERIFY-140], `core/memory.h`, `data/range.h`, `data/convenience/dynstring.h`, `data/vec/vec_impl.h`, `util/parse.h` and `algo/sort/sort_impl.h`, with a test of `parse_f64`'s `errno` (`test/util/parse_test.c`); the others argued in MISRA-DEV-019 to 027 and MISRA-TOOL-001 to 007; the `misra` job's text (`analysis.yml`). The job stays advisory in this run: no gate changes. |
 | **Category**   | The project's item 2 (AUTOSAR Classic), part a: MISRA C:2012 enforced with deviations. Run 1 of 3. |
 
 ### What is decided
@@ -33270,10 +33281,10 @@ real 66, canary 3, total 69. Each finding was read at its site:
 | 17.3 | Mandatory | 4 | `hashmap_range.h` ×2; `dynstring.h` ×2 | not violations: MISRA-TOOL-004, MISRA-TOOL-005 |
 | 11.9 | Required | 4 | `region.h`, `borrow.h` ×3 | not violations: MISRA-TOOL-002 |
 | 21.2 | Required | 3 | `stringbuf.h`, `diag.h` ×2 | deviation: MISRA-DEV-021 |
-| 4.1 | Required | 2 | `limits.h`, `types.h` | not violations: MISRA-TOOL-001 |
+| 4.1 | Required | 2 | `limits.h` [`sizes.h` since VERIFY-140], `types.h` | not violations: MISRA-TOOL-001 |
 | 22.8 | Required | 2 | `util/file.h` (`ftell`); `util/parse.h` (`strtod`) | `file.h`: deviation, MISRA-DEV-027; `parse.h`: **fixed** |
 | 21.16 | Required | 2 | `memory.h` | deviation: MISRA-DEV-024 |
-| 20.9 | Required | 2 | `limits.h` | **fixed** |
+| 20.9 | Required | 2 | `limits.h` [`ptr.h` since VERIFY-140] | **fixed** |
 | 17.2 | Required | 2 | `sort_impl.h` | **fixed** (the author's decision) |
 | 15.7 | Required | 2 | `dynstring.h`, `range.h` | **fixed** |
 | 15.4 | Advisory | 2 | `hashmap_impl.h`, `str_split.h` | deviation: MISRA-DEV-020 |
@@ -33297,7 +33308,7 @@ the first amendment's 21.16, 22.8 and 22.9, MathWorks' pages.
   every translation unit, and defined, as before, in the one that sets
   `CANON_CONTRACT_IMPL`, which now has the declaration before the
   definition.
-- **`limits.h` (20.9 ×2).** `CANON_PTR_TAG_BITS` tests
+- **`limits.h` (20.9 ×2).** [In `ptr.h` since VERIFY-140.] `CANON_PTR_TAG_BITS` tests
   `defined(UINTPTR_MAX)` before its value. `uintptr_t` is optional in C99
   (7.18.1.4); without it, the old test read `UINTPTR_MAX` as 0 and took the
   last branch, as the new one does: no platform changes value.
@@ -34307,7 +34318,7 @@ have changed since its last run.
 |---|------------|--------------|------------|
 | D1 | **1 to 6, 8 and 9 run**, and no other. | another set | H |
 | D2 | **1 to 6 and 8 are green**, each job with the notices of its last run (1, 3, 4, 5 and 6 #53, 2 #71, 8 #79), times and GitHub's own on the macOS runners' capacity aside. | a failure, or another notice | H: nothing they build or read changes. |
-| D3 | **The nine older probes are green**, each with the notices of its last run: #15 for G11, Count, G19, Round 3 and the char probe; #17 for the Eva error probe; #18 for G4, G13 and the pointer probe. Times aside. | a failure, or another notice | M–H: a WP goal near its prover's limit could fall either way; and five of them read headers VERIFY-068 changed after #15 and #17 (a declaration in `contract.h`, two preprocessor tests in `limits.h`, comments and `mem_copy`'s `restrict` in `memory.h`, an `#include` in `vec_impl.h`), on which the proof jobs that read the same headers have run since, their pins held. |
+| D3 | **The nine older probes are green**, each with the notices of its last run: #15 for G11, Count, G19, Round 3 and the char probe; #17 for the Eva error probe; #18 for G4, G13 and the pointer probe. Times aside. | a failure, or another notice | M–H: a WP goal near its prover's limit could fall either way; and five of them read headers VERIFY-068 changed after #15 and #17 (a declaration in `contract.h`, two preprocessor tests in `limits.h` [in `ptr.h` since VERIFY-140], comments and `mem_copy`'s `restrict` in `memory.h`, an `#include` in `vec_impl.h`), on which the proof jobs that read the same headers have run since, their pins held. |
 | D4 | **The diag_push probe's job is green**, and each of its three steps posts its notices. | a failure, or a step without its counts | H |
 | D5 | **WP gives a summary, no goal of `memmove`, and `memset`'s goal unproved.** No goal is Invalid; `typed_cast_diag_init_call_memset_requires_valid_s` is Timeout or Unknown, as in every run of `frama-c-diag`. | no summary, a goal Invalid, a goal of `memmove`, or the `memset` goal proved | H |
 | D6 | **The loop is proved**: its three invariants, established and preserved, its assigns, its variant, and the accesses to `d->frames[i]` and `d->frames[i + 1]`. | any of them unproved | M: each invariant compares whole frames, their 128-character messages with them, across a write to one frame. |
@@ -40375,10 +40386,10 @@ VERIFY-089.
   every printf has, and `unsigned long` has at least 32 bits, so the cast
   keeps the value. Where it is wider, `%llu`, with a cast to `unsigned
   long long`: C99's `long long`, at least 64 bits. `SIZE_MAX` is read
-  under `defined()`, as `core/primitives/limits.h` reads it, for the
+  under `defined()`, as `core/primitives/limits.h` [`sizes.h` since VERIFY-140] reads it, for the
   static analyzers that do not read system headers (Cppcheck, which
   reads none, sees the `%lu` branch, its cast with it). Not `ULONG_MAX`:
-  under `-I core/primitives`, `<limits.h>` is the project's own
+  under `-I core/primitives`, `<limits.h>` is the project's own [until VERIFY-140 split `limits.h`]
   (`types.h`'s note), which does not define it. So a 64-bit Linux or
   macOS, whose `unsigned long` would hold `size_t`, takes `%llu` too.
 - **Each header has its own pair, private** (the trailing underscore of
@@ -41170,7 +41181,7 @@ measured by run 1 alone.
   `error_test`, `fold_test`, `log_test`, `option_test`,
   `ownership_test`, `parse_test`, `random_test`, `result_test`,
   `scope_test`, `slice_test` and `types_test`. Of the other 44, 42 stop
-  first at Tier 1's `#error` (`limits.h`), `time_test` at `util/time.h`'s
+  first at Tier 1's `#error` (`limits.h` [`sizes.h` since VERIFY-140]), `time_test` at `util/time.h`'s
   `clock_gettime`, which newlib declares not under `-std=c99` (as with
   Cortex-M's newlib), and `lifetime_test` at its own line 134, `for (i =
   0; i < 100000u; i++)` with an `unsigned int i`: at a 16-bit `int` the
@@ -41362,7 +41373,7 @@ What it shows:
   equal, for any even base address, at the counter's value there (100016,
   after the sustained loop) or at 16 (computed).
 - **The runner**, with the stand-in toolchain (VERIFY-096's, made to
-  refuse each source that includes `limits.h`, as Tier 1's `#error` does,
+  refuse each source that includes `limits.h` [`sizes.h` since VERIFY-140], as Tier 1's `#error` does,
   to refuse `time_test.c`, and to hang `diag_test` and `log_test` after a
   line): the leg "as pinned", exit 0 with `ENFORCE`; the two stopped at
   60 s, their line kept; the file probe's seven steps, on the host's
@@ -42378,7 +42389,7 @@ No workflow builds the README's examples.
   included and unused.
 - For "Not supported": a copy of the tree with `u8` and `i8` removed from
   `types.h`, each header compiled alone with GCC: `contract.h`,
-  `scope.h`, `ownership.h`, `bits.h`, `limits.h`, `error.h`, `option.h`,
+  `scope.h`, `ownership.h`, `bits.h`, `limits.h` [split by VERIFY-140], `error.h`, `option.h`,
   `result.h` and `diag.h` with no error; `compare.h` 8, `slice.h` 7,
   `checked.h` 15, `arena.h` 44 (issue #14 holds the table).
 - `tools/which_workflows.py`: 8 alone.
@@ -43302,7 +43313,7 @@ nothing says so to a compiler.
   that relies on more than it establishes; so every header that includes
   either refuses too, and the others do not. The `defined()` gate leaves
   MSVC and CompCert, which do not define the macro, and the static
-  analyzers an error-free configuration, as `limits.h`'s does.
+  analyzers an error-free configuration, as `limits.h`'s does [`sizes.h`'s since VERIFY-140].
 - **`rx`**, `tools/renesas/renesas.py`: its tests are built with
   `-DCANON_ALLOW_FINITE_MATH`, a variant's own `defines`, so that `rx`
   goes on testing what a user of GCC's default gets; its pins stand.
@@ -44115,9 +44126,9 @@ Its source at the tag `v3.17`, read, not built or run:
   before `types.h`; picolibc's `<stdint.h>` includes `sys/_intsup.h`,
   which includes `<limits.h>` where `__GNUC_PREREQ(3, 2)` is false, as it
   is with `__GNUC__` undefined, as ccomp's preprocessor has it; and
-  `-I core/primitives` makes that `<limits.h>` Canon-C's own, which
+  `-I core/primitives` makes that `<limits.h>` Canon-C's own [until VERIFY-140 split `limits.h`], which
   includes `types.h` before `UINT8_MAX` is defined. It is the trap
-  `limits.h` records ("header-name shadowing"), met by a C library's
+  `limits.h` records ("header-name shadowing") [until VERIFY-140 split `limits.h`], met by a C library's
   header.
 - **Then compiled by GCC, linked and run**, under qemu-user (natively at
   `x86_32-linux`), glibc's fallback typedefs of `_Float32` and the like
@@ -44193,8 +44204,8 @@ S1 to S6 scored, and the record closes. Then the next record pins run
 finds: at 32-bit Arm, the 64-bit time that configure's `__REDIRECT`
 drops, which `-U__REDIRECT -U__REDIRECT_NTH` gives back in the stand-in;
 at RISC-V 32, picolibc's thread-local `errno` and its statement
-expressions, beyond CompCert's C. The trap `limits.h` records is met by
-picolibc's `<stdint.h>` here: whether to rename `limits.h`, which its own
+expressions, beyond CompCert's C. The trap `limits.h` records [until VERIFY-140 split `limits.h`] is met by
+picolibc's `<stdint.h>` here: whether to rename `limits.h` [VERIFY-140 split it], which its own
 comment calls a breaking change of the include path, is the author's.
 CompCert's other targets wait: the big-endian `armeb-*`, `arm-eabi` and
 `ppc-eabi` on bare metal, and BSD, macOS and Cygwin. Then item 10's
@@ -44211,7 +44222,7 @@ first attempt; the last, `6`, in 79 minutes.
 | S1 | **MATCH.** 1 to 6, 8 and 17 ran, and no other. |
 | S2 | **MATCH.** The six `compcert (TARGET)` jobs green at their first attempt, each building CompCert: "compcert.tar.gz: OK" against opam's SHA-256; configure's summary of each target (`arm`, `hardfloat`, little-endian, `arm-linux-gnueabihf-gcc`, linked with `-no-pie`; `aarch64`; `powerpc`, big-endian; `x86`, `gcc -m32`; `riscV`, `-mabi=lp64d`; and `riscV`, the two scripts, `-mabi=ilp32d`, no runtime library); `make install`, and "The CompCert C verified compiler, version 3.17", the build in 143 to 211 s. Configure checks Coq by the versions it lists, up to 9.1.0, and called the switch's 9.1.1 "UNSUPPORTED": `-ignore-coq-version`, which opam's build gives too, let it through. |
 | S3 | **MATCH.** "61 / 61 compiled, 61 ran" at `aarch64-linux`, `ppc-linux`, `x86_32-linux` and `rv64-linux`, and "61 / 61 compiled, 60 ran; did not run: time_test" at `arm-linux`, word for word. `time_test` there: "124 passed, 100 failed", its last failures `curr >= prev` (line 224), a clock that goes back, as the 32-bit `clock_gettime` writes its nanoseconds where the 64-bit `tv_sec` keeps its high word; the stand-in failed 105, at line 224 and three others. |
-| S4 | **MATCH.** "53 / 61 compiled to objects; nothing linked or run; not compiled: lifetime_token_test memory_test compare_test header_combination_test impl_defined_test autosar_test parse_test time_test", word for word, each for the reason read: no `pthread.h`; `types.h`'s Tier 0 `#error`, through picolibc's `sys/_intsup.h` and the library's `limits.h` (`memory_test`, `autosar_test`); "syntax error after '(' and before '{'" at picolibc's `machine/math.h:147` (`compare_test`); "syntax error after 'extern' and before '__thread'" at `sys/errno.h:62` (`header_combination_test`, `impl_defined_test`, `parse_test`, whose statement expressions come after); "use of undeclared identifier 'CLOCK_MONOTONIC'" (`time_test`). |
+| S4 | **MATCH.** "53 / 61 compiled to objects; nothing linked or run; not compiled: lifetime_token_test memory_test compare_test header_combination_test impl_defined_test autosar_test parse_test time_test", word for word, each for the reason read: no `pthread.h`; `types.h`'s Tier 0 `#error`, through picolibc's `sys/_intsup.h` and the library's `limits.h` [split by VERIFY-140] (`memory_test`, `autosar_test`); "syntax error after '(' and before '{'" at picolibc's `machine/math.h:147` (`compare_test`); "syntax error after 'extern' and before '__thread'" at `sys/errno.h:62` (`header_combination_test`, `impl_defined_test`, `parse_test`, whose statement expressions come after); "use of undeclared identifier 'CLOCK_MONOTONIC'" (`time_test`). |
 | S5 | **MATCH.** Each toolchain through `apt-install`, which found no cache: "0 from the cache, N fetched, 0 left to apt", 19, 23, 19, 21, 20 and 3 files, in 16 to 35 s; each job saved its own entry. Each restored the opam switch from "opam-Linux-ocaml-4.14.2-compcert-3.17-v1", its install skipped, and saved its build under "compcert-3.17-TARGET-build-v1". OCaml and opam came from apt, 142 MB, in 14 to 85 s. |
 | S6 | **MATCH.** `compcert`'s notice "61 / 61 compiled, 61 ran"; every other job green, and every notice of the 110 jobs its last run's, word for word, the times aside; `embedded`'s slowest header #133's, `algo/any_all/any_all.h`. |
 
@@ -44225,7 +44236,7 @@ run under qemu-user (natively at x86), 61 of 61 compile, and 61 pass at
 four of them; at 32-bit Arm 60 pass, `time_test` reading a clock that
 goes back, since configure's `__REDIRECT` drops the alias by which glibc
 2.39 gives a 64-bit `time_t` its functions. At RISC-V 32, with picolibc's
-headers, 53 of 61 compile to objects: two meet the trap `limits.h`
+headers, 53 of 61 compile to objects: two meet the trap `limits.h` [until VERIFY-140 split it]
 records, three picolibc's thread-local `errno`, one its statement
 expressions, and two what picolibc does not have (`pthread.h`,
 `CLOCK_MONOTONIC`). Run 1 measured; the next record pins. The close
@@ -44267,7 +44278,7 @@ failed 100 of its 224 checks: configure defines `__REDIRECT` and
 armhf defines `_TIME_BITS=64`, so the test called the 32-bit
 `clock_gettime` with a 64-bit `struct timespec`, and read a clock that
 went back. At RISC-V 32, 53 of 61 compiled to objects: `memory_test` and
-`autosar_test` met the trap `core/primitives/limits.h` records, under
+`autosar_test` met the trap `core/primitives/limits.h` [split by VERIFY-140] records, under
 `-I core/primitives`; `header_combination_test`, `impl_defined_test` and
 `parse_test` picolibc's thread-local `errno`, and `compare_test` its
 statement expressions, neither of which CompCert's C has;
@@ -44288,7 +44299,7 @@ statement expressions, neither of which CompCert's C has;
 - **Both CompCert jobs**: `-iquote core/primitives` where `-I
   core/primitives` was. The bare primitives are included with quotes,
   which the quote path serves; `#include <limits.h>` no longer finds the
-  library's.
+  library's [`limits.h`: split by VERIFY-140].
 - **`compcert-targets`**: two fields a target, `options` (ccomp's, after
   the compcert job's flags; `-U__REDIRECT -U__REDIRECT_NTH` at
   `arm-linux`, none elsewhere) and `pin`. ccomp passes `-D` and `-U` to
@@ -44393,7 +44404,7 @@ What it shows:
   at 32-bit Arm; CompCert's run gave the same.
 - **A quote path keeps a library's header from standing for the
   system's.** `-iquote` serves `#include "checked.h"` and leaves
-  `<limits.h>` to the system: with glibc the preprocessed code did not
+  `<limits.h>` to the system [and VERIFY-140 split the library's `limits.h`]: with glibc the preprocessed code did not
   change, and at RISC-V 32 two more tests compile.
 - **A notice the API returns twice is read in the log before it is
   called the project's.** `frama-c-pool` printed its notice once.
@@ -46972,13 +46983,13 @@ includes its `syslimits.h` as `"syslimits.h"`, beside it, and that file's
 `#include_next <limits.h>`, meant for the system's, starts at the head of
 the quote path: GCC gives a file found beside its includer a directory
 whose next is that head. The CompCert jobs' flags put `-iquote
-core/primitives` there, whose `limits.h` is the library's own, the
+core/primitives` there, whose `limits.h` [split by VERIFY-140] is the library's own, the
 shadowing that its comment records as a known trap. It includes
 `types.h`, which includes `<stdint.h>`, newlib's, which reads
 `<sys/_stdint.h>` while `<machine/_default_types.h>` is still open,
 before `__intmax_t`. Reading `<machine/_default_types.h>` first alone
 would not do: `<sys/_intsup.h>`, which `<stdint.h>` reads next, includes
-`<limits.h>` the same way, and the library's header then reaches
+`<limits.h>` the same way, and the library's header [`limits.h`: split by VERIFY-140] then reaches
 `types.h`, whose check of `UINT8_MAX` stops with its `#error` while
 `<stdint.h>` is half read, in each test that reads `<stdint.h>` before
 the library's `types.h` (`memory_test` and `autosar_test`).
@@ -47028,7 +47039,7 @@ the library's `types.h` (`memory_test` and `autosar_test`).
   `_LIBC_LIMITS_H_`, newlib's guard and not Cygwin's, is defined, and
   `gcc/limity.h` reaches the system's by `#include_next <limits.h>`;
   `gcc/config.gcc` wraps `<stdint.h>` for x86-64 Cygwin, as for Linux.
-- **The library**: `core/primitives/limits.h` includes `"types.h"`,
+- **The library**: `core/primitives/limits.h` [split by VERIFY-140] includes `"types.h"`,
   `<stddef.h>` and `<stdint.h>`, and its comment records the shadowing of
   `<limits.h>` as a known trap; `types.h` includes `<stdint.h>` and stops
   with `#error` where `UINT8_MAX` and the rest are not defined.
@@ -47049,7 +47060,7 @@ the library's `types.h` (`memory_test` and `autosar_test`).
   reproduced, and the host GCC's syntax check takes none; the first
   test's chain is the one above, header, `sys/cdefs.h`,
   `machine/_default_types.h`, GCC's `limits.h` and `syslimits.h`,
-  `core/primitives/limits.h`, `core/primitives/types.h`, GCC's `stdint.h`,
+  `core/primitives/limits.h` [split by VERIFY-140], `core/primitives/types.h`, GCC's `stdint.h`,
   newlib's, `sys/_stdint.h`. With `<machine/_default_types.h>` alone read
   first, 58 come in order and `memory_test` and `autosar_test` stop at
   `types.h`'s `#error`. Under the new header, all 61 come in order, and
@@ -47071,7 +47082,7 @@ the library's `types.h` (`memory_test` and `autosar_test`).
 |---|------------|--------------|------------|
 | K1 | **1 to 6 and 8 run**, and no other. | another set | H |
 | K2 | **CompCert from its cache**: `compcert-3.17-x86_64-cygwin-build-v1` restored, "unpacked cc-compcert.tar"; opam's build, the prerequisites and CompCert's build skipped; "The CompCert C verified compiler, version 3.17". | a miss, or the restore, the unpack or ccomp fails | M: VERIFY-130's run saved it; its restore and unpack have not run |
-| K3 | **What VERIFY-130's header gave**: open when `<sys/_stdint.h>` was first entered, level by level, the header, `sys/cdefs.h`, `machine/_default_types.h`, GCC's `limits.h` and `syslimits.h`, the library's `core/primitives/limits.h` and `core/primitives/types.h`, GCC's `stdint.h` and newlib's; the first line naming `__intmax_t` is `typedef __intmax_t intmax_t;`, before its declaration. | another chain, or the declaration first | M–H: read in GCC's and newlib's sources and reproduced here; Cygwin's GCC itself not read |
+| K3 | **What VERIFY-130's header gave**: open when `<sys/_stdint.h>` was first entered, level by level, the header, `sys/cdefs.h`, `machine/_default_types.h`, GCC's `limits.h` and `syslimits.h`, the library's `core/primitives/limits.h` [split by VERIFY-140] and `core/primitives/types.h`, GCC's `stdint.h` and newlib's; the first line naming `__intmax_t` is `typedef __intmax_t intmax_t;`, before its declaration. | another chain, or the declaration first | M–H: read in GCC's and newlib's sources and reproduced here; Cygwin's GCC itself not read |
 | K4 | **No test stops in newlib's types or at `types.h`'s check**: no log of a test not compiled names `<sys/_stdint.h>`, `<machine/_default_types.h>`, `<sys/_intsup.h>` or `types.h`. | any such log | M–H, given K3 |
 | K5 | **The tests**: the notice "compcert x86_64-cygwin: 61 / 61 compiled, 61 ran; no pin yet". | another notice, or none | L–M: H6's reasons, and the rest of Cygwin's headers read by CompCert for the first time, the host GCC's syntax check standing for CompCert's parser here |
 | K6 | **Nothing else changes**: the other 136 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly: 1, 3, 4, 5 and 6 #114's, 2 #149's, 8 #173's. | another notice, or a failure | H |
@@ -47096,7 +47107,7 @@ took 34; `6` #115 the last, in 80.
 |---|--------|
 | K1 | **MATCH.** 1 to 6 and 8 ran, and no other. |
 | K2 | **MATCH.** "Cache restored from key: compcert-3.17-x86_64-cygwin-build-v1", "unpacked cc-compcert.tar"; opam's build, the prerequisites and CompCert's build skipped; "The CompCert C verified compiler, version 3.17". |
-| K3 | **MATCH.** Open when `<sys/_stdint.h>` was first entered, in `any_all_test`, level by level: the header, `/usr/include/sys/cdefs.h`, `/usr/include/machine/_default_types.h`, `/usr/lib/gcc/x86_64-pc-cygwin/14/include/limits.h` and `syslimits.h`, `core/primitives/limits.h`, `core/primitives/types.h`, GCC's `stdint.h`, `/usr/include/stdint.h`; then "95:typedef __intmax_t intmax_t;" before "192:typedef long int __intmax_t;", both lines at the numbers the emulation here gave. |
+| K3 | **MATCH.** Open when `<sys/_stdint.h>` was first entered, in `any_all_test`, level by level: the header, `/usr/include/sys/cdefs.h`, `/usr/include/machine/_default_types.h`, `/usr/lib/gcc/x86_64-pc-cygwin/14/include/limits.h` and `syslimits.h`, `core/primitives/limits.h` [split by VERIFY-140], `core/primitives/types.h`, GCC's `stdint.h`, `/usr/include/stdint.h`; then "95:typedef __intmax_t intmax_t;" before "192:typedef long int __intmax_t;", both lines at the numbers the emulation here gave. |
 | K4 | **MATCH.** No test failed to compile, so that no log names any of the four. |
 | K5 | **MATCH.** "compcert x86_64-cygwin: 61 / 61 compiled, 61 ran; no pin yet". |
 | K6 | **MATCH.** The other 136 jobs green, every notice as their last runs printed it, word for word, the times aside, and `embedded`'s report of them wholly. |
@@ -47119,7 +47130,7 @@ What it shows:
   before the run, which had only to confirm it.
 - **The library's own trap, met by another road.**
   `core/primitives/limits.h`'s comment records that `-I core/primitives`
-  makes it shadow `<limits.h>`; the CompCert jobs' `-iquote` avoids that
+  makes it shadow `<limits.h>` [until VERIFY-140 split it]; the CompCert jobs' `-iquote` avoids that
   for `#include <limits.h>`, but not for GCC's `#include_next` from a
   file found beside its includer, which starts at the quote path. The
   other CompCert jobs pass with the same flags; under Cygwin's newlib,

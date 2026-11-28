@@ -29,7 +29,7 @@
  * contract); define CANON_ALLOW_FINITE_MATH to build anyway, knowing that
  * the comparators' NaN order does not hold. The defined() gate leaves
  * compilers that do not define the macro (MSVC, CompCert) and static
- * analyzers an error-free configuration, as limits.h's does.
+ * analyzers an error-free configuration, as sizes.h's does.
  * ──────────────────────────────────────────────────────────────────────── */
 #if defined(__FINITE_MATH_ONLY__)
 #  if (__FINITE_MATH_ONLY__ != 0) && !defined(CANON_ALLOW_FINITE_MATH)

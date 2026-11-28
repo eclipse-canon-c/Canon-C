@@ -151,7 +151,7 @@ issues, but they will not be handled as vulnerabilities:
   the lifetime the API defines is caller error. If the documentation is
   ambiguous about which is which, that is worth reporting as an issue.
 - **A platform-tier guard refusing to compile.** The `#error` guards in
-  `types.h` and `limits.h` are the intended behaviour on unsupported targets;
+  `types.h` and `sizes.h` are the intended behaviour on unsupported targets;
   they exist so that unsupported configurations fail loudly rather than
   silently producing wrong constants.
 - **Absence of a hardening measure Canon-C does not claim.** Canon-C is not a
@@ -177,4 +177,4 @@ These may help you judge whether something you have found is in scope:
   of them is still a valid finding.
 - **Target width matters.** Tier 1 requires `size_t >= 32` bits. Behaviour on
   16-bit targets is out of scope for the Tier 1 layers by design, and the
-  guard in `limits.h` enforces that.
+  guard in `sizes.h` enforces that.

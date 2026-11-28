@@ -160,10 +160,10 @@ stale.
 
 [↑ Back to constructs](#table-of-c-constructs)
 
-> Headers: `limits.h` (range constants), `contract.h` (`require_msg`).
-> `limits.h` pulls in `types.h` (the aliases), so:
+> Headers: `types.h` (the aliases and their range constants), `contract.h`
+> (`require_msg`), so:
 > ```c
-> #include "core/primitives/limits.h"
+> #include "core/primitives/types.h"
 > #include "core/primitives/contract.h"
 > ```
 
@@ -229,7 +229,7 @@ i8 level = (i8)v;      /* provably in range past this point */
 > input and must survive release builds; `ensure_msg` is compiled out under
 > `NDEBUG` unless `CANON_STRICT` is set. `require_msg` is itself compiled out
 > only under `-DCANON_NO_REQUIRE`, once the range is formally proved, so the
-> check is free in a verified build. Range constants per type are in `limits.h`
+> check is free in a verified build. Range constants per type are in `types.h`
 > (`CANON_I8_MIN/MAX` … `CANON_I64_MIN/MAX`, `CANON_U8_MAX` … `CANON_U64_MAX`,
 > `CANON_USIZE_MAX`, `CANON_ISIZE_MIN/MAX`).
 >
@@ -401,7 +401,7 @@ void copy(u8* dst, const u8* src, usize n) {
 
 > Header: `checked.h` (`checked_add`, `checked_sub`, `checked_mul`,
 > `checked_div`, `checked_mod`, signed/typed variants). Pulls in `types.h`
-> and `limits.h`, so:
+> and `sizes.h`, so:
 > ```c
 > #include "core/primitives/checked.h"
 > ```

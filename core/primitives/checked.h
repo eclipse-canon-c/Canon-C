@@ -100,14 +100,14 @@
  *       which provides guarded versions with require_msg precondition checks.
  *       Include ptr.h if you need alignment utilities.
  *
- * @sa types.h, limits.h, contract.h, ptr.h
+ * @sa types.h, sizes.h, contract.h, ptr.h
  */
 
 #ifndef CANON_CORE_PRIMITIVES_CHECKED_H
 #define CANON_CORE_PRIMITIVES_CHECKED_H
 
 #include "types.h"
-#include "limits.h"    /* CANON_ISIZE_MAX, CANON_ISIZE_MIN, CANON_USIZE_MAX */
+#include "sizes.h"     /* Tier 1, until checked.h is run at 16 bits (VERIFY-140) */
 
 /* ============================================================================
  * Compiler Builtin Detection

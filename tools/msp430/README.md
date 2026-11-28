@@ -17,7 +17,7 @@ with status 0.
 The run prints the memory regions of the model's linker script, as the
 toolchain has it.
 
-A `size_t` below 32 bits is Tier 1's refusal (`limits.h`, the README's
+A `size_t` below 32 bits is Tier 1's refusal (`sizes.h`, the README's
 platform tiers): a test that includes a Tier 1 header is not built, and
 the tests that build are those of the headers below Tier 1. Each model is
 built at the four build types of CMake, Debug (`-O0`), Release (`-O3`),

@@ -94,11 +94,13 @@ big-endian 32-bit Arm, `armeb-linux`, the `armeb` job's GCC, as released,
 does not define `_TIME_BITS=64`: `time_t` has 32 bits, glibc declares the
 functions of time by their own names, and nothing is added (VERIFY-121).
 The CompCert jobs put `core/primitives` on the quote path only
-(`-iquote`): with `-I`, its `limits.h` stands for the system's, which
+(`-iquote`): with `-I`, its `limits.h` stood for the system's, which
 picolibc's `<stdint.h>` includes where `__GNUC__` is undefined, and two
-tests did not compile at RISC-V 32 (the trap `core/primitives/limits.h`
-records). The README's way, the repository's root on the path, does not
-meet it.
+tests did not compile at RISC-V 32 (VERIFY-114). The README's way, the
+repository's root on the path, did not meet it. VERIFY-140 split that
+header into `types.h`, `sizes.h` and `ptr.h` and removed it, so no file
+of `core/primitives` has a C library header's name now; the quote path
+stays.
 CompCert's ARM back end does every floating-point operation on the VFP,
 double precision included, and has no software floating point: it
 targets Arm cores with a double-precision FPU, ARMv6 with VFPv2 and ARMv7
@@ -137,10 +139,11 @@ anything, and each, where `__GNUC__` is not defined, includes
 `syslimits.h`, found beside it by `#include "syslimits.h"`; GCC resumes
 an `#include_next` in a file so found at the start of the quote path
 (its `libcpp/files.cc`), where the CompCert jobs' `-iquote
-core/primitives` holds the library's own `limits.h`, the trap that
-file's comment records. That header comes back, by `types.h`, to
-`<stdint.h>`, then half read, and every test stopped at its `intmax_t`,
-not yet declared (VERIFY-130). So the header reads `<sys/features.h>`
+core/primitives` held the library's own `limits.h`, until VERIFY-140
+split it into `types.h`, `sizes.h` and `ptr.h` and removed it. That
+header came back, by `types.h`, to `<stdint.h>`, then half read,
+and every test stopped at its `intmax_t`, not yet declared
+(VERIFY-130). So the header reads `<sys/features.h>`
 and then `<stdint.h>`, whole, with newlib's `__GNUC_PREREQ` defined as
 true for it alone: newlib then takes GCC's own `__LONG_MAX__` and the
 rest, which GCC defines with or without `__GNUC__`, reads no

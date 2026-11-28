@@ -632,7 +632,7 @@ by methodology):
   macro no-op artifacts on `arena_debug_update_` calls (lines 356
   and 411). The overflow-guard cond 0 (`offset > CANON_USIZE_MAX -
   pad`) is unreachable because `arena_invariant` bounds `capacity`
-  by `CANON_ARENA_MAX_SIZE = CANON_GB = 2^30` (from limits.h) and
+  by `CANON_ARENA_MAX_SIZE = CANON_GB = 2^30` (from sizes.h) and
   `pad <= 15`; cond 1 (`offset + pad > CANON_USIZE_MAX - size`) is
   mathematically unreachable while cond 2 (the only reachable
   subcondition) is false, regardless of the constant. WP discharges
@@ -875,7 +875,7 @@ by methodology):
 
 Headers absent from the MC/DC table:
 
-`core/primitives/types.h`, `core/primitives/limits.h`,
+`core/primitives/types.h`, `core/primitives/sizes.h`,
 `core/primitives/lifetime.h`, `core/scope.h`, and `core/ownership.h`
 do not appear in the per-header MC/DC table because they have no
 measurable condition outcomes under the coverage build. Their content
@@ -889,7 +889,7 @@ off in the coverage build, so it is not translated and emits no
 instrumented lines, branches or conditions; its absence from the table
 is unchanged, but the reason is now exclusion by configuration rather
 than absence of code. Runtime evidence comes from `types_test.c`,
-`limits_test.c`, `scope_test.c`, and `ownership_test.c` respectively,
+`sizes_test.c`, `scope_test.c`, and `ownership_test.c` respectively,
 which lock the headers' documented behavior to regression tests. The
 condition outcomes measured by those tests are attributed to the
 calling TU's expansion sites, not to the headers themselves.
@@ -1719,7 +1719,7 @@ behavior on no-op preprocessor expansion (same pattern as `contract.h
 structurally unreachable: WP verifies that `arena_invariant` is
 preserved by every public function (substrate fact discharged via
 VERIFY-009), and `arena_invariant` combined with `CANON_ARENA_MAX_SIZE
-= CANON_GB = 2^30` (from `core/primitives/limits.h`) yields the
+= CANON_GB = 2^30` (from `core/primitives/sizes.h`) yields the
 unreachability of cond 0 at lines 346 and 401. Cond 1's unreachability
 is purely mathematical — independent of any constant — and falls out
 of usize arithmetic alone, so WP does not need a specific discharge

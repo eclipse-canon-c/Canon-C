@@ -1074,9 +1074,9 @@ static void test_extend_from_range_basic(void)
  * the elements below it unchanged. At int, a value int cannot hold exists
  * only where isize is wider than int: not on -m32 builds, where these
  * ranges' bounds would themselves overflow (CI #1383's 32-bit jobs). int
- * is 32 bits on every target the CI builds. <limits.h> is shadowed by
- * core/primitives/limits.h on this include path, so int's bounds are
- * computed. */
+ * is 32 bits on every target the CI builds. <limits.h> was Canon-C's own
+ * core/primitives/limits.h on this include path until VERIFY-140 split it
+ * into types.h, sizes.h and ptr.h; so int's bounds are computed. */
 static void test_extend_from_range_value_beyond_int_f1(void)
 {
 #if CANON_ISIZE_MAX > 0x7FFFFFFF

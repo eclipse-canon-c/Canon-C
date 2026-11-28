@@ -14,14 +14,15 @@
  **************************************************************************/
 
 /**
- * @file limits_test.c
- * @brief Unit tests for limits.h
+ * @file sizes_test.c
+ * @brief Unit tests for sizes.h, and for the constants that were limits.h's
+ *        with it until VERIFY-140: types.h's limits and ptr.h's tags
  *
  * Coverage
  * ───────────────────────────────────────────────────────────────────────────
- *   Integer type limits      — CANON_U8/U16/U32/U64_MAX,
+ *   Integer type limits      — CANON_U8/U16/U32/U64_MAX,  (types.h)
  *                              CANON_I8/I16/I32/I64_MIN/MAX
- *   Size type limits         — CANON_USIZE_MAX, CANON_ISIZE_MAX/MIN
+ *   Size type limits         — CANON_USIZE_MAX, CANON_ISIZE_MAX/MIN  (types.h)
  *   Size literals            — CANON_KB, CANON_MB, CANON_GB
  *   Alignment constants      — CANON_DEFAULT_ALIGN, CANON_CACHE_LINE,
  *                              CANON_SIMD_ALIGN, CANON_SIMD_ALIGN_AVX,
@@ -33,9 +34,9 @@
  *   SBO thresholds           — CANON_SSO_THRESHOLD, CANON_SVO_THRESHOLD
  *   Growth factor            — CANON_GROWTH_FACTOR_NUM/DENOM,
  *                              CANON_MIN_ALLOCATION
- *   Pointer tagging          — CANON_PTR_TAG_BITS, CANON_PTR_TAG_MASK,
+ *   Pointer tagging          — CANON_PTR_TAG_BITS, CANON_PTR_TAG_MASK,  (ptr.h)
  *                              CANON_PTR_ADDR_MASK
- *   Platform info            — CANON_POINTER_SIZE, CANON_BITS_PER_BYTE,
+ *   Platform info            — CANON_POINTER_SIZE, CANON_BITS_PER_BYTE,  (types.h)
  *                              CANON_POINTER_BITS
  *
  * Portability note
@@ -45,11 +46,12 @@
  *   runtime assertions.
  */
 
-/* Pull in CANON_CONTRACT_IMPL so static_require() compiles — limits.h
- * includes types.h which is the only dependency needed here. */
+/* Pull in CANON_CONTRACT_IMPL so static_require() compiles — sizes.h
+ * includes types.h, with the limits; ptr.h gives the tagging constants. */
 #define CANON_CONTRACT_IMPL
 #include "contract.h"   /* for static_require() */
-#include "limits.h"
+#include "sizes.h"
+#include "ptr.h"        /* CANON_PTR_TAG_BITS, CANON_PTR_TAG_MASK, CANON_PTR_ADDR_MASK */
 
 
 #include <stddef.h>
@@ -431,6 +433,6 @@ int main(void) {
     test_ptr_tag();
     test_platform_info();
 
-    printf("\nlimits_test: %d passed, %d failed\n", g_pass, g_fail);
+    printf("\nsizes_test: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail > 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }

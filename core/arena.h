@@ -18,8 +18,8 @@
 
 #include <stdbool.h>             /* bool, true, false (C99) */
 
-#include "core/primitives/types.h"    /* u8, usize */
-#include "core/primitives/limits.h"   /* CANON_ARENA_MAX_SIZE, CANON_USIZE_MAX, CANON_DEFAULT_ALIGN */
+#include "core/primitives/types.h"    /* u8, usize, CANON_USIZE_MAX */
+#include "core/primitives/sizes.h"    /* CANON_ARENA_MAX_SIZE, CANON_DEFAULT_ALIGN */
 #include "core/primitives/contract.h" /* require_msg */
 #include "core/primitives/ptr.h"      /* ptr_offset, ptr_align_padding, is_power_of_two */
 #include "core/memory.h"              /* mem_zero, mem_secure_zero */

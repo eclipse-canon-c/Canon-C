@@ -1050,7 +1050,7 @@ For what Canon-C intentionally omits, established C libraries exist:
 > dependency chain automatically.
 >
 > **What requires no mitigation at all**
-> `core/primitives/types.h`, `core/primitives/limits.h`,
+> `core/primitives/types.h`, `core/primitives/sizes.h`,
 > `core/primitives/bits.h`, `core/primitives/checked.h`, and
 > `core/primitives/compare.h` pull in only freestanding headers
 > (`<stdint.h>`, `<stddef.h>`, `<stdbool.h>`) and are safe on any
@@ -1100,8 +1100,8 @@ For what Canon-C intentionally omits, established C libraries exist:
 > `<stdlib.h>` for its default panic handler — swap the handler as
 > described above and stdio is never reached.
 >
-> **Tier 1** — `size_t` >= 32 bits, enforced in `limits.h` beside the
-> size literals that need it. Covers `limits.h`, `checked.h`, `ptr.h`,
+> **Tier 1** — `size_t` >= 32 bits, enforced in `sizes.h` beside the
+> size literals that need it. Covers `sizes.h`, `checked.h`, `ptr.h`,
 > and everything built on them: arenas, pools, collections. (`slice.h`
 > includes only Tier 0 headers; its test passes at MSP430X's 16- and
 > 20-bit `size_t`s, VERIFY-096.) On
@@ -1109,8 +1109,9 @@ For what Canon-C intentionally omits, established C libraries exist:
 > 0 under well-defined unsigned arithmetic and silently zero every
 > capacity constant; the guard turns that silent breakage into a named
 > compile-time refusal. (`checked.h`'s arithmetic is itself
-> width-correct — it sits at Tier 1 only because it includes `limits.h`
-> for the `CANON_*SIZE_*` aliases.)
+> width-correct, and its `CANON_*SIZE_*` limits are `types.h`'s — it
+> sits at Tier 1 only because it still includes `sizes.h`, until it is
+> run at 16 bits.)
 >
 > **Tier 2** — hosted libc: a working `malloc`, retargeted stdio, OS
 > clocks. Covers `memory.h`, `data/convenience/`, file I/O, logging,

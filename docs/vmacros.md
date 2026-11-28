@@ -123,7 +123,7 @@ missing for one of three reasons. They do **not** share a fix — bucket every
 absent file before applying any remedy.
 
 1. **No conditions to cover.** Pure data/typedef/straight-line headers (e.g.
-   `limits.h`, `types.h`, much of the `*_mangle.h` files) contain zero
+   `sizes.h`, `types.h`, much of the `*_mangle.h` files) contain zero
    `&&`/`||`/`?:`/`if`. They will never appear in a condition table because there
    is nothing to measure. MC/DC is *vacuously complete*. The correct artifact is
    a one-line note in the coverage documentation ("no conditions; nothing to

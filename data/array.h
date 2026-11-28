@@ -19,7 +19,7 @@
 #include <string.h>
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
+#include "core/primitives/sizes.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/checked.h"
 #include "core/ownership.h"

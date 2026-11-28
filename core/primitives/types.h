@@ -14,7 +14,7 @@
  **************************************************************************/
 /**
  * @file types.h
- * @brief Portable integer and size type aliases for Canon-C
+ * @brief Portable integer and size type aliases, and their limits, for Canon-C
  *
  * Short, explicit type names over verbose stdint.h identifiers.
  * Every other module depends on this header.
@@ -46,7 +46,7 @@
  *
  * This header is Tier 0 of Canon-C's platform tiers. Headers that
  * introduce further platform requirements guard them at their own origin:
- * core/primitives/limits.h enforces Tier 1 (size_t >= 32 bits) beside the
+ * core/primitives/sizes.h enforces Tier 1 (size_t >= 32 bits) beside the
  * size literals that need it. See the README's bare-metal section for the
  * tier model.
  *
@@ -57,20 +57,20 @@
  *
  * @sa <inttypes.h> for printf/scanf format macros (PRIu32, PRId64, etc.)
  * @sa checked.h, bits.h
- * @sa limits.h — Tier 1 platform contract (size literals, capacity limits)
+ * @sa sizes.h — Tier 1 platform contract (size literals, capacity limits)
  */
 #ifndef CANON_CORE_PRIMITIVES_TYPES_H
 #define CANON_CORE_PRIMITIVES_TYPES_H
 #include <stddef.h>   /* size_t, ptrdiff_t */
 #include <stdint.h>   /* uint8_t … int64_t  */
 #include <stdbool.h>  /* bool, true, false  */
-/* NOTE: <limits.h> is deliberately NOT included here. The project's own
- * core/primitives/limits.h shadows the system header under the build's
- * -I core/primitives flag (angle-bracket includes search -I directories
- * before system directories), so <limits.h> from this file would resolve
- * to the Canon-C header and CHAR_BIT would never be defined. The 8-bit-
- * byte requirement is instead enforced through the exact-width type
- * check below, which implies it — see the platform contract comment. */
+/* NOTE: <limits.h> is not included here. Until VERIFY-140 the project's
+ * own core/primitives/limits.h shadowed the system header under the
+ * build's -I core/primitives flag, and CHAR_BIT was never defined; that
+ * header's limits are this one's now (below), the rest sizes.h's and
+ * ptr.h's. The 8-bit-byte requirement is enforced through the exact-
+ * width type check below, which implies it — see the platform contract
+ * comment — and Canon-C's limits are <stdint.h>'s, which suffice. */
 
 /* ── Platform contract (Tier 0) ──────────────────────────────────────────────
  * Enforced here, once, at the bottom of the dependency rule. Every other
@@ -91,9 +91,9 @@
  * CHAR_BIT == 8 and sizeof(uint8_t) == 1. A target where uint8_t exists
  * is a target with 8-bit bytes; a target with non-8-bit bytes (e.g. a
  * TI C2000-class DSP with CHAR_BIT == 16) cannot define UINT8_MAX and
- * fails this check. CHAR_BIT itself is not consulted because the system
- * <limits.h> is shadowed by the project's own limits.h under the build's
- * include flags — see the include-section note above.
+ * fails this check. CHAR_BIT itself is not consulted: until VERIFY-140
+ * the system <limits.h> was shadowed by the project's own limits.h under
+ * the build's include flags — see the include-section note above.
  * ──────────────────────────────────────────────────────────────────────── */
 #if !defined(UINT8_MAX)  || !defined(UINT16_MAX) || \
     !defined(UINT32_MAX) || !defined(UINT64_MAX) || \
@@ -145,4 +145,69 @@ typedef char canon_types_assert_f64_is_8_bytes_[(sizeof(f64) == 8) ? 1 : -1];
 
 /* ── Boolean ─────────────────────────────────────────────────────────────── */
 /* bool / true / false provided by <stdbool.h> above. No aliases needed. */
+
+/* ── Integer type limits (Tier 0) ────────────────────────────────────────────
+ * The limits of the aliases above, from <stdint.h> (C99 7.18.2, 7.18.3),
+ * which is never shadowed: width-correct on any target this header
+ * admits. Until VERIFY-140 these, and the platform information below,
+ * were core/primitives/limits.h's; VERIFY-140 split that header into
+ * this one, sizes.h and ptr.h, and removed it.
+ * ──────────────────────────────────────────────────────────────────────── */
+/** @brief Max value of u8  — 255 */
+#define CANON_U8_MAX   UINT8_MAX
+/** @brief Max value of u16 — 65,535 */
+#define CANON_U16_MAX  UINT16_MAX
+/** @brief Max value of u32 — 4,294,967,295 */
+#define CANON_U32_MAX  UINT32_MAX
+/** @brief Max value of u64 — 18,446,744,073,709,551,615 */
+#define CANON_U64_MAX  UINT64_MAX
+
+/** @brief Min value of i8  — -128 */
+#define CANON_I8_MIN   INT8_MIN
+/** @brief Max value of i8  — 127 */
+#define CANON_I8_MAX   INT8_MAX
+/** @brief Min value of i16 — -32,768 */
+#define CANON_I16_MIN  INT16_MIN
+/** @brief Max value of i16 — 32,767 */
+#define CANON_I16_MAX  INT16_MAX
+/** @brief Min value of i32 — -2,147,483,648 */
+#define CANON_I32_MIN  INT32_MIN
+/** @brief Max value of i32 — 2,147,483,647 */
+#define CANON_I32_MAX  INT32_MAX
+/** @brief Min value of i64 — -9,223,372,036,854,775,808 */
+#define CANON_I64_MIN  INT64_MIN
+/** @brief Max value of i64 — 9,223,372,036,854,775,807 */
+#define CANON_I64_MAX  INT64_MAX
+
+/* ── Size type limits (Tier 0) ───────────────────────────────────────────────
+ * These track the platform's own size_t and ptrdiff_t at any width.
+ * ──────────────────────────────────────────────────────────────────────── */
+/**
+ * @brief Max value of usize — SIZE_MAX: at least 2^16-1 (C99 7.18.3);
+ *        2^32-1 or 2^64-1 at Tier 1
+ *
+ * Example — overflow guard:
+ * ```c
+ * if (size > CANON_USIZE_MAX - arena->offset) { return ERROR_OVERFLOW; }
+ * ```
+ */
+#define CANON_USIZE_MAX  SIZE_MAX
+
+/** @brief Max value of isize — PTRDIFF_MAX */
+#define CANON_ISIZE_MAX  PTRDIFF_MAX
+
+/** @brief Min value of isize — PTRDIFF_MIN */
+#define CANON_ISIZE_MIN  PTRDIFF_MIN
+
+/* ── Platform information (Tier 0) ───────────────────────────────────────── */
+
+/** @brief Size of a pointer in bytes — sizeof(void *): 4 at 32 bits, 8 at
+ *         64; 2 or 4 at 16. */
+#define CANON_POINTER_SIZE  ((usize)sizeof(void*))
+
+/** @brief Number of bits in a byte — always 8, per the Tier 0 contract above. */
+#define CANON_BITS_PER_BYTE ((usize)8)
+
+/** @brief Number of bits of a pointer's storage — CANON_POINTER_SIZE times 8. */
+#define CANON_POINTER_BITS  (CANON_POINTER_SIZE * CANON_BITS_PER_BYTE)
 #endif /* CANON_CORE_PRIMITIVES_TYPES_H */
